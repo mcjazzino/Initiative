@@ -84,7 +84,7 @@ input,textarea{font:inherit;color:var(--txt)}
 @keyframes sheen{60%,100%{transform:translateX(100%)}}
 .classgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .cg{padding:10px 4px;border-radius:12px;background:var(--card2);border:1.5px solid transparent;font-size:11px;font-weight:700;text-align:center}
-.cg i{display:block;width:22px;height:22px;border-radius:7px;margin:0 auto 6px}
+.cg i{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;margin:0 auto 6px;border:2px solid;font-style:normal;font-size:12px;font-weight:800;line-height:1}
 .cg.on{border-color:var(--acc)}
 /* sheet */
 #scrim{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:.25s;z-index:20}
@@ -4062,19 +4062,21 @@ function homeView() {
   <div style="margin-top:18px"><button class="startbtn" data-act="startTurn">Start Combat Turn</button></div>
   <button class="btn ghost" style="margin-top:10px" data-act="waitTurn">${I.hour} Not my turn yet</button>
   <details class="rcat setup" style="margin-top:20px" ${ch.source === 'demo' || SETUP_OPEN ? 'open' : ''} ontoggle="SETUP_OPEN=this.open"><summary><span>Change character</span><span class="sm mut">${src}</span></summary>
+  ${shelfCard()}
+  <button class="btn ghost" style="margin-top:10px" data-act="colOpen"><i class="cdot"></i> App colour</button>
   <div class="card" style="margin-top:10px">
    <div class="row between"><div><div style="font-weight:800">${ch.source === 'ddb' ? 'Update from D&amp;D Beyond' : 'Link D&amp;D Beyond character'}</div><div class="sm mut">${ch.source === 'ddb' ? 'Changed something on your sheet? Bring it in again' : 'Bring in your stats, weapons, spells &amp; gear'}</div></div><button class="btn sm pri" data-act="link">${I.link}${ch.source === 'ddb' ? 'Update' : 'Link'}</button></div>${ch.source === 'ddb' ? `<button class="btn" style="margin-top:10px" data-act="linkOther">Import a different character</button>` : ''}
   </div>
   <div class="card" style="margin-top:10px">
    <div class="row between"><div><div style="font-weight:800">${ch.source === 'hand' ? (pre ? 'Make it your own' : 'Your character, built by hand') : 'Not on D&amp;D Beyond?'}</div><div class="sm mut">${ch.source === 'hand' ? (pre ? 'Change its species, subclass, gear or spells' : 'Levelled up or changed your sheet? Update it here') : 'Roll20, paper, anything else: enter it yourself'}</div></div><button class="btn sm" data-act="${ch.source === 'hand' ? 'hbEdit' : 'hbStart'}">${ch.source === 'hand' ? 'Edit' : 'Build'}</button></div>
   </div>
-  <div class="row between" style="margin:18px 0 10px"><div><div class="xs mut">Ready-made characters</div><div class="sm mut" style="margin-top:3px">Pick a level, tap a class, play</div></div>
+  <div class="row between" style="margin:18px 0 10px"><div><div class="xs mut">Or play a ready-made character</div><div class="sm mut" style="margin-top:3px">Pick a level, tap a class. ${ch.source === 'demo' ? '' : 'Yours is kept.'}</div></div>
    <div class="row" style="gap:6px"><span class="sm mut">Level</span><button class="iconbtn" style="width:34px;height:34px" data-act="pgLvl" data-arg="-1">−</button><b class="num" style="min-width:28px;text-align:center">${PG_LVL}</b><button class="iconbtn" style="width:34px;height:34px" data-act="pgLvl" data-arg="1">+</button></div></div>
   <div class="classgrid">${Object.entries(CLS)
     .sort((x, y) => x[1].n.localeCompare(y[1].n))
     .map(
       ([k, v]) =>
-        `<button class="cg ${ch.cls === k && (ch.source === 'demo' || pre) ? 'on' : ''}" data-act="quick" data-arg="${k}"><i style="background:${v.c}"></i>${v.n}${k === 'bloodhunter' ? '<small style="display:block;font-weight:600;opacity:.6;margin-top:2px">max level 7</small>' : ''}</button>`
+        `<button class="cg ${ch.cls === k && (ch.source === 'demo' || pre) ? 'on' : ''}" data-act="pickReady" data-arg="${k}"><i style="border-color:${v.c};color:${v.c}">${v.n === 'Blood Hunter' ? 'BH' : v.n.slice(0, 2)}</i>${v.n}${k === 'bloodhunter' ? '<small style="display:block;font-weight:600;opacity:.6;margin-top:2px">max level 7</small>' : ''}</button>`
     )
     .join('')}</div>
   </details>`;
@@ -7903,12 +7905,13 @@ const ACT = {
   },
   demo(k) {
     const o = CH();
+    shelfKeep(null);
     S = fresh(k, o.edition);
     S.char.rules = { ...(o.rules || {}) };
     S.char.strict = !!o.strict;
     hist = [];
     render();
-    toast(`Switched to ${CLS[k].n}`);
+    toast(`Switched to ${CLS[k].n}${shelfToast()}`);
   },
   menu() {
     openSheet('Character', menuSheet);
@@ -9627,6 +9630,7 @@ const ACT = {
       }
       const same0 = old && old.ddbId && old.ddbId === ch.ddbId;
       ch.importedAt = Date.now();
+      if (!same0) shelfKeep(ch);
       S = same0 ? { ...S, char: ch } : { char: ch, conc: null, cond: freshCond(), c: newCombat(), ws: null };
       if (S.shil) applyShil();
       /* same character: keep the fight going */ if (pendingGuess) ch.editionSet = true;
@@ -9635,7 +9639,7 @@ const ACT = {
       if (checkNeeds().any) openSheet('Quick check', importCheckSheet);
       else closeSheet();
       toast(
-        `${kept.length || (old && old.ddbId === ch.ddbId) ? 'Updated' : 'Linked'} <b>${esc(ch.name)}</b>${ch.multi ? ' (' + esc(ch.multi) + ')' : ''}${synced ? `<br><span class="mut">From your sheet: ${esc(synced.join(' · '))}</span>` : ''}${kept.length ? `<br>Kept your ${kept.join(' and ')}` : ''}${sheetNotes().length ? `<br><span style="color:var(--warn)">${sheetNotes().length} rules note${sheetNotes().length > 1 ? 's' : ''}: see the menu</span>` : ''}`
+        `${kept.length || (old && old.ddbId === ch.ddbId) ? 'Updated' : 'Linked'} <b>${esc(ch.name)}</b>${ch.multi ? ' (' + esc(ch.multi) + ')' : ''}${synced ? `<br><span class="mut">From your sheet: ${esc(synced.join(' · '))}</span>` : ''}${kept.length ? `<br>Kept your ${kept.join(' and ')}` : ''}${sheetNotes().length ? `<br><span style="color:var(--warn)">${sheetNotes().length} rules note${sheetNotes().length > 1 ? 's' : ''}: see the menu</span>` : ''}${shelfToast()}`
       );
     } catch (e) {
       toast("Couldn't read that: " + esc(e.message.slice(0, 80)));
@@ -12902,7 +12906,10 @@ function hbApply(B, keepFight) {
       wardMade: old.wardMade
     });
     S = { ...S, char: ch };
-  } else S = { char: ch, conc: null, cond: freshCond(), c: newCombat(), ws: null };
+  } else {
+    shelfKeep(ch);
+    S = { char: ch, conc: null, cond: freshCond(), c: newCombat(), ws: null };
+  }
   if (S.shil) applyShil();
   render();
 }
@@ -13082,7 +13089,7 @@ Object.assign(ACT, {
     hbApply(B, edit);
     closeSheet();
     toast(
-      `${edit ? 'Updated' : 'Built'} <b>${esc(CH().name)}</b>: level ${CH().level} ${esc(CH().multi || CLS[CH().cls].n)}<br><span class="mut">Change anything later with Edit character</span>`
+      `${edit ? 'Updated' : 'Built'} <b>${esc(CH().name)}</b>: level ${CH().level} ${esc(CH().multi || CLS[CH().cls].n)}<br><span class="mut">Change anything later with Edit character</span>${shelfToast()}`
     );
   }
 });
@@ -13457,7 +13464,7 @@ Object.assign(ACT, {
       same = old.build && old.build.pregen && old.cls === k;
     pgApply(k, PG_LVL, same ? old.name : '');
     toast(
-      `Level ${PG_LVL} ${CLS[k].n} ready: <b>${esc(CH().name)}</b><br><span class="mut">Tap the name to rename · change the level any time</span>`
+      `Level ${PG_LVL} ${CLS[k].n} ready: <b>${esc(CH().name)}</b><br><span class="mut">Tap the name to rename · change the level any time</span>${shelfToast()}`
     );
   },
   pgLvl(d) {
@@ -13496,6 +13503,110 @@ Object.assign(ACT, {
   }
 });
 
+/* ---------- your characters: switching never loses one ----------
+   Whenever a different character replaces an imported or built one (a ready-made pick, a demo,
+   another import, a new build), the old one is kept on this device with its whole state
+   (HP, slots, uses, conditions). The home screen's "Change character" lists them to switch back.
+   Kept in its own localStorage key, so starting fresh never clears it. */
+const SHELF_KEY = 'initiative-shelf',
+  SHELF_MAX = 6;
+function shelf() {
+  try {
+    return JSON.parse(localStorage.getItem(SHELF_KEY) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+function shelfSave(L) {
+  try {
+    localStorage.setItem(SHELF_KEY, JSON.stringify(L.slice(0, SHELF_MAX)));
+  } catch (e) {}
+}
+const charId = ch =>
+  !ch ? '' : ch.ddbId ? 'ddb:' + ch.ddbId : (ch.source || '') + ':' + (ch.name || '') + ':' + (ch.cls || '');
+const keepable = ch => ch && ch.source !== 'demo';
+// call before S.char is replaced by newCh (null = unknown yet: always keep)
+function shelfKeep(newCh) {
+  const cur = S && S.char;
+  if (!keepable(cur) || (newCh && charId(newCh) === charId(cur))) return false;
+  const L = shelf().filter(x => x.id !== charId(cur));
+  L.unshift({ id: charId(cur), n: cur.name, line: shelfLine(cur), at: Date.now(), S: JSON.parse(JSON.stringify(S)) });
+  shelfSave(L);
+  SHELF_NOTE = cur.name;
+  return true;
+}
+// name of a character just kept, so the next toast can say it's safe
+let SHELF_NOTE = '';
+function shelfToast() {
+  if (!SHELF_NOTE) return '';
+  const n = SHELF_NOTE;
+  SHELF_NOTE = '';
+  return `<br><span class="mut">${esc(n)} is kept under Change character → Your characters</span>`;
+}
+function shelfLine(ch) {
+  const src = ch.source === 'ddb' ? 'D&D Beyond' : ch.build && ch.build.pregen ? 'Ready-made' : 'Built by hand';
+  return `Level ${ch.level || '?'} ${ch.multi || (CLS[ch.cls] ? CLS[ch.cls].n : '')} · ${src}`;
+}
+function shelfCard() {
+  const L = shelf().filter(x => x.id !== charId(CH()));
+  if (!L.length) return '';
+  return `<div class="xs mut" style="margin:14px 0 8px">Your characters</div>
+  ${L.map(
+    (x, i) => `<div class="card row between" style="margin-top:8px;gap:10px"><div style="min-width:0"><div style="font-weight:800">${esc(x.n)}</div><div class="sm mut">${esc(x.line)}</div></div>
+    <div class="row" style="gap:6px"><button class="btn pri" style="width:auto;padding:8px 14px" data-act="shelfLoad" data-arg="${esc(x.id)}">Play</button>
+    <button class="iconbtn" style="width:34px;height:34px" data-act="shelfDelAsk" data-arg="${esc(x.id)}" aria-label="Remove">✕</button></div></div>`
+  ).join('')}`;
+}
+// asked before a ready-made or demo pick replaces a character the player brought in
+function replaceAskSheet() {
+  const ch = CH(),
+    k = REPLACE_K;
+  return `<p style="line-height:1.5;margin:4px 0 12px">This swaps <b>${esc(ch.name)}</b> for a ready-made level ${k === 'bloodhunter' ? 7 : PG_LVL} ${CLS[k].n}.</p>
+  <p class="sm mut" style="line-height:1.5;margin-bottom:14px">${esc(ch.name)} isn't lost: they stay under Change character → Your characters, exactly as they are now.</p>
+  <button class="btn pri" data-act="replaceGo">Play the ${CLS[k].n}</button>
+  <button class="btn ghost" style="margin-top:8px" data-act="closeSheet">Keep playing ${esc(ch.name)}</button>`;
+}
+let REPLACE_K = '';
+Object.assign(ACT, {
+  shelfLoad(id) {
+    const L = shelf(),
+      x = L.find(y => y.id === id);
+    if (!x) return;
+    shelfKeep(x.S.char);
+    const rest = shelf().filter(y => y.id !== id);
+    shelfSave(rest);
+    S = x.S;
+    hist = [];
+    closeSheet();
+    render();
+    toast(`Back to <b>${esc(CH().name)}</b>${shelfToast()}`);
+  },
+  shelfDelAsk(id) {
+    const x = shelf().find(y => y.id === id);
+    if (!x) return;
+    SHELF_DEL = id;
+    openSheet(`Remove ${x.n}?`, () => `<p class="sm mut" style="line-height:1.5;margin:4px 0 14px">${esc(x.n)} will be gone from this device. ${/^ddb:/.test(id) ? 'You can import them again from D&amp;D Beyond.' : 'A character built by hand would need to be built again.'}</p>
+      <button class="btn" style="color:var(--bad,#e5484d)" data-act="shelfDel">Remove ${esc(x.n)}</button><button class="btn ghost" style="margin-top:8px" data-act="closeSheet">Keep</button>`);
+  },
+  shelfDel() {
+    shelfSave(shelf().filter(y => y.id !== SHELF_DEL));
+    closeSheet();
+    render();
+  },
+  pickReady(k) {
+    const ch = CH(),
+      brought = ch.source === 'ddb' || (ch.source === 'hand' && !(ch.build && ch.build.pregen));
+    if (!brought) return ACT.quick(k);
+    REPLACE_K = k;
+    openSheet('Switch character?', replaceAskSheet);
+  },
+  replaceGo() {
+    closeSheet();
+    ACT.quick(REPLACE_K);
+  }
+});
+let SHELF_DEL = '';
+
 /* ---------- first launch: what this app is, and how to get your character in ---------- */
 function welcomeView() {
   const ed = CH().edition || '2024';
@@ -13515,7 +13626,7 @@ function welcomeView() {
      .sort((x, y) => x[1].n.localeCompare(y[1].n))
      .map(
        ([k, v]) =>
-         `<button class="cg" data-act="quick" data-arg="${k}"><i style="background:${v.c}"></i>${v.n}${k === 'bloodhunter' ? '<small style="display:block;font-weight:600;opacity:.6;margin-top:2px">max level 7</small>' : ''}</button>`
+         `<button class="cg" data-act="quick" data-arg="${k}"><i style="border-color:${v.c};color:${v.c}">${v.n === 'Blood Hunter' ? 'BH' : v.n.slice(0, 2)}</i>${v.n}${k === 'bloodhunter' ? '<small style="display:block;font-weight:600;opacity:.6;margin-top:2px">max level 7</small>' : ''}</button>`
      )
      .join('')}</div>
   </div>
