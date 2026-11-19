@@ -231,7 +231,8 @@ body.sheet-open #toast.on{transform:translate(-50%,0)}
 .wopt.pri{border-color:var(--line);background:var(--soft)}
 .wopt b{display:block;font-size:16px}.wopt small{display:block;color:var(--mut);font-size:13px;line-height:1.45;margin-top:3px}
 .wic{width:42px;height:42px;border-radius:13px;background:var(--card2);display:grid;place-items:center;flex:none;font-size:18px;color:var(--acc)}.wic svg{width:20px;height:20px}
-.endc{display:block;margin:8px auto 0;background:none;border:0;color:var(--mut);font-size:13px;font-weight:700;padding:4px 10px}
+.endc{width:auto;flex:0 0 auto;padding:15px 16px;white-space:nowrap}
+.endc.tall{padding:19px 16px}
 .chkline{display:flex;gap:12px;align-items:flex-start;width:100%;text-align:left;padding:13px 14px;border-radius:14px;background:var(--card);border:1.5px solid #26232e;margin-bottom:7px;color:inherit}
 .chkline .box{width:24px;height:24px;border-radius:8px;border:2px solid var(--line);flex:none;display:grid;place-items:center;font-weight:900;color:var(--ink)}
 .chkline.on .box{background:var(--acc);border-color:var(--acc)}.chkline.on{opacity:.6}
@@ -4163,7 +4164,7 @@ function turnView() {
         `<div class="row between" style="margin-top:12px"><span class="xs" style="color:var(--acc)">Round ${C().round} · Your turn</span>${edBadge()}</div>`
       ) +
       `<div style="margin-top:12px">${dyingPanel()}</div><p class="sm mut" style="margin:12px 2px;line-height:1.5">While unconscious you can't move, take actions or reactions, and attacks against you have advantage; a melee hit is a critical hit.</p>
-  <div class="dock"><div class="row"><button class="btn pri" data-act="endTurn">End Turn</button></div><button class="endc" data-act="endCombatAsk">End combat</button></div>`
+  <div class="dock"><div class="row"><button class="btn endc" data-act="endCombatAsk">End combat</button><button class="btn pri" data-act="endTurn">End Turn</button></div></div>`
     );
   const c = C(),
     ch = CH(),
@@ -4200,7 +4201,7 @@ function turnView() {
   </div>
   ${condCard()}${c.status.length || c.held.length || S.cond.prone || condList().length || S.rage ? `<div class="status">${S.rage ? `<span class="tag a">Raging · +${rageDmg()} STR damage · resist B/P/S${is14('rage') ? ` · round ${S.rage.rounds}/10` : ''}</span>` : ''}${S.cond.prone ? `<button class="tag warn" style="border:0" data-act="use" data-arg="xstand">Prone · tap to stand up (${Math.floor((S.ws ? beast().sp.walk || 0 : CH().speed) / 2)} ft)</button>` : ''}${condTags()}${c.status.map(s => `<span class="tag a">${esc(s)}</span>`).join('')}${c.held.length ? `<span class="tag warn">${c.held.length} held action</span>` : ''}</div>` : ''}
   <div style="margin-top:12px">${leftSummary()}</div>
-  <div class="dock"><div class="row">${hist.length ? `<button class="btn" style="width:auto;padding:15px 16px;white-space:nowrap" data-act="undo">↺ Undo</button>` : ''}<button class="btn pri" data-act="endTurn">End Turn</button></div><button class="endc" data-act="endCombatAsk">End combat</button></div>`
+  <div class="dock"><div class="row">${hist.length ? `<button class="btn" style="width:auto;padding:15px 16px" data-act="undo" aria-label="Undo">↺</button>` : ''}<button class="btn endc" data-act="endCombatAsk">End combat</button><button class="btn pri" data-act="endTurn">End Turn</button></div></div>`
   );
 }
 function chip(k, label) {
@@ -4246,7 +4247,7 @@ function offView() {
       : ''
   }
   ${c.held.length ? reactList : ''}
-  <div class="dock"><div class="row">${hist.length ? `<button class="btn" style="width:auto;padding:19px 18px" data-act="undo">↺</button>` : ''}<button class="startbtn" style="padding:19px;font-size:18px" data-act="startTurn">Start Combat Turn</button></div><button class="endc" data-act="endCombatAsk">End combat</button></div>`
+  <div class="dock"><div class="row">${hist.length ? `<button class="btn" style="width:auto;padding:19px 18px" data-act="undo" aria-label="Undo">↺</button>` : ''}<button class="btn endc tall" data-act="endCombatAsk">End combat</button><button class="startbtn" style="padding:19px;font-size:18px" data-act="startTurn">Start Combat Turn</button></div></div>`
   );
 }
 function allReactions() {
