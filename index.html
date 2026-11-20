@@ -9599,6 +9599,10 @@ const ACT = {
   },
   rest(type) {
     const ch = CH();
+    if (type === 'long' && S.fam && S.fam.fey) {
+      S.fam = null;
+      if (S.pets) delete S.pets.fam;
+    }
     if (type === 'long' && S.pets) Object.keys(S.pets).forEach(k => (S.pets[k].cur = (pets().find(p => p.id === k) || { max: S.pets[k].cur }).max));
     S.rite = null;
     S.rage = null;
@@ -13996,7 +14000,7 @@ function featurePets() {
 }
 function pets() {
   const ch = CH();
-  return [...(ch.pets || []), ...(ch.source === 'ddb' ? [] : featurePets()), ...(ch.myPets || [])];
+  return [...(ch.pets || []), ...(ch.source === 'ddb' ? [] : featurePets()), ...(ch.myPets || []), ...(famPet() ? [famPet()] : [])];
 }
 function petState(p) {
   S.pets = S.pets || {};
@@ -14054,6 +14058,7 @@ function petsSheet() {
     return `<div class="card row between" style="margin-top:8px;gap:10px"><div><div style="font-weight:800">${esc(p.n)}</div><div class="sm mut">${esc([p.what, PET_KIND[p.kind]].filter(Boolean).join(' · '))} · ${st.cur}/${p.max} HP</div></div>
       ${st.away ? `<button class="btn pri" style="width:auto;padding:8px 14px" data-act="petBack" data-arg="${p.id}">Bring out</button>` : `<button class="btn" style="width:auto;padding:8px 14px" data-act="petOpen" data-arg="${p.id}">Open</button>`}</div>`;
   }).join('') : '<p class="sm mut" style="line-height:1.5">No companions yet. Characters from D&amp;D Beyond bring the ones on their Extras tab. You can add one here too.</p>'}
+  ${canFamiliar() ? `<button class="btn" style="margin-top:10px" data-act="famAsk" data-arg="${feats().some(f => /^Wild Companion$/i.test(f.n)) && !(CH().spells || []).some(s => s.n === 'Find Familiar') ? '1' : '0'}">${S.fam ? 'Change your familiar' : 'Your familiar: choose its form'}</button>` : ''}
   <details class="rcat" style="margin-top:14px"><summary>Add a companion</summary>
    <input class="field" id="pN" placeholder="Name, e.g. Pip the owl" style="margin-top:8px">
    <div class="row" style="gap:8px;margin-top:8px"><input class="field" id="pAC" type="number" inputmode="numeric" placeholder="AC"><input class="field" id="pHP" type="number" inputmode="numeric" placeholder="HP"><input class="field" id="pSp" placeholder="Speed"></div>
@@ -14086,6 +14091,14 @@ Object.assign(ACT, {
     if (!p || !v) return toast('Type an amount first');
     const st = petState(p);
     st.cur = mode === 'dmg' ? Math.max(0, st.cur - v) : Math.min(p.max, st.cur + v);
+    if (id === 'fam' && !st.cur) {
+      S.fam = null;
+      delete S.pets.fam;
+      save();
+      closeSheet();
+      render();
+      return toast(`<b>${esc(p.n)} vanishes</b><br><span class="mut">Cast Find Familiar again to bring it back</span>`);
+    }
     save();
     render();
     toast(mode === 'dmg' ? (st.cur ? `${esc(p.n)} takes ${v}: ${st.cur}/${p.max} HP` : `<b>${esc(p.n)} drops to 0 HP</b>`) : `${esc(p.n)} heals ${v}: ${st.cur}/${p.max} HP`);
@@ -14145,6 +14158,94 @@ Object.assign(ACT, {
     render();
   }
 });
+
+/* ---------- familiars: Find Familiar and the druid's Wild Companion ----------
+   Casting Find Familiar or using Wild Companion asks for the familiar's form; it then joins the
+   companions (S.fam). A familiar can't attack; it vanishes at 0 HP. A Wild Companion familiar
+   (5.5e) is a Fey and leaves when you finish a Long Rest. */
+const FAM_FORMS = [
+  ['Bat', 12, 1, '5 ft, fly 30 ft', 'Blindsight 60 ft.'],
+  ['Cat', 12, 2, '40 ft, climb 40 ft', 'Keen smell.'],
+  ['Frog', 11, 1, '20 ft, swim 20 ft', 'Breathes air and water; standing jump 10 ft.'],
+  ['Hawk', 13, 1, '10 ft, fly 60 ft', 'Keen sight.'],
+  ['Lizard', 10, 2, '20 ft, climb 20 ft', 'Darkvision 30 ft; climbs walls.'],
+  ['Octopus', 12, 3, '5 ft, swim 30 ft', 'Can squeeze through tiny gaps; ink cloud once.'],
+  ['Owl', 11, 1, '5 ft, fly 60 ft', "Flyby: doesn't provoke opportunity attacks when it flies away. Darkvision 120 ft."],
+  ['Rat', 10, 1, '20 ft, climb 20 ft', 'Darkvision 30 ft; keen smell.'],
+  ['Raven', 12, 2, '10 ft, fly 50 ft', 'Mimicry: imitates simple sounds and voices.'],
+  ['Spider', 12, 1, '20 ft, climb 20 ft', 'Walks on walls and webs; senses through webs.'],
+  ['Weasel', 13, 1, '30 ft, climb 30 ft', 'Keen hearing and smell.']
+];
+const canFamiliar = () =>
+  (CH().spells || []).some(s => s.n === 'Find Familiar') || feats().some(f => /^Wild Companion$/i.test(f.n));
+function famPet() {
+  const f = S.fam;
+  if (!f) return null;
+  const F = FAM_FORMS.find(x => x[0] === f.form) || FAM_FORMS[6];
+  return {
+    id: 'fam',
+    n: f.name || F[0],
+    what: `Familiar · ${F[0]}${f.fey ? ' (Fey)' : ''}`,
+    kind: 'own',
+    ac: F[1],
+    max: F[2],
+    speed: F[3],
+    atk: [],
+    notes: [
+      F[4],
+      "A familiar can't attack. On its own turn it can Help, Dodge, Hide or move.",
+      'When you cast a touch spell, it can deliver it for you (its Reaction) if it is within 100 ft.',
+      f.fey ? 'It leaves when you finish a Long Rest.' : 'At 0 HP it vanishes; cast Find Familiar again to bring it back.'
+    ],
+    cmd: ''
+  };
+}
+function famPickSheet() {
+  return `<p class="sm mut" style="line-height:1.5;margin:0 0 12px">Which form does your familiar take?</p>
+  <div class="uagrid">${FAM_FORMS.map(f => `<button data-act="famPick" data-arg="${f[0]}">${f[0]}</button>`).join('')}</div>
+  <input class="field" id="famName" placeholder="Its name (optional)" style="margin-top:12px">`;
+}
+let FAM_FEY = false;
+Object.assign(ACT, {
+  famAsk(fey) {
+    FAM_FEY = fey === true || fey === '1';
+    (sheetFn ? pushSheet : openSheet)('Your familiar', famPickSheet);
+  },
+  famPick(form) {
+    const name = (($('#famName') || {}).value || '').trim();
+    S.fam = { form, name, fey: FAM_FEY };
+    S.pets = S.pets || {};
+    S.pets.fam = { cur: (FAM_FORMS.find(x => x[0] === form) || [0, 0, 1])[2], away: false };
+    save();
+    closeSheet();
+    render();
+    toast(`${esc(name || form)} appears beside you`);
+  }
+});
+// after Wild Companion or Find Familiar is used, ask for the form
+(() => {
+  const use0 = ACT.use,
+    castAt0 = ACT.castAt;
+  const ask = (o, before) => {
+    if (!o || JSON.stringify(S) === before) return;
+    if (/^Wild Companion$/i.test(o.n)) ACT.famAsk(true);
+    else if (o.n === 'Find Familiar') ACT.famAsk(false);
+  };
+  ACT.use = function (id) {
+    const o = findAny(id),
+      before = JSON.stringify(S);
+    const r = use0.apply(this, arguments);
+    if (o && o.lvl === undefined) ask(o, before);
+    return r;
+  };
+  ACT.castAt = function (arg) {
+    const o = spells().find(x => x._id === String(arg).split('|')[0]),
+      before = JSON.stringify(S);
+    const r = castAt0.apply(this, arguments);
+    ask(o, before);
+    return r;
+  };
+})();
 
 // everything is defined: draw the first screen
 render();
