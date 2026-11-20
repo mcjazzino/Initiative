@@ -229,6 +229,12 @@ body.sheet-open #toast.on{transform:translate(-50%,0)}
 .swc i{width:30px;height:30px;border-radius:50%;display:block}
 .swc.on{border-color:var(--acc);color:var(--txt,#fff)}.swc.on i{box-shadow:0 0 0 3px var(--bg,#111),0 0 0 5px var(--acc)}
 .setup>summary{font-weight:800}
+.rcat.setup{margin-top:10px!important;border:1px solid #2c2836;border-radius:16px;padding:0 15px}
+.rcat.setup>summary{padding:15px 0;font-size:15.5px;position:relative;justify-content:center}
+.rcat.setup>summary .cclbl{display:flex;align-items:center;gap:8px}.cclbl svg{width:18px;height:18px}
+.rcat.setup>summary>span+span{display:none}
+.rcat.setup>summary::after{position:absolute;right:0}
+.rcat.setup[open]>summary{border-bottom:1px solid #2c2836;margin-bottom:10px}
 .setup>summary>span+span{margin-left:12px;text-align:right}
 .welcome{padding:18px 2px 0}
 .wopt{display:flex;gap:14px;align-items:center;width:100%;text-align:left;padding:16px;border-radius:18px;background:var(--card);border:1.5px solid #26232e;margin-bottom:10px;color:inherit}
@@ -326,6 +332,7 @@ const I = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>',
   heart:
     '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-8-5.2-8-11a4.5 4.5 0 018-2.8A4.5 4.5 0 0120 10c0 5.8-8 11-8 11z"/></svg>',
+  swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></svg>',
   hour: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12M6 21h12M7 3c0 5 5 6 5 9s-5 4-5 9M17 3c0 5-5 6-5 9s5 4 5 9"/></svg>',
   menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>',
   link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></svg>',
@@ -4366,7 +4373,7 @@ function homeView() {
   </div>
   <div style="margin-top:18px"><button class="startbtn" data-act="startTurn">Start Combat Turn</button></div>
   <button class="btn ghost" style="margin-top:10px" data-act="waitTurn">${I.hour} Not my turn yet</button>
-  <details class="rcat setup" style="margin-top:20px" ${ch.source === 'demo' || SETUP_OPEN ? 'open' : ''} ontoggle="SETUP_OPEN=this.open"><summary><span>Change character</span><span class="sm mut">${src}</span></summary>
+  <details class="rcat setup" style="margin-top:20px" ${ch.source === 'demo' || SETUP_OPEN ? 'open' : ''} ontoggle="SETUP_OPEN=this.open"><summary><span class="cclbl">${I.swap} Change character</span><span class="sm mut">${src}</span></summary>
   ${shelfCard()}
   <button class="btn ghost" style="margin-top:10px" data-act="colOpen"><i class="cdot"></i> App colour</button>
   <div class="card" style="margin-top:10px">
