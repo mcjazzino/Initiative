@@ -8674,6 +8674,14 @@ const ACT = {
       openSheet('Your Rage is ending', rageEndSheet);
       return;
     }
+    openSheet(
+      'End your turn?',
+      () => `<button class="btn pri" data-act="endTurnGo">Confirm End Turn</button>
+      <button class="btn" style="margin-top:10px" data-act="closeSheet">Keep fighting</button>`
+    );
+  },
+  endTurnGo() {
+    closeSheet();
     ACT.endTurnNow();
   },
   endTurnNow() {
