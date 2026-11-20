@@ -6000,7 +6000,7 @@ function acSheet() {
   ${parts.length ? `<div class="card" style="margin-top:14px"><div class="xs mut" style="margin-bottom:6px">How it adds up</div>${rows}${now.length ? `<div class="xs mut" style="margin:10px 0 2px">Right now</div>${now.map(x => `<div class="acrow"><span>${esc(x.n)}</span><b>${sgn(x.v)}</b></div>`).join('')}` : ''}<div class="acrow total"><span>Armour class${now.length ? ' right now' : ''}</span><b>${live}</b></div></div>` : ''}
   <div class="stepper" style="grid-template-columns:1fr 1fr"><button data-act="acAdj" data-arg="-1">−1</button><button data-act="acAdj" data-arg="1">+1</button></div>
   ${imp != null && ch.ac !== imp ? `<button class="btn" style="margin-top:10px" data-act="acReset">Reset to ${imp}</button>` : ''}
-  ${parts.some(p => p.shield) ? `<div class="toggle" style="margin-top:10px"><span>Holding your shield <span class="sm mut">(drop or stow it: −${parts.find(p => p.shield).v} AC)</span></span><button class="sw ${parts.find(p => p.shield).down ? '' : 'on'}" data-act="acShield"></button></div>` : ''}${ch.source === 'hand' && ch.build ? `<button class="btn" style="margin-top:10px" data-act="hbEditAC">Change armour or shield</button>` : ''}<p class="sm mut" style="margin-top:14px;${ch.source === 'hand' ? 'display:none' : ''}">${parts.length ? 'Something missing? ' : ''}If this doesn't match D&amp;D Beyond, set it to match here. Tap the AC on D&amp;D Beyond to see how it's built up — magic items, fighting styles and feats are the usual reasons for a difference.</p>`;
+  ${parts.some(p => p.shield) ? `<div class="toggle" style="margin-top:10px"><span>Holding your shield <span class="sm mut">(drop or stow it: −${parts.find(p => p.shield).v} AC)</span></span><button class="sw ${parts.find(p => p.shield).down ? '' : 'on'}" data-act="acShield"></button></div>` : ''}${ch.source === 'hand' && ch.build ? `${parts.some(p => p.n === 'From your sheet') ? '<p class="sm mut" style="margin-top:12px">Pick your armour, shield and bonuses in Gear and this shows how your AC adds up.</p>' : ''}<button class="btn" style="margin-top:10px" data-act="hbEditAC">${parts.some(p => p.n === 'From your sheet') ? 'Add armour &amp; shield' : 'Change armour or shield'}</button>` : ''}<p class="sm mut" style="margin-top:14px;${ch.source === 'hand' ? 'display:none' : ''}">${parts.length ? 'Something missing? ' : ''}If this doesn't match D&amp;D Beyond, set it to match here. Tap the AC on D&amp;D Beyond to see how it's built up — magic items, fighting styles and feats are the usual reasons for a difference.</p>`;
 }
 function hpSheet() {
   const hp = CH().hp;
@@ -12880,6 +12880,9 @@ function hbAC(B) {
     sp = SPC_AC.find(x => x[0].test(B.species || '')),
     ABL = { DEX: 'Dexterity', CON: 'Constitution', WIS: 'Wisdom', CHA: 'Charisma' };
   let parts = [];
+  // typed from the sheet but nothing entered in Gear yet: say so, rather than a misleading "No armour" line
+  if (+B.ac && B.arm == null && !B.shield && !(B.acx || []).length && !+B.acb)
+    return { ac: +B.ac, calc: +B.ac, parts: [{ n: 'From your sheet', v: +B.ac, base: true, todo: true }] };
   if (a[1]) {
     const dex = a[2] === 'H' ? 0 : a[2] === 'M' ? Math.min(2, m.DEX) : m.DEX;
     parts.push({ n: a[0] + (a[2] === 'H' ? ' (heavy armour)' : a[2] === 'M' ? ' (medium armour)' : /spell/.test(a[0]) ? '' : ' (light armour)'), v: a[1], base: true });
@@ -12905,7 +12908,7 @@ function hbAC(B) {
   if (+B.acb) parts.push({ n: 'Other bonus', v: +B.acb });
   const sum = parts.reduce((t, p) => t + p.v, 0);
   // a number typed from the sheet wins; whatever the list can't explain is shown as its own line
-  if (+B.ac && +B.ac !== sum) parts.push({ n: +B.ac > sum ? 'Something else on your sheet' : 'Your sheet is lower by', v: +B.ac - sum, gap: true });
+  if (+B.ac && +B.ac !== sum) parts.push({ n: +B.ac > sum ? 'Not entered in Gear yet' : 'Your sheet is lower by', v: +B.ac - sum, gap: true });
   return { ac: +B.ac || sum, calc: sum, parts };
 }
 function hbArmour(i) {
@@ -13397,7 +13400,7 @@ Object.assign(ACT, {
   hbEditAC() {
     closeSheet();
     ACT.hbEdit();
-    HSTEP = 1;
+    HSTEP = 2;
     render();
   },
   hbAcxAdd() {
@@ -14056,6 +14059,7 @@ Object.assign(ACT, {
     const rest = shelf().filter(y => y.id !== id);
     shelfSave(rest);
     S = x.S;
+    acMigrate(S.char);
     hist = [];
     closeSheet();
     render();
@@ -14086,6 +14090,36 @@ Object.assign(ACT, {
   }
 });
 let SHELF_DEL = '';
+
+// characters saved before armour & shield existed: give them the same itemised AC as a fresh build.
+// Their AC number only changes if the old one came from a ready-made table; anything the player
+// changed by hand (+1/−1) is kept.
+function acMigrate(ch) {
+  if (!ch) return;
+  try {
+    if (ch.source === 'hand' && ch.build) {
+      const B = ch.build;
+      if (B.pregen && B.arm == null && PG[ch.cls] && PG[ch.cls].arm) {
+        [B.arm, B.shield] = PG[ch.cls].arm((B.cls[0] || {}).lvl || ch.level);
+        delete B.ac;
+      }
+      if ((ch.acParts || []).some(p => p.n === 'From your sheet' && !p.todo) || (B.pregen && !(ch.acParts || []).length)) {
+        const A = hbAC(B),
+          was = ch.acImported != null ? ch.acImported : ch.ac;
+        ch.acParts = A.parts;
+        if (A.ac !== was) {
+          ch.ac += A.ac - was;
+          if (ch.acImported != null) ch.acImported = A.ac;
+        }
+      }
+    }
+    // D&D Beyond imports from before the shield switch: mark the shield line
+    if (ch.source === 'ddb')
+      (ch.acParts || []).forEach(p => {
+        if (!p.base && p.aid == null && /^shield\b/i.test(p.n) && !/faith/i.test(p.n)) p.shield = true;
+      });
+  } catch (e) {}
+}
 
 /* ---------- first launch: what this app is, and how to get your character in ---------- */
 function welcomeView() {
@@ -14619,6 +14653,7 @@ Object.assign(ACT, {
 })();
 
 // everything is defined: draw the first screen
+acMigrate(S && S.char);
 render();
 
 </script>
