@@ -11582,6 +11582,10 @@ function hfGen(B) {
   hfSubs(B, D, F, add, res); // subclass features: builder-subclasses.js
   // features the player added by hand
   (B.cf || []).forEach((f, i) => {
+    if (f.p && R.some(r => r.k === f.p)) {
+      add('cf.' + i, f.n, f.t || 'A', f.d || '', { res: f.p, step: f.c || 1 });
+      return;
+    }
     if (f.u) res('cf' + i, f.n, f.u, f.r || 'long');
     add('cf.' + i, f.n, f.t || 'A', f.d || '', f.u ? { res: 'cf' + i } : {});
   });
@@ -12994,7 +12998,8 @@ function hbFeatures() {
   const B = HB,
     G = hfGen(B),
     E = B.ed,
-    shown = G.F.filter(f => (!f.x.only || f.x.only === E) && !f.id.startsWith('cf.'));
+    shown = G.F.filter(f => (!f.x.only || f.x.only === E) && !f.id.startsWith('cf.')),
+    pools = cfPools(G);
   const isOn = f => (f.opt ? (B.on || []).includes(f.id) : !(B.off || []).includes(f.id));
   const grp = f =>
     f.id.startsWith('spc.')
@@ -13018,7 +13023,7 @@ function hbFeatures() {
       .filter(isOn)
       .map(f => f.x.res || (f.sp && f.sp.res))
       .filter(Boolean)
-      .concat(['wArcaneRecovery'])
+      .concat(['wArcaneRecovery'], (B.cf || []).map(f => f.p).filter(Boolean))
   );
   const R = G.R.filter(r => resUsed.has(r.k));
   return `<p class="sm mut" style="line-height:1.5;margin:6px 0 12px">Worked out from your class${B.cls.length > 1 ? 'es' : ''} and level. Switch off anything you don't have, and pick your options.</p>
@@ -13051,14 +13056,17 @@ function hbFeatures() {
   }
   <div class="xs sec">Your own features</div>
   ${(B.cf || []).map((f, i) => `<div class="item"><div class="row between" style="align-items:flex-start;gap:10px"><div style="flex:1;min-width:0"><div class="t">${esc(f.n)}</div>
-    <div class="row" style="gap:5px;margin-top:5px">${costTag(f.t)}${f.u ? `<span class="tag">${f.u}× per ${f.r} rest</span>` : ''}</div>${f.d ? `<div class="d">${esc(f.d)}</div>` : ''}</div>
+    <div class="row" style="gap:5px;margin-top:5px">${costTag(f.t)}${cfUseTag(f, G)}</div>${f.d ? `<div class="d">${esc(f.d)}</div>` : ''}</div>
     <button class="iconbtn" style="width:34px;height:34px" data-act="hbCfDel" data-arg="${i}" aria-label="Remove">✕</button></div></div>`).join('')}
   <details class="rcat" ${(B.cf || []).length ? '' : 'open'}><summary>Missing something? Add it</summary>
-   <p class="sm mut" style="line-height:1.5;margin:8px 0">A subclass feature, feat, species trait or magic item you use in a fight. Copy it from your sheet.</p>
+   <p class="sm mut" style="line-height:1.5;margin:8px 0">A subclass feature, feat, species trait or magic item you use in a fight. Copy it from your sheet.${pools.length ? ` If it spends ${esc(pools.map(resLabel).slice(0, 2).join(' or '))}, pick that in the list below.` : ''}</p>
    <input class="field" id="hcfN" placeholder="Name, e.g. Wrath of the Sea">
+   <div style="margin-top:8px"><select class="field" id="hcfU" onchange="hbCfUses(this.value)"><option value="0">No limit on uses</option>${[1, 2, 3, 4, 5, 6].map(n => `<option value="${n}">${n}× per rest</option>`).join('')}${
+      pools.length ? `<optgroup label="Spends from">${pools.map(r => `<option value="p:${r.k}">Spends ${esc(resLabel(r))}</option>`).join('')}</optgroup>` : ''
+    }</select></div>
    <div class="row" style="gap:8px;margin-top:8px"><select class="field" id="hcfT"><option value="A">Action</option><option value="B">Bonus Action</option><option value="R">Reaction</option><option value="F">No action</option></select>
-    <select class="field" id="hcfU"><option value="0">Unlimited</option>${[1, 2, 3, 4, 5, 6].map(n => `<option value="${n}">${n}× per</option>`).join('')}</select>
-    <select class="field" id="hcfR"><option value="long">long rest</option><option value="short">short rest</option></select></div>
+    <select class="field" id="hcfR" style="display:none"><option value="long">long rest</option><option value="short">short rest</option></select>
+    <select class="field" id="hcfC" style="display:none">${[1, 2, 3, 4, 5, 6].map(n => `<option value="${n}">costs ${n}</option>`).join('')}</select></div>
    <textarea class="field" id="hcfD" rows="3" style="margin-top:8px" placeholder="What it does (optional)"></textarea>
    <button class="btn pri" style="margin-top:8px" data-act="hbCfAdd">Add feature</button>
   </details>`;
@@ -13088,12 +13096,33 @@ function hbSubNote(i) {
     ? `<div class="sm" style="margin-top:8px;line-height:1.45;color:var(--mut)">Initiative doesn't know the <b>${esc(c.sub.trim())}</b> features yet. Add the ones you use under Features, with “Missing something? Add it”.</div>`
     : '';
 }
+// class pools a home-made feature can spend from: Channel Divinity, Superiority Dice, Focus Points…
+function cfPools(G) {
+  return G.R.filter(r => !/^cf\d|^sp[A-Z]|^wArcaneRecovery$/.test(r.k));
+}
+function resLabel(r) {
+  return (HB.ed === '2014' && r.n14) || r.n;
+}
+function cfUseTag(f, G) {
+  if (f.p) {
+    const r = G.R.find(x => x.k === f.p);
+    return r ? `<span class="tag" style="border:1px solid var(--acc)">uses ${esc(resLabel(r))}${f.c > 1 ? ' ×' + f.c : ''}</span>` : `<span class="tag warn">its pool isn't there at this level</span>`;
+  }
+  return f.u ? `<span class="tag">${f.u}× per ${f.r} rest</span>` : '';
+}
+function hbCfUses(v) {
+  const pool = v.startsWith('p:');
+  $('#hcfR').style.display = pool || v === '0' ? 'none' : '';
+  $('#hcfC').style.display = pool ? '' : 'none';
+}
 Object.assign(ACT, {
   hbCfAdd() {
     const n = ($('#hcfN').value || '').trim();
     if (!n) return toast('Give it a name first');
     HB.cf = HB.cf || [];
-    HB.cf.push({ n, t: $('#hcfT').value, u: +$('#hcfU').value, r: $('#hcfR').value, d: ($('#hcfD').value || '').trim() });
+    const u = $('#hcfU').value,
+      pool = u.startsWith('p:');
+    HB.cf.push({ n, t: $('#hcfT').value, u: pool ? 0 : +u, r: $('#hcfR').value, d: ($('#hcfD').value || '').trim(), ...(pool ? { p: u.slice(2), c: +$('#hcfC').value } : {}) });
     render();
   },
   hbCfDel(i) {
