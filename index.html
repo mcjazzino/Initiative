@@ -5979,6 +5979,9 @@ function readySheet() {
   <button class="btn pri" style="margin-top:14px" data-act="rdConfirm">Hold this action</button>`;
 }
 function acSheet() {
+  // temporary effects that change the AC shown in combat (Bladesong, Haste, Shield of Faith, Slow…)
+  const now = [...(S.blade ? [{ n: 'Bladesong (INT)', v: intMod() }] : []), ...condList().filter(c => c.ac).map(c => ({ n: c.n, v: c.ac }))],
+    live = CH().ac + now.reduce((t, x) => t + x.v, 0);
   const ch = CH(),
     imp = ch.acImported;
   const parts = ch.acParts || [],
@@ -5993,8 +5996,8 @@ function acSheet() {
     (adj
       ? `<div class="acrow"><span>Your adjustment in this app</span><b>${adj > 0 ? '+' + adj : adj}</b></div>`
       : '');
-  return `<div class="hpbig">${ch.ac}</div><div class="sm mut" style="text-align:center">${imp != null ? (adj ? `Changed by you · imported value was ${imp}` : ch.source === 'ddb' ? 'As calculated from your D&amp;D Beyond character' : ch.source === 'hand' ? (ch.build && +ch.build.ac ? 'The number from your sheet' : 'Worked out from your armour and shield') : 'Demo character') : 'Armour class'}</div>
-  ${parts.length ? `<div class="card" style="margin-top:14px"><div class="xs mut" style="margin-bottom:6px">How it adds up</div>${rows}<div class="acrow total"><span>Armour class</span><b>${ch.ac}</b></div></div>` : ''}
+  return `<div class="hpbig">${live}</div>${now.length ? `<div class="sm" style="text-align:center;color:var(--acc)">${ch.ac} normally · ${esc(now.map(x => x.n).join(', '))} active</div>` : ''}<div class="sm mut" style="text-align:center">${imp != null ? (adj ? `Changed by you · imported value was ${imp}` : ch.source === 'ddb' ? 'As calculated from your D&amp;D Beyond character' : ch.source === 'hand' ? (ch.build && +ch.build.ac ? 'The number from your sheet' : 'Worked out from your armour and shield') : 'Demo character') : 'Armour class'}</div>
+  ${parts.length ? `<div class="card" style="margin-top:14px"><div class="xs mut" style="margin-bottom:6px">How it adds up</div>${rows}${now.length ? `<div class="xs mut" style="margin:10px 0 2px">Right now</div>${now.map(x => `<div class="acrow"><span>${esc(x.n)}</span><b>${sgn(x.v)}</b></div>`).join('')}` : ''}<div class="acrow total"><span>Armour class${now.length ? ' right now' : ''}</span><b>${live}</b></div></div>` : ''}
   <div class="stepper" style="grid-template-columns:1fr 1fr"><button data-act="acAdj" data-arg="-1">−1</button><button data-act="acAdj" data-arg="1">+1</button></div>
   ${imp != null && ch.ac !== imp ? `<button class="btn" style="margin-top:10px" data-act="acReset">Reset to ${imp}</button>` : ''}
   ${parts.some(p => p.shield) ? `<div class="toggle" style="margin-top:10px"><span>Holding your shield <span class="sm mut">(drop or stow it: −${parts.find(p => p.shield).v} AC)</span></span><button class="sw ${parts.find(p => p.shield).down ? '' : 'on'}" data-act="acShield"></button></div>` : ''}${ch.source === 'hand' && ch.build ? `<button class="btn" style="margin-top:10px" data-act="hbEditAC">Change armour or shield</button>` : ''}<p class="sm mut" style="margin-top:14px;${ch.source === 'hand' ? 'display:none' : ''}">${parts.length ? 'Something missing? ' : ''}If this doesn't match D&amp;D Beyond, set it to match here. Tap the AC on D&amp;D Beyond to see how it's built up — magic items, fighting styles and feats are the usual reasons for a difference.</p>`;
