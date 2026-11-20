@@ -8674,14 +8674,6 @@ const ACT = {
       openSheet('Your Rage is ending', rageEndSheet);
       return;
     }
-    if (c.action && !sheetFn) {
-      openSheet(
-        'End turn?',
-        () => `<p class="mut" style="margin-top:0">You still have your <b style="color:var(--txt)">Action</b>${c.bonus && bonusOpts().some(usableNow) ? ' and <b style="color:var(--txt)">Bonus Action</b>' : ''}${moveLeft() ? ` and <b style="color:var(--txt)">${moveLeft()} ft</b> of movement` : ''}.</p>
-      <button class="btn pri" data-act="ready">Ready an action instead</button><button class="btn" style="margin-top:8px" data-act="actions">Dodge or something else</button><button class="btn ghost" style="margin-top:8px" data-act="endTurnNow">End turn anyway</button>`
-      );
-      return;
-    }
     ACT.endTurnNow();
   },
   endTurnNow() {
