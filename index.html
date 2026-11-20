@@ -2174,6 +2174,232 @@ function selfBloodDamage(n) {
   return notes;
 }
 
+/* ---------- always-prepared subclass spells, both rulesets ----------
+   Used by the builder (built and ready-made characters get them automatically) and by the D&D Beyond
+   import (when the export leaves them out and its rules text has no readable table).
+   Each list: tiers of spells, with the class level each tier arrives at (AT).
+   A spell's level is its tier's level (see spTierLvl) unless written 'name:level'. */
+const SUB_AT = {
+  '2014': { Cleric: [1, 3, 5, 7, 9], Paladin: [3, 5, 9, 13, 17], Ranger: [3, 5, 9, 13, 17], Sorcerer: [1, 3, 5, 7, 9], Druid: [3, 5, 7, 9], DruidCircle: [2, 3, 5, 7, 9], Artificer: [3, 5, 9, 13, 17] },
+  '2024': { Cleric: [3, 5, 7, 9], Druid: [3, 5, 7, 9], Sorcerer: [3, 5, 7, 9], Warlock: [3, 5, 7, 9], Paladin: [3, 5, 9, 13, 17], Ranger: [3, 5, 9, 13, 17], Artificer: [3, 5, 9, 13, 17] }
+};
+// level of a spell in tier i: half-caster tables go 1-5; 2024 full casters start with level 1 (and some 2) at 3
+function spTierLvl(at, i, land14) {
+  if (land14) return i + 2; // 5e Circle of the Land: 2nd-level spells at druid level 3
+  return at.length === 4 ? (i === 0 ? 1 : i + 2) : i + 1;
+}
+const SUB_SP = {
+  // ---- 5e (2014) ----
+  'Knowledge Domain': ['command, identify', 'augury, suggestion', 'nondetection, speak with dead', 'arcane eye, confusion', 'legend lore, scrying'],
+  'Life Domain': ['bless, cure wounds', 'lesser restoration, spiritual weapon', 'beacon of hope, revivify', 'death ward, guardian of faith', 'mass cure wounds, raise dead'],
+  'Light Domain': ['burning hands, faerie fire', 'flaming sphere, scorching ray', 'daylight, fireball', 'guardian of faith, wall of fire', 'flame strike, scrying'],
+  'Nature Domain': ['animal friendship, speak with animals', 'barkskin, spike growth', 'plant growth, wind wall', 'dominate beast, grasping vine', 'insect plague, tree stride'],
+  'Tempest Domain': ['fog cloud, thunderwave', 'gust of wind, shatter', 'call lightning, sleet storm', 'control water, ice storm', 'destructive wave, insect plague'],
+  'Trickery Domain': ['charm person, disguise self', 'mirror image, pass without trace', 'blink, dispel magic', 'dimension door, polymorph', 'dominate person, modify memory'],
+  'War Domain': ['divine favor, shield of faith', 'magic weapon, spiritual weapon', "crusader's mantle, spirit guardians", 'freedom of movement, stoneskin', 'flame strike, hold monster'],
+  'Forge Domain': ['identify, searing smite', 'heat metal, magic weapon', 'elemental weapon, protection from energy', 'fabricate, wall of fire', 'animate objects, creation'],
+  'Grave Domain': ['bane, false life', 'gentle repose, ray of enfeeblement', 'revivify, vampiric touch', 'blight, death ward', 'antilife shell, raise dead'],
+  'Order Domain': ['command, heroism', 'hold person, zone of truth', 'mass healing word, slow', 'compulsion, locate creature', 'commune, dominate person'],
+  'Peace Domain': ['heroism, sanctuary', 'aid, warding bond', "beacon of hope, sending", "aura of purity, otiluke's resilient sphere", "greater restoration, rary's telepathic bond"],
+  'Twilight Domain': ['faerie fire, sleep', 'moonbeam, see invisibility', 'aura of vitality, leomund\'s tiny hut', 'aura of life, greater invisibility', 'circle of power, mislead'],
+  'Arcana Domain': ['detect magic, magic missile', 'magic weapon, nystul\'s magic aura', 'dispel magic, magic circle', 'arcane eye, leomund\'s secret chest', 'planar binding, teleportation circle'],
+  'Death Domain': ['false life, ray of sickness', 'blindness/deafness, ray of enfeeblement', 'animate dead, vampiric touch', 'blight, death ward', 'antilife shell, cloudkill'],
+  'Oath of Devotion': ['protection from evil and good, sanctuary', 'lesser restoration, zone of truth', 'beacon of hope, dispel magic', 'freedom of movement, guardian of faith', 'commune, flame strike'],
+  'Oath of the Ancients': ['ensnaring strike, speak with animals', 'misty step, moonbeam', 'plant growth, protection from energy', 'ice storm, stoneskin', 'commune with nature, tree stride'],
+  'Oath of Vengeance': ["bane, hunter's mark", 'hold person, misty step', 'haste, protection from energy', 'banishment, dimension door', 'hold monster, scrying'],
+  'Oath of Conquest': ['armor of agathys, command', 'hold person, spiritual weapon', 'bestow curse, fear', 'dominate beast, stoneskin', 'cloudkill, dominate person'],
+  'Oath of Redemption': ['sanctuary, sleep', 'calm emotions, hold person', 'counterspell, hypnotic pattern', "otiluke's resilient sphere, stoneskin", 'hold monster, wall of force'],
+  'Oath of Glory': ['guiding bolt, heroism', 'enhance ability, magic weapon', 'haste, protection from energy', 'compulsion, freedom of movement', 'commune, flame strike'],
+  'Oath of the Watchers': ['alarm, detect magic', 'moonbeam, see invisibility', 'counterspell, nondetection', 'aura of purity, banishment', 'hold monster, scrying'],
+  'Oath of the Crown': ['command, compelled duel', 'warding bond, zone of truth', "aura of vitality, spirit guardians", 'banishment, guardian of faith', 'circle of power, geas'],
+  'Gloom Stalker': ['disguise self', 'rope trick', 'fear', 'greater invisibility', 'seeming'],
+  'Horizon Walker': ['protection from evil and good', 'misty step', 'haste', 'banishment', 'teleportation circle'],
+  'Fey Wanderer': ['charm person', 'misty step', 'dispel magic', 'dimension door', 'mislead'],
+  Swarmkeeper: ['faerie fire, mage hand:0', 'web', 'gaseous form', 'arcane eye', 'insect plague'],
+  'Monster Slayer': ['protection from evil and good', 'zone of truth', 'magic circle', 'banishment', 'hold monster'],
+  'Aberrant Sorcery': ['arms of hadar, dissonant whispers, mind sliver:0', 'calm emotions, detect thoughts', 'hunger of hadar, sending', "evard's black tentacles, summon aberration", "rary's telepathic bond, telekinesis"],
+  'Clockwork Sorcery': ['alarm, protection from evil and good', 'aid, lesser restoration', 'dispel magic, protection from energy', 'freedom of movement, summon construct', 'greater restoration, wall of force'],
+  'Circle of Spores': ['chill touch:0', 'blindness/deafness, gentle repose', 'animate dead, gaseous form', 'blight, confusion', 'cloudkill, contagion'],
+  'Circle of Wildfire': ['burning hands, cure wounds', 'flaming sphere, scorching ray', 'plant growth, revivify', 'aura of life, fire shield', 'flame strike, mass cure wounds'],
+  Alchemist: ['healing word, ray of sickness', "flaming sphere, melf's acid arrow", 'gaseous form, mass healing word', 'blight, death ward', 'cloudkill, raise dead'],
+  Armorer: ['magic missile, thunderwave', 'mirror image, shatter', 'hypnotic pattern, lightning bolt', 'fire shield, greater invisibility', 'passwall, wall of force'],
+  Artillerist: ['shield, thunderwave', 'scorching ray, shatter', 'fireball, wind wall', 'ice storm, wall of fire', 'cone of cold, wall of force'],
+  'Battle Smith': ['heroism, shield', 'branding smite, warding bond', 'aura of vitality, conjure barrage', 'aura of purity, fire shield', 'banishing smite, mass cure wounds']
+};
+// 5.5e (2024) Player's Handbook lists; where a name is shared with 5e, this one is used under 5.5e rules
+const SUB_SP24 = {
+  'Life Domain': ['aid:2, bless, cure wounds, lesser restoration:2', 'mass healing word, revivify', 'aura of life, death ward', 'greater restoration, mass cure wounds'],
+  'Light Domain': ['burning hands, faerie fire, scorching ray:2, see invisibility:2', 'daylight, fireball', 'arcane eye, wall of fire', 'flame strike, scrying'],
+  'Trickery Domain': ['charm person, disguise self, invisibility:2, pass without trace:2', 'hypnotic pattern, nondetection', 'confusion, dimension door', 'dominate person, modify memory'],
+  'War Domain': ['guiding bolt, magic weapon:2, shield of faith, spiritual weapon:2', "crusader's mantle, spirit guardians", 'fire shield, freedom of movement', 'hold monster, steel wind strike'],
+  'Circle of the Moon': ['cure wounds, moonbeam:2, starry wisp:0', 'conjure animals', 'fount of moonlight', 'mass cure wounds'],
+  'Circle of the Sea': ['fog cloud, gust of wind:2, ray of frost:0, shatter:2, thunderwave', 'lightning bolt, water breathing', 'control water, ice storm', 'conjure elementals, hold monster'],
+  'Oath of Devotion': ['protection from evil and good, shield of faith', 'aid, zone of truth', 'beacon of hope, dispel magic', 'freedom of movement, guardian of faith', 'commune, flame strike'],
+  'Oath of Glory': ['guiding bolt, heroism', 'enhance ability, magic weapon', 'haste, protection from energy', 'compulsion, freedom of movement', "legend lore, yolande's regal presence"],
+  'Oath of the Ancients': ['ensnaring strike, speak with animals', 'misty step, moonbeam', 'plant growth, protection from energy', 'ice storm, stoneskin', 'commune with nature, tree stride'],
+  'Oath of Vengeance': ["bane, hunter's mark", 'hold person, misty step', 'haste, protection from energy', 'banishment, dimension door', 'hold monster, scrying'],
+  'Fey Wanderer': ['charm person', 'misty step', 'summon fey', 'dimension door', 'mislead'],
+  'Gloom Stalker': ['disguise self', 'rope trick', 'fear', 'greater invisibility', 'seeming'],
+  'Aberrant Sorcery': ['arms of hadar, calm emotions:2, detect thoughts:2, dissonant whispers, mind sliver:0', 'hunger of hadar, sending', "evard's black tentacles, summon aberration", "rary's telepathic bond, telekinesis"],
+  'Clockwork Sorcery': ['aid:2, alarm, lesser restoration:2, protection from evil and good', 'dispel magic, protection from energy', 'freedom of movement, summon construct', 'greater restoration, wall of force'],
+  'Draconic Sorcery': ["alter self:2, chromatic orb, command, dragon's breath:2", 'fear, fly', 'arcane eye, charm monster', 'legend lore, summon dragon'],
+  'Archfey Patron': ['calm emotions:2, faerie fire, misty step:2, phantasmal force:2, sleep', 'blink, plant growth', 'dominate beast, greater invisibility', 'dominate person, seeming'],
+  'Celestial Patron': ['aid:2, cure wounds, guiding bolt, lesser restoration:2, light:0, sacred flame:0', 'daylight, revivify', 'guardian of faith, wall of fire', 'greater restoration, summon celestial'],
+  'Fiend Patron': ['burning hands, command, scorching ray:2, suggestion:2', 'fireball, stinking cloud', 'fire shield, wall of fire', 'geas, insect plague'],
+  'Great Old One Patron': ["detect thoughts:2, dissonant whispers, phantasmal force:2, tasha's hideous laughter", 'clairvoyance, hunger of hadar', 'confusion, summon aberration', 'modify memory, telekinesis']
+};
+// Circle of the Land: the land decides the list
+const LAND_SP = {
+  '2014': {
+    Arctic: ['hold person, spike growth', 'sleet storm, slow', 'freedom of movement, ice storm', 'commune with nature, cone of cold'],
+    Coast: ['mirror image, misty step', 'water breathing, water walk', 'control water, freedom of movement', 'conjure elemental, scrying'],
+    Desert: ['blur, silence', 'create food and water, protection from energy', 'blight, hallucinatory terrain', 'insect plague, wall of stone'],
+    Forest: ['barkskin, spider climb', 'call lightning, plant growth', 'divination, freedom of movement', 'commune with nature, tree stride'],
+    Grassland: ['invisibility, pass without trace', 'daylight, haste', 'divination, freedom of movement', 'dream, insect plague'],
+    Mountain: ['spider climb, spike growth', 'lightning bolt, meld into stone', 'stone shape, stoneskin', 'passwall, wall of stone'],
+    Swamp: ["darkness, melf's acid arrow", 'water walk, stinking cloud', 'freedom of movement, locate creature', 'insect plague, scrying'],
+    Underdark: ['spider climb, web', 'gaseous form, stinking cloud', 'greater invisibility, stone shape', 'cloudkill, insect plague']
+  },
+  '2024': {
+    Arid: ['blur:2, burning hands, fire bolt:0', 'fireball', 'blight', 'wall of stone'],
+    Polar: ['fog cloud, hold person:2, ray of frost:0', 'sleet storm', 'ice storm', 'cone of cold'],
+    Temperate: ['misty step:2, shocking grasp:0, sleep', 'lightning bolt', 'freedom of movement', 'tree stride'],
+    Tropical: ['acid splash:0, ray of sickness, web:2', 'stinking cloud', 'polymorph', 'insect plague']
+  }
+};
+// casting time (A/B/R) and concentration for spells the builder's library doesn't describe
+const SUB_SP_META = {
+  'blindness/deafness': 'A', 'gentle repose': 'A', 'animate dead': 'A', 'gaseous form': 'Ac', 'confusion': 'Ac', 'cloudkill': 'Ac', 'contagion': 'A',
+  'chill touch': 'A', 'mind sliver': 'A', 'starry wisp': 'A', 'ray of frost': 'A', 'fire bolt': 'A', 'shocking grasp': 'A', 'acid splash': 'A', 'light': 'A', 'sacred flame': 'A', 'mage hand': 'A',
+  'arms of hadar': 'A', 'dissonant whispers': 'A', 'hunger of hadar': 'Ac', sending: 'A', "evard's black tentacles": 'Ac', 'summon aberration': 'Ac',
+  "rary's telepathic bond": 'A', telekinesis: 'Ac', alarm: 'A', 'summon construct': 'Ac', 'greater restoration': 'A', 'wall of force': 'Ac',
+  'alter self': 'Ac', 'chromatic orb': 'A', command: 'A', "dragon's breath": 'Bc', fear: 'Ac', fly: 'Ac', 'arcane eye': 'Ac', 'charm monster': 'A', 'legend lore': 'A', 'summon dragon': 'Ac',
+  'calm emotions': 'Ac', 'phantasmal force': 'Ac', sleep: 'A', blink: 'A', 'plant growth': 'A', 'dominate beast': 'Ac', 'greater invisibility': 'Ac', 'dominate person': 'Ac', seeming: 'A',
+  'cure wounds': 'A', 'guiding bolt': 'A', 'lesser restoration': 'A', daylight: 'A', revivify: 'A', 'guardian of faith': 'A', 'wall of fire': 'Ac', 'summon celestial': 'Ac',
+  'burning hands': 'A', 'scorching ray': 'A', suggestion: 'Ac', fireball: 'A', 'stinking cloud': 'Ac', 'fire shield': 'A', geas: 'A', 'insect plague': 'Ac',
+  'detect thoughts': 'Ac', "tasha's hideous laughter": 'Ac', clairvoyance: 'Ac', 'modify memory': 'Ac',
+  aid: 'A', bless: 'Ac', 'mass healing word': 'B', 'aura of life': 'Ac', 'death ward': 'A', 'mass cure wounds': 'A',
+  'faerie fire': 'Ac', 'see invisibility': 'A', scrying: 'Ac', 'flame strike': 'A', 'charm person': 'A', 'disguise self': 'A', invisibility: 'Ac', 'pass without trace': 'Ac',
+  'hypnotic pattern': 'Ac', nondetection: 'A', 'dimension door': 'A', 'magic weapon': 'B', 'shield of faith': 'Bc', 'spiritual weapon': 'Bc',
+  "crusader's mantle": 'Ac', 'spirit guardians': 'Ac', 'freedom of movement': 'A', 'hold monster': 'Ac', 'steel wind strike': 'A',
+  moonbeam: 'Ac', 'conjure animals': 'Ac', 'fount of moonlight': 'Ac', 'fog cloud': 'Ac', 'gust of wind': 'Ac', shatter: 'A', thunderwave: 'A', 'lightning bolt': 'A', 'water breathing': 'A',
+  'control water': 'Ac', 'ice storm': 'A', 'conjure elementals': 'Ac', 'conjure elemental': 'Ac', 'protection from evil and good': 'Ac', 'zone of truth': 'A', 'beacon of hope': 'Ac',
+  'dispel magic': 'A', commune: 'A', heroism: 'Ac', 'enhance ability': 'Ac', haste: 'Ac', 'protection from energy': 'Ac', compulsion: 'Ac',
+  "yolande's regal presence": 'Ac', 'ensnaring strike': 'Bc', 'speak with animals': 'A', 'misty step': 'B', 'commune with nature': 'A', 'tree stride': 'Ac', stoneskin: 'Ac',
+  bane: 'Ac', "hunter's mark": 'Bc', 'hold person': 'Ac', banishment: 'Ac', 'summon fey': 'Ac', mislead: 'Ac', 'rope trick': 'A',
+  blur: 'Ac', 'wall of stone': 'Ac', 'sleet storm': 'Ac', 'cone of cold': 'A', web: 'Ac', 'ray of sickness': 'A', polymorph: 'Ac', blight: 'A',
+  slow: 'Ac', 'water walk': 'A', 'create food and water': 'A', 'hallucinatory terrain': 'A', 'spider climb': 'Ac', barkskin: 'B', 'call lightning': 'Ac',
+  divination: 'A', dream: 'A', 'spike growth': 'Ac', 'meld into stone': 'A', 'stone shape': 'A', passwall: 'A', silence: 'Ac', darkness: 'Ac', "melf's acid arrow": 'A',
+  'locate creature': 'Ac', 'mirror image': 'A', identify: 'A', augury: 'A', 'speak with dead': 'A', 'animal friendship': 'A', 'wind wall': 'Ac', 'grasping vine': 'Bc',
+  'destructive wave': 'A', 'divine favor': 'B', 'searing smite': 'B', 'heat metal': 'Ac', 'elemental weapon': 'Ac', fabricate: 'A', 'animate objects': 'Ac', creation: 'A',
+  'false life': 'A', 'ray of enfeeblement': 'Ac', 'vampiric touch': 'Ac', 'antilife shell': 'Ac', 'raise dead': 'A', sanctuary: 'B', 'warding bond': 'A',
+  "otiluke's resilient sphere": 'Ac', 'aura of vitality': 'Bc', "leomund's tiny hut": 'A', 'circle of power': 'Ac', 'detect magic': 'Ac', 'magic missile': 'A', "nystul's magic aura": 'A',
+  'magic circle': 'A', "leomund's secret chest": 'A', 'planar binding': 'A', 'teleportation circle': 'A', 'armor of agathys': 'A', 'bestow curse': 'Ac',
+  'counterspell': 'R', 'aura of purity': 'Ac', 'compelled duel': 'Bc', 'shield': 'R', 'conjure barrage': 'A', 'branding smite': 'B', 'banishing smite': 'B', 'healing word': 'B'
+};
+const spTitle = n => n.replace(/(^|[\s\/-])(\w)/g, (m, a, c) => a + c.toUpperCase()).replace(/ (Of|The|And|With|From|To)\b/g, w => w.toLowerCase());
+// the always-prepared spells a subclass gives at class level `lvl`: [{ n, lvl, at }]
+function subSpellList(cls, sub, lvl, ed, land) {
+  if (!sub) return [];
+  let tiers = null,
+    at = null;
+  const A = SUB_AT[ed] || SUB_AT['2024'];
+  if (/Circle of the Land/i.test(sub)) {
+    const L = LAND_SP[ed] || {};
+    tiers = L[land] || null;
+    at = A.Druid;
+  } else {
+    tiers = (ed === '2024' && SUB_SP24[sub]) || SUB_SP[sub] || null;
+    if (tiers && ed === '2024' && !SUB_SP24[sub] && cls === 'Cleric') at = [1, 3, 5, 7, 9]; // a 5e domain used under 5.5e rules keeps its own table
+    at = at || (cls === 'Druid' ? (tiers && tiers.length === 5 ? A.DruidCircle || [2, 3, 5, 7, 9] : A.Druid) : A[cls]) || [3, 5, 9, 13, 17];
+    if (tiers && tiers.length === 5 && at.length === 4) at = cls === 'Paladin' || cls === 'Ranger' || cls === 'Artificer' ? [3, 5, 9, 13, 17] : [1, 3, 5, 7, 9];
+  }
+  if (!tiers) return [];
+  const out = [];
+  tiers.forEach((t, i) => {
+    if (at[i] == null || at[i] > lvl) return;
+    t.split(/,\s*/).forEach(x => {
+      const [nm, l] = x.trim().split(':');
+      out.push({ n: spTitle(nm), lvl: l != null ? +l : spTierLvl(at, i, ed === '2014' && /Circle of the Land/i.test(sub)), at: at[i] });
+    });
+  });
+  return out;
+}
+// short combat descriptions for list spells the builder's library doesn't describe
+const SUB_SP_DESC = {
+  'arcane eye': 'An invisible eye you can see through, moving 30 ft a turn, for up to 1 hour.',
+  confusion: '10-ft sphere: WIS save or confused (random behaviour) for 1 minute; repeat the save each turn.',
+  'legend lore': 'Learn lore about a famous person, place or object. Out of combat.',
+  'raise dead': 'Return a creature dead up to 10 days to life with 1 HP. One-hour casting.',
+  daylight: 'A 60-ft sphere of bright light for 1 hour; it dispels magical darkness of level 3 or lower.',
+  'insect plague': '20-ft sphere of swarming locusts: CON save or 4d10 piercing (half on a success); difficult terrain.',
+  'tree stride': 'Step into one tree and out of another within 500 ft, once per turn, for 1 minute.',
+  'control water': 'Shape a large body of water: flood, part, redirect or make a whirlpool.',
+  'dominate person': 'A humanoid makes a WIS save or is charmed and follows your commands; it repeats the save when damaged.',
+  'modify memory': 'A creature makes a WIS save or you reshape up to 10 minutes of its memory.',
+  fabricate: 'Turn raw materials into a finished object. Out of combat.',
+  'animate objects': 'Bring up to ten small objects to life to fight for you (Bonus Action to command).',
+  creation: 'Create a nonliving object of vegetable or mineral matter. Out of combat.',
+  blight: 'A creature makes a CON save or takes 8d8 necrotic (half on a success); plants take the maximum.',
+  'antilife shell': 'A 10-ft barrier around you that living creatures (not undead or constructs) can\'t pass.',
+  compulsion: 'Creatures of your choice within 30 ft: WIS save or you move them with a Bonus Action each turn.',
+  'locate creature': 'Sense the direction of a creature you know, within 1,000 ft.',
+  commune: 'Ask your deity up to three yes-or-no questions. Out of combat.',
+  'aura of purity': '30-ft aura: allies resist poison, can\'t be diseased, and have advantage on saves against many conditions.',
+  "otiluke's resilient sphere": 'A creature (DEX save if unwilling) is sealed in a sphere of force: nothing gets in or out.',
+  "rary's telepathic bond": 'Up to eight willing creatures can talk telepathically for 1 hour.',
+  "leomund's tiny hut": 'A 10-ft dome of force that keeps others out for 8 hours. Out of combat (ritual).',
+  'aura of life': '30-ft aura: allies resist necrotic damage and regain 1 HP at 0 HP at the start of their turns.',
+  'circle of power': '30-ft aura: allies have advantage on saves against spells and take no damage on a successful half-damage save.',
+  mislead: 'You turn invisible while an illusory double of you acts in your place.',
+  "nystul's magic aura": 'Change how a creature or object appears to divination magic. Out of combat.',
+  'magic circle': 'A 10-ft cylinder that celestials, elementals, fey, fiends or undead can\'t willingly enter.',
+  "leomund's secret chest": 'Hide a chest on the Ethereal Plane and call it back. Out of combat.',
+  'planar binding': 'Bind a celestial, elemental, fey or fiend to serve you. Out of combat.',
+  'teleportation circle': 'Open a portal to a permanent teleportation circle you know.',
+  cloudkill: '20-ft sphere of poison fog: CON save or 5d8 poison (half on a success); it drifts 10 ft a turn.',
+  'commune with nature': 'Learn facts about the surrounding land. Out of combat.',
+  geas: 'A creature makes a WIS save or must follow your command for 30 days, or take 5d10 psychic.',
+  'rope trick': 'A rope leads to an extradimensional space where up to eight creatures hide for 1 hour.',
+  seeming: 'Change how any number of creatures look for 8 hours.',
+  'gaseous form': 'A willing creature becomes a slow-flying mist that resists damage, for up to 1 hour.',
+  'arms of hadar': 'Creatures within 10 ft: STR save or 2d6 necrotic and no reactions until their next turn (half damage on a success).',
+  "evard's black tentacles": '20-ft square of tentacles: STR or DEX save each turn or 3d6 bludgeoning and restrained.',
+  'summon aberration': 'Summon an aberrant spirit that fights for you; it acts right after you.',
+  telekinesis: 'Move a creature (STR contest) or an object up to 30 ft with your mind, each turn.',
+  'summon construct': 'Summon a construct spirit that fights for you; it acts right after you.',
+  contagion: 'A creature you touch makes CON saves or contracts a magical disease.',
+  'fire shield': 'Flames wreathe you for 10 minutes: resist cold or fire, and melee attackers take 2d8 damage.',
+  "melf's acid arrow": 'Ranged spell attack: 4d4 acid now and 2d4 at the end of its next turn (half and none on a miss).',
+  passwall: 'Open a passage through wood, plaster or stone for 1 hour.',
+  'conjure barrage': '60-ft cone: DEX save or 5d8 damage of your weapon\'s type (half on a success).',
+  'banishing smite': 'Your next weapon hit deals +5d10 force; if it drops below 50 HP it is banished.',
+  'steel wind strike': 'Flash between up to five creatures within 30 ft: melee spell attacks, 6d10 force each; then teleport.',
+  'fount of moonlight': 'Resist radiant, +2d6 radiant on your melee hits, and a reaction to blind an attacker (CON save).',
+  'water breathing': 'Up to ten creatures can breathe underwater for 24 hours.',
+  'conjure elementals': 'Conjure elemental spirits that damage and restrain creatures near you.',
+  "yolande's regal presence": '10-ft emanation: enemies that enter or start there make a WIS save or take 4d6 psychic and are pushed or knocked prone.',
+  'summon fey': 'Summon a fey spirit that fights for you; it acts right after you.',
+  'alter self': 'Change your form: aquatic adaptation, a new appearance, or natural weapons.',
+  "dragon's breath": 'A creature can use a Magic action to exhale a 15-ft cone of energy: DEX save, 3d6.',
+  'charm monster': 'A creature makes a WIS save or is charmed by you for 1 hour.',
+  'summon dragon': 'Summon a draconic spirit that fights for you; it acts right after you.',
+  'phantasmal force': 'A creature makes an INT save or perceives an illusion that deals 2d8 psychic each turn.',
+  'summon celestial': 'Summon a celestial spirit that fights for you; it acts right after you.',
+  'stinking cloud': '20-ft sphere of gas: creatures that start there make a CON save or can\'t act or react that turn.',
+  "tasha's hideous laughter": 'A creature makes a WIS save or falls prone, laughing, and is incapacitated.',
+  clairvoyance: 'Create an invisible sensor to see or hear a place you know. Out of combat.',
+  'water walk': 'Up to ten creatures can walk on liquid for 1 hour.',
+  'conjure elemental': 'Summon an elemental that fights for you.',
+  'create food and water': 'Create food and water for 15 people. Out of combat.',
+  'hallucinatory terrain': 'Make natural terrain look, sound and smell like another kind. Out of combat.',
+  'wall of stone': 'Raise a stone wall of ten 10-ft panels; creatures caught in it may be pushed aside (DEX save).',
+  divination: 'Ask your deity a question about the next 7 days. Out of combat.',
+  dream: 'Speak to a creature in its dreams. Out of combat.',
+  'meld into stone': 'Step into a stone object or surface and stay there for up to 8 hours.',
+  'stone shape': 'Shape a piece of stone: a weapon, a door, a passage.'
+};
+
 /* ---------- state ---------- */
 const KEY = 'initiative-dnd-v2';
 let S;
@@ -6093,162 +6319,7 @@ function guessEdition(d) {
   return null;
 }
 // 2014 subclass spell lists, used only when the export carries no table (D&D Beyond leaves some out). Five tiers each.
-const SUB_SP = {
-  'Knowledge Domain': [
-    'command, identify',
-    'augury, suggestion',
-    'nondetection, speak with dead',
-    'arcane eye, confusion',
-    'legend lore, scrying'
-  ],
-  'Life Domain': [
-    'bless, cure wounds',
-    'lesser restoration, spiritual weapon',
-    'beacon of hope, revivify',
-    'death ward, guardian of faith',
-    'mass cure wounds, raise dead'
-  ],
-  'Light Domain': [
-    'burning hands, faerie fire',
-    'flaming sphere, scorching ray',
-    'daylight, fireball',
-    'guardian of faith, wall of fire',
-    'flame strike, scrying'
-  ],
-  'Nature Domain': [
-    'animal friendship, speak with animals',
-    'barkskin, spike growth',
-    'plant growth, wind wall',
-    'dominate beast, grasping vine',
-    'insect plague, tree stride'
-  ],
-  'Tempest Domain': [
-    'fog cloud, thunderwave',
-    'gust of wind, shatter',
-    'call lightning, sleet storm',
-    'control water, ice storm',
-    'destructive wave, insect plague'
-  ],
-  'Trickery Domain': [
-    'charm person, disguise self',
-    'mirror image, pass without trace',
-    'blink, dispel magic',
-    'dimension door, polymorph',
-    'dominate person, modify memory'
-  ],
-  'War Domain': [
-    'divine favor, shield of faith',
-    'magic weapon, spiritual weapon',
-    "crusader's mantle, spirit guardians",
-    'freedom of movement, stoneskin',
-    'flame strike, hold monster'
-  ],
-  'Forge Domain': [
-    'identify, searing smite',
-    'heat metal, magic weapon',
-    'elemental weapon, protection from energy',
-    'fabricate, wall of fire',
-    'animate objects, creation'
-  ],
-  'Grave Domain': [
-    'bane, false life',
-    'gentle repose, ray of enfeeblement',
-    'revivify, vampiric touch',
-    'blight, death ward',
-    'antilife shell, raise dead'
-  ],
-  'Order Domain': [
-    'command, heroism',
-    'hold person, zone of truth',
-    'mass healing word, slow',
-    'compulsion, locate creature',
-    'commune, dominate person'
-  ],
-  'Peace Domain': [
-    'heroism, sanctuary',
-    'aid, warding bond',
-    'beacon of hope, sending',
-    "aura of purity, otiluke's resilient sphere",
-    "greater restoration, rary's telepathic bond"
-  ],
-  'Twilight Domain': [
-    'faerie fire, sleep',
-    'moonbeam, see invisibility',
-    "aura of vitality, leomund's tiny hut",
-    'aura of life, greater invisibility',
-    'circle of power, mislead'
-  ],
-  'Arcana Domain': [
-    'detect magic, magic missile',
-    "magic weapon, nystul's magic aura",
-    'dispel magic, magic circle',
-    "arcane eye, leomund's secret chest",
-    'planar binding, teleportation circle'
-  ],
-  'Death Domain': [
-    'false life, ray of sickness',
-    'blindness/deafness, ray of enfeeblement',
-    'animate dead, vampiric touch',
-    'blight, death ward',
-    'antilife shell, cloudkill'
-  ],
-  'Oath of Devotion': [
-    'protection from evil and good, sanctuary',
-    'lesser restoration, zone of truth',
-    'beacon of hope, dispel magic',
-    'freedom of movement, guardian of faith',
-    'commune, flame strike'
-  ],
-  'Oath of the Ancients': [
-    'ensnaring strike, speak with animals',
-    'misty step, moonbeam',
-    'plant growth, protection from energy',
-    'ice storm, stoneskin',
-    'commune with nature, tree stride'
-  ],
-  'Oath of Vengeance': [
-    "bane, hunter's mark",
-    'hold person, misty step',
-    'haste, protection from energy',
-    'banishment, dimension door',
-    'hold monster, scrying'
-  ],
-  'Oath of Conquest': [
-    'armor of agathys, command',
-    'hold person, spiritual weapon',
-    'bestow curse, fear',
-    'dominate beast, stoneskin',
-    'cloudkill, dominate person'
-  ],
-  'Oath of Redemption': [
-    'sanctuary, sleep',
-    'calm emotions, hold person',
-    'counterspell, hypnotic pattern',
-    "otiluke's resilient sphere, stoneskin",
-    'hold monster, wall of force'
-  ],
-  'Oath of Glory': [
-    'guiding bolt, heroism',
-    'enhance ability, magic weapon',
-    'haste, protection from energy',
-    'compulsion, freedom of movement',
-    'commune, flame strike'
-  ],
-  'Oath of the Watchers': [
-    'alarm, detect magic',
-    'moonbeam, see invisibility',
-    'counterspell, nondetection',
-    'aura of purity, banishment',
-    'hold monster, scrying'
-  ],
-  'Oath of the Crown': [
-    'command, compelled duel',
-    'warding bond, zone of truth',
-    'aura of vitality, spirit guardians',
-    'banishment, guardian of faith',
-    'circle of power, geas'
-  ]
-};
+// subclass spell lists: subclass-spells.js
 // Spells that show up in subclass tables, so auto-added ones get the right cost and concentration. [cost, concentration, summary, 2024 cost, 2024 concentration]
 const KNOWN_SP = {
   "hunter's mark": [
@@ -7384,42 +7455,30 @@ function parseDDB(raw) {
         }
       });
     });
-    // no table in the export: fall back to the book list for known 2014 subclasses
+    // no table in the export: fall back to the book lists (subclass-spells.js), both rulesets
     (d.classes || []).forEach(c => {
       const cn = c.definition?.name,
-        lvl = c.level,
-        sub = c.subclassDefinition?.name || '',
-        list = SUB_SP[sub];
-      if (!list || autoSpells.some(a => a.cls === cn) || guessEdition(d) === '2024') return;
-      const reach = cn === 'Paladin' ? [3, 5, 9, 13, 17] : [1, 3, 5, 7, 9];
-      list.forEach((names, i) => {
-        if (reach[i] > lvl) return;
-        names.split(', ').forEach(n0 => {
-          const n = n0
-            .replace(/(^|[\s\/-])(\w)/g, (m, a, ch) => a + ch.toUpperCase())
-            .replace(/ (Of|The|And|With|From|To)\b/g, w => w.toLowerCase());
-          if (have.has(n.toLowerCase())) return;
-          have.add(n.toLowerCase());
-          const k = KNOWN_SP[n.toLowerCase()];
-          const cv = (d.characterValues || []).find(
-            v =>
-              v.typeId === 8 &&
-              typeof v.value === 'string' &&
-              v.value.toLowerCase().startsWith(n.toLowerCase() + ' [')
-          );
-          autoSpells.push({
-            n: cv ? cv.value : n,
-            base: n,
-            cls: cn,
-            lvl: i + 1,
-            t: k ? k[0] : 'A',
-            conc: k ? !!k[1] : false,
-            auto: sub + ' spells',
-            unconfirmed: !k,
-            d:
-              `Always prepared · ${sub} spell (${cn} level ${reach[i]}).` +
-              (k ? (k[2] ? ' ' + k[2] : '') : ' Check its casting time and concentration.')
-          });
+        sub = c.subclassDefinition?.name || '';
+      if (!sub || autoSpells.some(a => a.cls === cn)) return;
+      subSpellList(cn, sub, c.level, guessEdition(d) || '2024').forEach(s0 => {
+        const n = s0.n;
+        if (have.has(n.toLowerCase())) return;
+        have.add(n.toLowerCase());
+        const k = KNOWN_SP[n.toLowerCase()],
+          meta = SUB_SP_META[n.toLowerCase()];
+        const cv = (d.characterValues || []).find(
+          v => v.typeId === 8 && typeof v.value === 'string' && v.value.toLowerCase().startsWith(n.toLowerCase() + ' [')
+        );
+        autoSpells.push({
+          n: cv ? cv.value : n,
+          base: n,
+          cls: cn,
+          lvl: s0.lvl,
+          t: k ? k[0] : meta ? meta[0] : 'A',
+          conc: k ? !!k[1] : meta ? meta.includes('c') : false,
+          auto: sub + ' spells',
+          unconfirmed: !k && !meta,
+          d: `Always prepared · ${sub} spell (${cn} level ${s0.at}).` + (k && k[2] ? ' ' + k[2] : SUB_SP_DESC[n.toLowerCase()] ? ' ' + SUB_SP_DESC[n.toLowerCase()] : '')
         });
       });
     });
@@ -11794,6 +11853,24 @@ function hbBuild(B) {
       if (l) spells.push(JSON.parse(JSON.stringify(l)));
     } else spells.push({ ...s, custom: true });
   });
+  // always-prepared subclass spells (subclass-spells.js); they don't count against prepared spells
+  B.cls.forEach(c => {
+    subSpellList(c.n, c.sub, c.lvl, E, B.land).forEach(s0 => {
+      const had = spells.find(x => x.n.toLowerCase() === s0.n.toLowerCase());
+      if (had) {
+        // picked by hand too: it's still always prepared, so it doesn't count against the spells you prepare
+        if (!had.auto) (had.auto = c.sub.trim() + ' spells'), (had.d = `Always prepared · ${c.sub.trim()} (${c.n} level ${s0.at}).` + (had.d ? ' ' + had.d : ''));
+        return;
+      }
+      const l = lib.find(x => x.n.toLowerCase() === s0.n.toLowerCase()),
+        meta = SUB_SP_META[s0.n.toLowerCase()] || 'A';
+      const s = l ? JSON.parse(JSON.stringify(l)) : { n: s0.n, lvl: s0.lvl, t: meta[0], conc: meta.includes('c'), d: SUB_SP_DESC[s0.n.toLowerCase()] || '' };
+      s.cls = c.n;
+      s.auto = c.sub.trim() + ' spells';
+      s.d = `Always prepared · ${c.sub.trim()} (${c.n} level ${s0.at}).` + (s.d ? ' ' + s.d : '');
+      spells.push(s);
+    });
+  });
   if (kept.some(f => /^(cle\.(b)?potent|dru\.potent)$/.test(f.id)))
     spells
       .filter(x => x.lvl === 0 && /\dd\d/.test(x.d || ''))
@@ -12727,7 +12804,7 @@ function hbWho() {
      ${i ? `<button class="iconbtn" style="width:38px;height:38px" data-act="hbClsDel" data-arg="${i}" aria-label="Remove class">✕</button>` : ''}</div>
     <div class="row between" style="margin-top:10px"><span class="sm mut">Level</span><div class="row" style="gap:6px"><button class="iconbtn" style="width:34px;height:34px" data-act="hbLvl" data-arg="${i}|-1">−</button><b class="num" style="min-width:30px;text-align:center">${c.lvl}</b><button class="iconbtn" style="width:34px;height:34px" data-act="hbLvl" data-arg="${i}|1">+</button></div></div>
     <input class="field" style="margin-top:10px;padding:10px 12px" list="hbsub${i}" placeholder="Subclass (optional)" value="${esc(c.sub || '')}" oninput="hbCls(${i},'sub',this.value,1)" onchange="render()">
-    <datalist id="hbsub${i}">${HC[c.n].subs.map(s => `<option value="${esc(s)}">`).join('')}</datalist>${hbSubNote(i)}</div>`
+    <datalist id="hbsub${i}">${HC[c.n].subs.map(s => `<option value="${esc(s)}">`).join('')}</datalist>${hbSubNote(i)}${hbLandPick(i)}</div>`
     )
     .join('')}
   ${B.cls.length < 3 ? `<button class="btn ghost" data-act="hbClsAdd">+ Add a class (multiclass)</button>` : ''}
@@ -12828,6 +12905,7 @@ function hbSpells() {
       ? `<div class="card" style="margin:6px 0 10px"><div class="row between"><span class="sm mut">Spell save DC</span><b>${8 + D.prof + D.m[D.scAb]}</b></div><div class="row between"><span class="sm mut">Spell attack</span><b>${sgn(D.prof + D.m[D.scAb])}</b></div><div class="row between"><span class="sm mut">Ability</span><b>${D.scAb}</b></div>${slotTxt ? `<div class="sm mut" style="margin-top:6px">Slots: ${slotTxt}</div>` : ''}</div>`
       : `<p class="sm mut" style="line-height:1.5;margin:6px 0 12px">Not a spellcaster. If you have spells from your species or a feat, add them here; otherwise skip this step.</p>`
   }
+  ${hbAutoSp()}
   ${chosen.length ? `<div class="xs sec">Your spells · ${chosen.length}</div><div class="filters" style="flex-wrap:wrap">${chosen.map((s, i) => `<button class="on" data-act="hbSpDel" data-arg="${i}">${esc(typeof s === 'string' ? s : s.n)} ✕</button>`).join('')}</div>` : ''}
   <div class="xs sec">Add from the list</div>
   <input class="field" placeholder="Search spells" value="${esc(HQ)}" oninput="HQ=this.value;$('#hbList').innerHTML=hbSpellList()">
@@ -13213,6 +13291,23 @@ Object.assign(ACT, {
       hbApply(B, true);
     }
   };
+}
+
+// Circle of the Land: which land (it decides the circle spells)
+function hbLandPick(i) {
+  const c = HB.cls[i];
+  if (!c || c.n !== 'Druid' || !/Circle of the Land/i.test(c.sub || '')) return '';
+  const lands = Object.keys(LAND_SP[HB.ed] || LAND_SP['2024']);
+  if (!lands.includes(HB.land)) HB.land = lands[0];
+  return `<div class="row" style="gap:8px;margin-top:8px;align-items:center"><span class="sm mut">Land</span><select class="field" style="flex:1;padding:8px 10px" onchange="HB.land=this.value;render()">${lands.map(l => `<option ${l === HB.land ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
+}
+// the subclass's always-prepared spells, shown (not removable) in the Spells step
+function hbAutoSp() {
+  const L = HB.cls.flatMap(c => subSpellList(c.n, c.sub, c.lvl, HB.ed, HB.land).map(s => ({ ...s, sub: (c.sub || '').trim() })));
+  if (!L.length) return '';
+  return `<div class="xs sec">Always prepared · from ${esc([...new Set(L.map(s => s.sub))].join(', '))}</div>
+  <div class="filters" style="flex-wrap:wrap">${L.map(s => `<span class="tag" style="padding:7px 10px">${esc(s.n)}${s.lvl ? '' : ' · cantrip'}</span>`).join('')}</div>
+  <div class="sm mut" style="margin:6px 0 4px">These come with your subclass and don't count against the spells you prepare.</div>`;
 }
 
 // level for ready-made characters
