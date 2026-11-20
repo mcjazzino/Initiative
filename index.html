@@ -765,7 +765,7 @@ const DEMO = {
         'Spiritual Weapon',
         2,
         'B',
-        'Floating weapon: 1d8+WIS force; move & attack as a Bonus Action.',
+        'A floating weapon attacks as you cast it: melee spell attack, 1d8+WIS force. On later turns, move it 20 ft and attack again as a Bonus Action.',
         true,
         { v14: { conc: false } }
       ),
@@ -2724,15 +2724,16 @@ const SPREP = {
     t: 'B',
     l: 'Spiritual Weapon: attack',
     dur: 10,
+    now: true, // casting it includes the first attack
     atk: (e, x) => ({
       hit: x.atk,
-      dmg: `${1 + (is14('smite') ? Math.floor((e.lvl - 2) / 2) : e.lvl - 2)}d8${x.mod >= 0 ? '+' : ''}${x.mod}`,
+      dmg: `${1 + (is14('demo') ? Math.floor((e.lvl - 2) / 2) : e.lvl - 2)}d8${x.mod >= 0 ? '+' : ''}${x.mod}`,
       type: 'force',
       row: 'Spectral weapon',
       sub: 'Melee spell attack · move it up to 20 ft first'
     }),
     f: (e, x) =>
-      `Move the weapon up to 20 ft and make a melee spell attack: +${x.atk}, ${1 + (is14('smite') ? Math.floor((e.lvl - 2) / 2) : e.lvl - 2)}d8${x.mod >= 0 ? '+' : ''}${x.mod} force.`
+      `Move the weapon up to 20 ft and make a melee spell attack: +${x.atk}, ${1 + (is14('demo') ? Math.floor((e.lvl - 2) / 2) : e.lvl - 2)}d8${x.mod >= 0 ? '+' : ''}${x.mod} force.`
   },
   'call lightning': {
     t: 'A',
@@ -2810,7 +2811,7 @@ function repExtras() {
     return {
       _id: 'xrep' + i,
       n: D.l,
-      t: !is14('smite') && D.t24 ? D.t24 : D.t,
+      t: !is14('demo') && D.t24 ? D.t24 : D.t,
       kind: 'rep',
       repK: e.k,
       wl: D.atk ? { ...D.atk(e, nums), n: spBase(e.n), lvl: e.lvl } : null,
@@ -4781,7 +4782,13 @@ function castSpell(s, slotKey) {
       const lv = slotKey === 'P' ? (CH().slots.P || {}).lvl || s.lvl : +slotKey;
       S.rep = (S.rep || []).filter(e => e.k !== k);
       S.rep.push({ k, n: s.n, lvl: lv, conc: !!s.conc, until: c.round + SPREP[k].dur });
-      extra += `<br><span class="mut">On later turns: “${SPREP[k].l}” appears in your ${(!is14('smite') && SPREP[k].t24 ? SPREP[k].t24 : SPREP[k].t) === 'B' ? 'Bonus Actions' : 'Actions'}</span>`;
+      if (SPREP[k].now) {
+        const ch = CH(),
+          atk = s.atk != null ? s.atk : ch.sc ? ch.sc.atk : 0,
+          w = SPREP[k].atk({ lvl: lv }, { atk, mod: atk - (ch.prof || 2) });
+        extra += `<br><b>Attack now</b>, as part of the cast: <b>+${w.hit}</b> to hit, <b>${esc(w.dmg)}</b> ${w.type}`;
+      }
+      extra += `<br><span class="mut">On later turns: “${SPREP[k].l}” appears in your ${(!is14('demo') && SPREP[k].t24 ? SPREP[k].t24 : SPREP[k].t) === 'B' ? 'Bonus Actions' : 'Actions'}</span>`;
     }
   }
   if (/^Shillelagh/i.test(s.base || s.n)) {
@@ -11886,6 +11893,12 @@ function hbBuild(B) {
       s.d = `Always prepared · ${c.sub.trim()} (${c.n} level ${s0.at}).` + (s.d ? ' ' + s.d : '');
       spells.push(s);
     });
+  });
+  // the shared spell list was written for one class: "+ CHA" becomes the casting ability of whoever has it
+  spells.forEach(x => {
+    if (x.custom || !x.d) return;
+    const ab = (x.cls && HC[x.cls] && HC[x.cls].ab) || D.scAb;
+    if (ab) x.d = x.d.replace(/\+ ?(CHA|WIS|INT)\b/g, a => a.replace(/CHA|WIS|INT/, ab));
   });
   if (kept.some(f => /^(cle\.(b)?potent|dru\.potent)$/.test(f.id)))
     spells
