@@ -1227,9 +1227,58 @@ const DEMO = {
   }
 };
 
+/* The demo Blood Hunter at any level 1-20: Order of the Profane Soul (Celestial patron), DEX and INT.
+   Scores: DEX 16 / INT 16 / CON 14; ASIs to DEX at 4 and 12, INT at 8 and 16, CON at 19. Level 7 matches DEMO.bloodhunter. */
+function bhTemplate(L) {
+  L = Math.max(1, Math.min(20, +L || 7));
+  const dex = 3 + (L >= 4) + (L >= 12),
+    int = 3 + (L >= 8) + (L >= 16),
+    con = 2 + (L >= 19),
+    prof = 2 + Math.floor((L - 1) / 4),
+    hit = prof + dex,
+    order = L >= 3 ? 'Order of the Profane Soul' : '',
+    beams = L >= 17 ? 4 : L >= 11 ? 3 : L >= 5 ? 2 : 1;
+  const curses = ['marked', L >= 6 && 'eyeless', L >= 10 && 'binding', L >= 14 && 'exposure', L >= 18 && 'bloated'].filter(Boolean);
+  if (L >= 18) curses.push('souleater');
+  const rites = [L >= 2 && 'flame', L >= 7 && 'frozen', L >= 14 && 'dead'].filter(Boolean);
+  const S1 = [
+    [3, SP('Eldritch Blast', 0, 'A', `Ranged spell attack, 1d10 force per beam — ${beams === 1 ? 'one beam' : beams + ' beams'} at your level.`)],
+    [3, SP('Minor Illusion', 0, 'A', 'Create a sound or small image.')],
+    [3, SP('Hex', 1, 'B', '+1d6 necrotic on your hits against the target; disadvantage on one ability.', true)],
+    [3, SP('Armor of Agathys', 1, 'A', '5 temporary HP per slot level; melee attackers take that much cold damage.')],
+    [5, SP('Hellish Rebuke', 1, 'R', 'When damaged: DEX save, 2d10 fire (+1d10 per slot level above 1).')],
+    [7, SP('Misty Step', 2, 'B', 'Teleport up to 30 ft.')],
+    [9, SP('Darkness', 2, 'A', '15-ft sphere of magical darkness for 10 minutes.', true)],
+    [11, SP('Hold Person', 2, 'A', 'A humanoid makes a WIS save or is paralyzed; it repeats the save at the end of each turn.', true)],
+    [13, SP('Counterspell', 3, 'R', 'When a creature within 60 ft casts a spell: interrupt it (automatic for level 3 or lower; otherwise an ability check).')],
+    [15, SP('Hunger of Hadar', 3, 'A', '20-ft sphere of void: blinded inside, 2d6 cold at the start of turns, 2d6 acid at the end (DEX save).', true)],
+    [17, SP('Fly', 3, 'A', 'A creature gains a 60-ft fly speed for 10 minutes.', true)],
+    [19, SP('Banishment', 4, 'A', 'A creature makes a CHA save or is banished for up to 1 minute.', true)]
+  ];
+  const passives = [L >= 10 && 'Dark Augmentation', L >= 14 && 'Hardened Soul'].filter(Boolean);
+  return {
+    str: 0,
+    prof,
+    sc: { dc: 8 + prof + int, atk: prof + int, ab: 'INT' },
+    name: 'Vesper Crane',
+    sub: order,
+    ac: 12 + dex,
+    hp: 10 + con + (L - 1) * (6 + con),
+    speed: 30 + (L >= 10 ? 5 : 0),
+    attacks: L >= 5 ? 2 : 1,
+    weapons: [
+      W('Rapier', hit, `1d8+${dex}`, 'piercing'),
+      W('Light Crossbow', hit, `1d8+${dex}`, 'piercing', 'Ranged 80/320')
+    ],
+    bh: { level: L, order, patron: L >= 3 ? 'celestial' : '', hemo: 'INT', int, wis: 1, curses, rites, tempSoak: true, wl: 0 },
+    feats: [],
+    passives,
+    spells: L >= 3 ? S1.filter(([l]) => L >= l).map(([, s]) => s) : []
+  };
+}
 const P = (n, v, base) => ({ n, v, base: !!base });
 const DEMO_AC = {
-  bloodhunter: [P('Studded Leather (light armour)', 12, 1), P('Dexterity', 3)],
+  bloodhunter: [P('Studded Leather (light armour)', 12, 1), P('Dexterity', 3)], // level 7; scaled demos use their own
   barbarian: [P('Unarmored Defense (Barbarian)', 10, 1), P('Dexterity', 2), P('Constitution', 3)],
   bard: [P('Leather (light armour)', 11, 1), P('Dexterity', 3)],
   cleric: [P('Chain Mail (heavy armour)', 16, 1), P('Shield', 2)],
@@ -1244,8 +1293,8 @@ const DEMO_AC = {
   wizard: [P('Mage Armor (spell, cast before combat)', 13, 1), P('Dexterity', 2)],
   artificer: [P('Half Plate (medium armour)', 15, 1), P('Dexterity', 1), P('Shield', 2)]
 };
-function demoChar(k, edition = '2024') {
-  const t = DEMO[k];
+function demoChar(k, edition = '2024', L) {
+  const t = k === 'bloodhunter' ? bhTemplate(L || 7) : DEMO[k];
   const slots = {};
   if (t.slots) for (const l in t.slots) slots[l] = { max: t.slots[l], used: 0 };
   if (t.pact) slots.P = { lvl: t.pact.lvl, max: t.pact.max, used: 0, rest: 'short' };
@@ -1257,8 +1306,9 @@ function demoChar(k, edition = '2024') {
     sub: t.sub,
     level: t.bh ? t.bh.level : 5,
     str: t.str || 0,
-    prof: 3,
+    prof: t.prof || 3,
     sc: t.sc || null,
+    passives: t.passives || [],
     wis: t.wis || 0,
     druidLevel: k === 'druid' ? 5 : 0,
     ac: t.ac,
@@ -1914,7 +1964,7 @@ function bhFeats() {
   const F2 = (k, o) => out.push({ ...o, _id: 'b' + k });
   const hm = s => s.replace(/your Hemocraft modifier/g, `your Hemocraft modifier (+${m})`);
   const txt = n => (b.texts || {})[n.toLowerCase()] || null;
-  F2('rite', {
+  if (l >= 2) F2('rite', {
     full: txt('Crimson Rite'),
     n: 'Crimson Rite',
     t: 'B',
@@ -1942,8 +1992,15 @@ function bhFeats() {
       n: 'Brand of Castigation',
       t: 'F',
       res: 'brand',
-      d: `When you damage a creature with your Crimson Rite weapon: brand it. You always know where it is, and it takes ${m} psychic each time it damages you or a creature within 5 ft of you.`,
+      d: `When you damage a creature with your Crimson Rite weapon: brand it. You always know where it is, and it takes ${m} psychic each time it damages you or a creature within 5 ft of you.${l >= 13 ? ` Brand of Tethering: it can't Dash, and if it tries to teleport or leave its plane it takes 4d6 psychic and makes a WIS save or the attempt fails.` : ''}${isProfane() && l >= 11 ? ' Brand of the Sapping Scar: it has disadvantage on saves against your warlock spells.' : ''}`,
       needRite: true
+    });
+  if (l >= 20)
+    F2('sanguine', {
+      n: 'Sanguine Mastery',
+      t: 'F',
+      once: 'sanguine',
+      d: 'Once per turn, reroll a hemocraft die (rite or curse) and use either result. When you crit with your Crimson Rite weapon, regain one Blood Maledict use.'
     });
   if (isProfane()) {
     const p = b.patron;
@@ -2114,8 +2171,8 @@ const freshCond = () => ({
   hasted: false,
   blessed: false
 });
-function fresh(k, ed) {
-  return { char: demoChar(k, ed), conc: null, cond: freshCond(), c: newCombat(), ws: null };
+function fresh(k, ed, L) {
+  return { char: demoChar(k, ed, L), conc: null, cond: freshCond(), c: newCombat(), ws: null };
 }
 function newCombat() {
   return {
@@ -2159,7 +2216,7 @@ if (S.c) {
 if (S.char && S.char.source === 'demo' && S.char.cls) {
   try {
     const o = S.char,
-      f = demoChar(o.cls, o.edition || '2024');
+      f = demoChar(o.cls, o.edition || '2024', o.cls === 'bloodhunter' ? o.level : undefined);
     Object.values(f.res).forEach(r => {
       const old = (o.res || {})[r.k];
       if (old) r.cur = Math.min(r.max, old.cur);
@@ -3776,6 +3833,7 @@ function damageHints() {
     L.push(`<b>Aura of Protection</b>: +${Math.max(1, chaMod())} to your saves, and to allies' within ${pl >= 18 ? '30 ft (Aura Expansion)' : '10 ft'}.`);
   }
   if (hasP('Gnomish Cunning') || hasP('Gnome Cunning')) L.push('<b>Gnomish Cunning</b>: advantage on INT, WIS and CHA saves.');
+  if (hasP('Dark Augmentation')) L.push(`<b>Dark Augmentation</b>: +${Math.max(1, hemoMod())} to STR, DEX and CON saves.`);
   return L.length
     ? `<div class="card" style="margin-top:12px">${L.map(x => `<div class="sm" style="line-height:1.45;margin-top:3px">${x}</div>`).join('')}</div>`
     : '';
@@ -3788,6 +3846,7 @@ function condSaveNote(k) {
   if (k === 'frightened' && hasP('Brave')) L.push('Brave: you had advantage on that save');
   if (k === 'frightened' && hasP('Aura of Courage')) L.push("Aura of Courage: you can't be Frightened while you're conscious");
   if ((k === 'charmed' || k === 'frightened') && hasP('Gnomish Cunning')) L.push('Gnomish Cunning: you had advantage on that save');
+  if ((k === 'charmed' || k === 'frightened') && hasP('Hardened Soul')) L.push('Hardened Soul: you had advantage on that save');
   return L.length ? '<br>' + L.join('<br>') : '';
 }
 function chaMod() {
@@ -4077,7 +4136,7 @@ function homeView() {
     .sort((x, y) => x[1].n.localeCompare(y[1].n))
     .map(
       ([k, v]) =>
-        `<button class="cg ${ch.cls === k && (ch.source === 'demo' || pre) ? 'on' : ''}" data-act="pickReady" data-arg="${k}"><i style="border-color:${v.c};color:${v.c}">${v.n === 'Blood Hunter' ? 'BH' : v.n.slice(0, 2)}</i>${v.n}${k === 'bloodhunter' ? '<small style="display:block;font-weight:600;opacity:.6;margin-top:2px">max level 7</small>' : ''}</button>`
+        `<button class="cg ${ch.cls === k && (ch.source === 'demo' || pre) ? 'on' : ''}" data-act="pickReady" data-arg="${k}"><i style="border-color:${v.c};color:${v.c}">${v.n === 'Blood Hunter' ? 'BH' : v.n.slice(0, 2)}</i>${v.n}</button>`
     )
     .join('')}</div>
   </details>`;
@@ -7907,12 +7966,12 @@ const ACT = {
   demo(k) {
     const o = CH();
     shelfKeep(null);
-    S = fresh(k, o.edition);
+    S = fresh(k, o.edition, k === 'bloodhunter' ? PG_LVL : undefined);
     S.char.rules = { ...(o.rules || {}) };
     S.char.strict = !!o.strict;
     hist = [];
     render();
-    toast(`Switched to ${CLS[k].n}${shelfToast()}`);
+    toast(`Switched to ${k === 'bloodhunter' ? `level ${CH().level} ` : ''}${CLS[k].n}${shelfToast()}`);
   },
   menu() {
     openSheet('Character', menuSheet);
@@ -13562,7 +13621,7 @@ function shelfCard() {
 function replaceAskSheet() {
   const ch = CH(),
     k = REPLACE_K;
-  return `<p style="line-height:1.5;margin:4px 0 12px">This swaps <b>${esc(ch.name)}</b> for a ready-made level ${k === 'bloodhunter' ? 7 : PG_LVL} ${CLS[k].n}.</p>
+  return `<p style="line-height:1.5;margin:4px 0 12px">This swaps <b>${esc(ch.name)}</b> for a ready-made level ${PG_LVL} ${CLS[k].n}.</p>
   <p class="sm mut" style="line-height:1.5;margin-bottom:14px">${esc(ch.name)} isn't lost: they stay under Change character → Your characters, exactly as they are now.</p>
   <button class="btn pri" data-act="replaceGo">Play the ${CLS[k].n}</button>
   <button class="btn ghost" style="margin-top:8px" data-act="closeSheet">Keep playing ${esc(ch.name)}</button>`;
@@ -13627,7 +13686,7 @@ function welcomeView() {
      .sort((x, y) => x[1].n.localeCompare(y[1].n))
      .map(
        ([k, v]) =>
-         `<button class="cg" data-act="quick" data-arg="${k}"><i style="border-color:${v.c};color:${v.c}">${v.n === 'Blood Hunter' ? 'BH' : v.n.slice(0, 2)}</i>${v.n}${k === 'bloodhunter' ? '<small style="display:block;font-weight:600;opacity:.6;margin-top:2px">max level 7</small>' : ''}</button>`
+         `<button class="cg" data-act="quick" data-arg="${k}"><i style="border-color:${v.c};color:${v.c}">${v.n === 'Blood Hunter' ? 'BH' : v.n.slice(0, 2)}</i>${v.n}</button>`
      )
      .join('')}</div>
   </div>
