@@ -99,7 +99,11 @@ input,textarea{font:inherit;color:var(--txt)}
 .item{background:var(--card);border:1px solid #26232e;border-radius:15px;padding:12px 12px 12px 14px;margin-bottom:8px}
 .item.dis{opacity:.45}
 .item .t{font-weight:800;font-size:15px}
-.item .d{font-size:12.8px;color:var(--mut);margin-top:4px;line-height:1.45}
+.item .d{font-size:12.8px;color:var(--mut);margin-top:4px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.unclamp .item .d{display:block;-webkit-line-clamp:unset}
+.uagrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.uagrid button{padding:12px 6px;border-radius:12px;background:var(--card2);border:1px solid #2c2836;font-weight:700;font-size:13.5px;color:var(--txt)}
+.uagrid button.off{opacity:.45}
 .cost{font-size:10px;font-weight:800;letter-spacing:.06em;padding:3px 7px;border-radius:6px;text-transform:uppercase;white-space:nowrap}
 .cost.A{background:var(--soft);color:var(--acc);border:1px solid var(--line)}
 .cost.B{background:rgba(242,184,75,.12);color:var(--warn)}
@@ -4883,10 +4887,19 @@ function actionsSheet() {
           .join('')}${freeSp.map(s => item(s, { btn: 'Smite' })).join('')}`
       : ''
   }
-  <div class="xs sec">Other actions</div>${universal()
-    .map(a => item(a))
-    .join('')}`;
+  <div class="xs sec">Other actions</div>${uaGrid()}`;
 }
+// the standard actions everyone knows (Dash, Dodge…): small buttons; tap one for its rules and the Use button
+function uaGrid() {
+  const c = C();
+  return `<div class="uagrid">${universal()
+    .map(a => {
+      const used = (a.t || 'A') === 'A' ? !c.action : (a.t === 'B' && !c.bonus);
+      return `<button class="${used ? 'off' : ''}" data-act="uaOpen" data-arg="${a.k}">${esc(a.n)}</button>`;
+    })
+    .join('')}</div>`;
+}
+
 function bonusSheet() {
   const c = C(),
     fb = feats().filter(f => f.t === 'B'),
@@ -4988,11 +5001,18 @@ function invSheet() {
   <div class="xs sec">Weapons in hand</div>
   ${item({ _id: 'xdraw', n: 'Draw or stow a weapon', t: old ? 'I' : 'F', d: old ? 'Uses your free object interaction (a second one costs your Action).' : 'Free as part of an attack — once per attack.' })}
   ${attSection()}
-  <div class="xs sec">Items</div>${
-    items()
-      .map(it => item(it))
-      .join('') || '<div class="empty">Inventory is empty.</div>'
-  }`;
+  ${invLists()}`;
+}
+const FIGHT_GEAR =
+  /potion|elixir|scroll|oil|acid|alchemist's fire|holy water|caltrops|ball bearing|\bnet\b|bomb|poison|antitoxin|healer|arrow|bolt|bullet|needle|dart|javelin|torch|wand|staff|rod\b|ring\b|amulet|cloak|boots|bracers|gem|bead|figurine|horn|dust|philter|grenade/i;
+const fightGear = it => it.potion || it.custom || it.aid != null || it.charges || FIGHT_GEAR.test(it.n);
+function invLists() {
+  const all = items();
+  if (!all.length) return '<div class="xs sec">Items</div><div class="empty">Inventory is empty.</div>';
+  const top = all.filter(fightGear),
+    rest = all.filter(it => !fightGear(it));
+  return `<div class="xs sec">Items</div>${top.map(it => item(it)).join('') || '<div class="empty">Nothing for a fight, like a potion or scroll.</div>'}
+  ${rest.length ? `<details class="rcat" style="margin-top:10px"><summary><span>Other gear</span><span class="sm mut">${rest.length}</span></summary>${rest.map(it => item(it)).join('')}</details>` : ''}`;
 }
 function moveSheet() {
   const c = C(),
@@ -8743,6 +8763,14 @@ const ACT = {
       () => `<button class="btn pri" data-act="endTurnGo">Confirm End Turn</button>
       <button class="btn" style="margin-top:10px" data-act="closeSheet">Keep fighting</button>`
     );
+  },
+  // a standard action (Dash, Dodge…) from the Actions list's button grid: its rules and Use button
+  uaOpen(k) {
+    if (universal().some(x => x.k === k))
+      pushSheet(
+        universal().find(x => x.k === k).n,
+        () => `<button class="backlink" data-act="back">‹ Back</button><div class="unclamp">${item(universal().find(x => x.k === k))}</div>`
+      );
   },
   endTurnGo() {
     closeSheet();
