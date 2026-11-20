@@ -4901,6 +4901,7 @@ function backSheet() {
   $('#sbody').scrollTop = p.y || 0;
 }
 function closeSheet() {
+  if (sheetFn && sheetFn.name === 'hbSheet') hbDraftSave();
   sheetStack = [];
   GL = null;
   document.body.classList.remove('sheet-open');
@@ -12811,7 +12812,7 @@ function hbDrag(e, a) {
   addEventListener('pointercancel', up);
 }
 function hbHead() {
-  return `<div class="hbsteps">${HSTEPS.map((s, i) => `<button class="${i === HSTEP ? 'on' : i < HSTEP ? 'done' : ''}" data-act="hbGo" data-arg="${i}"><b>${i + 1}</b>${s}</button>`).join('')}</div>`;
+  return `${HB._resumed ? `<div class="row between card" style="padding:10px 12px;margin:0 0 10px"><span class="sm">Picked up where you left off</span><button class="btn sm ghost" data-act="hbFresh">Start over</button></div>` : ''}<div class="hbsteps">${HSTEPS.map((s, i) => `<button class="${i === HSTEP ? 'on' : i < HSTEP ? 'done' : ''}" data-act="hbGo" data-arg="${i}"><b>${i + 1}</b>${s}</button>`).join('')}</div>`;
 }
 function hbFoot() {
   const last = HSTEP === HSTEPS.length - 1,
@@ -12819,6 +12820,33 @@ function hbFoot() {
   return `<div class="row" style="gap:8px;margin-top:18px">${HSTEP ? `<button class="btn" style="flex:1" data-act="hbGo" data-arg="${HSTEP - 1}">‹ Back</button>` : ''}
    ${last ? `<button class="btn pri" style="flex:2" data-act="hbDone">${edit ? 'Save changes' : 'Create character'}</button>` : `<button class="btn pri" style="flex:2" data-act="hbGo" data-arg="${HSTEP + 1}">Next: ${HSTEPS[HSTEP + 1]} ›</button>`}</div>`;
 }
+// an unfinished build or edit is kept when the sheet is closed, and picked up again next time
+const HB_DRAFT = 'initiative-hbdraft';
+function hbDraftKey(edit) {
+  const ch = CH();
+  return edit ? 'edit:' + ch.source + ':' + ch.name + ':' + ch.cls : 'new';
+}
+function hbDraftSave() {
+  if (!HB) return;
+  try {
+    localStorage.setItem(HB_DRAFT, JSON.stringify({ k: hbDraftKey(HB._edit), hb: HB, step: HSTEP }));
+  } catch (e) {}
+}
+function hbDraftLoad(edit) {
+  try {
+    const d = JSON.parse(localStorage.getItem(HB_DRAFT) || 'null');
+    if (d && d.k === hbDraftKey(edit) && d.hb) return d;
+  } catch (e) {}
+  return null;
+}
+function hbDraftClear() {
+  try {
+    localStorage.removeItem(HB_DRAFT);
+  } catch (e) {}
+}
+addEventListener('pagehide', () => {
+  if (sheetFn && sheetFn.name === 'hbSheet') hbDraftSave();
+});
 function hbSheet() {
   return hbHead() + [hbWho, hbScores, hbWeapons, hbSpells, hbFeatures][HSTEP]() + hbFoot();
 }
@@ -12828,8 +12856,7 @@ function hbWho() {
     used = B.cls.map(c => c.n);
   return `<p class="sm mut" style="line-height:1.5;margin:6px 0 12px">Copy these from your character sheet: Roll20, paper, or anywhere else. The app works out the rest, and you can change anything later.</p>
   <input class="field" placeholder="Character name" value="${esc(B.name)}" oninput="hbSet('name',this.value)">
-  <input class="field" style="margin-top:8px" list="hbspc" placeholder="Species (optional)" value="${esc(B.species || '')}" oninput="hbSet('species',this.value)" onchange="hbSpecies()">
-  <datalist id="hbspc">${[...SPECIES, 'Half-Elf', 'Half-Orc', 'Firbolg', 'Genasi', 'Tabaxi', 'Kenku', 'Tortle', 'Warforged'].map(x => `<option value="${x}">`).join('')}</datalist>
+  ${hbPick(SPC_ALL, B.species, B._spOther, 'Species (optional)', "hbSpPick(this.value)", `<input class="field" style="margin-top:8px" placeholder="Type the species" value="${esc(B.species || '')}" oninput="hbSet('species',this.value)" onchange="hbSpecies()">`)}
   ${(() => {
     const sk = spcKey(B.species),
       so = SPC_OPTS[sk];
@@ -12847,8 +12874,7 @@ function hbWho() {
      <select class="field" style="flex:1;padding:10px 12px" onchange="hbCls(${i},'n',this.value)">${HCN.map(n => `<option ${n === c.n ? 'selected' : ''} ${n !== c.n && used.includes(n) ? 'disabled' : ''}>${n}</option>`).join('')}</select>
      ${i ? `<button class="iconbtn" style="width:38px;height:38px" data-act="hbClsDel" data-arg="${i}" aria-label="Remove class">✕</button>` : ''}</div>
     <div class="row between" style="margin-top:10px"><span class="sm mut">Level</span><div class="row" style="gap:6px"><button class="iconbtn" style="width:34px;height:34px" data-act="hbLvl" data-arg="${i}|-1">−</button><b class="num" style="min-width:30px;text-align:center">${c.lvl}</b><button class="iconbtn" style="width:34px;height:34px" data-act="hbLvl" data-arg="${i}|1">+</button></div></div>
-    <input class="field" style="margin-top:10px;padding:10px 12px" list="hbsub${i}" placeholder="Subclass (optional)" value="${esc(c.sub || '')}" oninput="hbCls(${i},'sub',this.value,1)" onchange="render()">
-    <datalist id="hbsub${i}">${HC[c.n].subs.map(s => `<option value="${esc(s)}">`).join('')}</datalist>${hbSubNote(i)}${hbLandPick(i)}</div>`
+    <div style="margin-top:10px">${hbPick(HC[c.n].subs, c.sub, c._other, 'No subclass yet', `hbSubPick(${i},this.value)`, `<input class="field" style="margin-top:8px;padding:10px 12px" placeholder="Type the subclass" value="${esc(c.sub || '')}" oninput="hbCls(${i},'sub',this.value,1)" onchange="render()">`)}</div>${hbSubNote(i)}${hbLandPick(i)}</div>`
     )
     .join('')}
   ${B.cls.length < 3 ? `<button class="btn ghost" data-act="hbClsAdd">+ Add a class (multiclass)</button>` : ''}
@@ -13075,6 +13101,29 @@ Object.assign(ACT, {
     render();
   }
 });
+// a native dropdown (the phone's own picker) with "Other…" for anything not listed
+const SPC_ALL = [...SPECIES, 'Half-Elf', 'Half-Orc', 'Firbolg', 'Genasi', 'Tabaxi', 'Kenku', 'Tortle', 'Warforged'];
+function hbPick(list, val, other, none, js, input) {
+  val = (val || '').trim();
+  const known = list.some(x => x.toLowerCase() === val.toLowerCase()),
+    oth = other || (val && !known);
+  return `<select class="field" style="padding:10px 12px" onchange="${js}">
+   <option value="">${esc(none)}</option>${list.map(x => `<option value="${esc(x)}" ${!oth && x.toLowerCase() === val.toLowerCase() ? 'selected' : ''}>${esc(x)}</option>`).join('')}
+   <option value="__other" ${oth ? 'selected' : ''}>Other… (type it)</option></select>${oth ? input : ''}`;
+}
+function hbSpPick(v) {
+  HB._spOther = v === '__other';
+  if (!HB._spOther) HB.species = v;
+  else if (SPC_ALL.includes(HB.species)) HB.species = '';
+  hbSpecies();
+}
+function hbSubPick(i, v) {
+  const c = HB.cls[+i];
+  c._other = v === '__other';
+  if (c._other && HC[c.n].subs.includes(c.sub)) c.sub = '';
+  hbCls(+i, 'sub', c._other ? c.sub || '' : v, 1);
+  render();
+}
 function hbSpecies() {
   HB.spo = '';
   if (isGorgon(HB) && !HB._gfound) {
@@ -13090,6 +13139,7 @@ function hbCls(i, k, v, quiet) {
   c[k] = v;
   if (k === 'n') {
     c.sub = '';
+    c._other = false;
     if (i === 0) HB.saves = null;
   }
   if (!quiet) render();
@@ -13146,26 +13196,35 @@ function hbApply(B, keepFight) {
   render();
 }
 Object.assign(ACT, {
-  hbStart() {
-    HB = hbNew();
-    HSTEP = 0;
+  hbStart(fresh) {
+    const d = !fresh && hbDraftLoad(false);
+    HB = d ? d.hb : hbNew();
+    HSTEP = d ? d.step : 0;
     HQ = '';
     HLV = -1;
+    HB._resumed = !!d;
     openSheet('Build a character', hbSheet);
   },
-  hbEdit() {
+  hbEdit(fresh) {
     const b = CH().build;
     if (!b) {
       ACT.hbStart();
       return;
     }
-    HB = JSON.parse(JSON.stringify(b));
+    const d = !fresh && hbDraftLoad(true);
+    HB = d ? d.hb : JSON.parse(JSON.stringify(b));
     HB._edit = true;
-    HB.ed = CH().edition;
-    HSTEP = 0;
+    if (!d) HB.ed = CH().edition;
+    HSTEP = d ? d.step : 0;
     HQ = '';
     HLV = -1;
+    HB._resumed = !!d;
     openSheet('Edit your character', hbSheet);
+  },
+  hbFresh() {
+    const edit = HB && HB._edit;
+    hbDraftClear();
+    edit ? ACT.hbEdit(1) : ACT.hbStart(1);
   },
   hbGo(i) {
     HSTEP = Math.max(0, Math.min(HSTEPS.length - 1, +i));
@@ -13312,6 +13371,9 @@ Object.assign(ACT, {
       edit = B._edit;
     delete B._edit;
     delete B._gfound;
+    delete B._resumed;
+    delete B._spOther;
+    (B.cls || []).forEach(c => delete c._other);
     if (!(B.name || '').trim()) {
       HSTEP = 0;
       render();
@@ -13319,6 +13381,8 @@ Object.assign(ACT, {
       return;
     }
     hbApply(B, edit);
+    HB = null;
+    hbDraftClear();
     closeSheet();
     toast(
       `${edit ? 'Updated' : 'Built'} <b>${esc(CH().name)}</b>: level ${CH().level} ${esc(CH().multi || CLS[CH().cls].n)}<br><span class="mut">Change anything later with Edit character</span>${shelfToast()}`
