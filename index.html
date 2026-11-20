@@ -249,6 +249,10 @@ body.sheet-open #toast.on{transform:translate(-50%,0)}
 .hbabc,.hbrow3 .card{text-align:center;padding:10px 6px;margin:0}
 .hbnum{width:100%;background:none;border:0;outline:none;text-align:center;font-size:22px;font-weight:800;color:inherit;padding:2px 0;font-family:inherit}
 .hbnum:focus{color:var(--acc)}
+.hbabc{touch-action:none;user-select:none;-webkit-user-select:none;cursor:ns-resize;position:relative}
+.hbabc.drag{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}.hbabc.drag .hbnum{color:var(--acc)}
+.hbgrip{display:block;font-style:normal;font-size:8px;line-height:1;color:var(--mut);opacity:.55}
+.tag.auto{padding:7px 10px;border:1px solid var(--acc);color:var(--txt);background:color-mix(in srgb,var(--acc) 14%,transparent)}
 .hbrow3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
 .hbsmall{width:52px;padding:7px 6px;border-radius:9px;background:var(--card2);border:1px solid #2c2836;color:inherit;text-align:center;outline:none}
 select.field{color:var(--txt,#f3f0f7);-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--mut) 50%),linear-gradient(135deg,var(--mut) 50%,transparent 50%);background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:5px 5px;background-repeat:no-repeat}
@@ -4355,7 +4359,7 @@ function homeView() {
   <div class="hero"><div class="badge">${esc(ch.name[0])}</div>
    <button class="display" style="font-size:26px;font-weight:800;background:none;border:0;color:inherit;padding:0" data-act="rename" title="Rename">${esc(ch.name)} <span class="mut" style="font-size:13px">✎</span></button>
    <div class="mut" style="margin-top:4px">${ch.species ? esc(ch.species) + ' · ' : ''}${clsList() ? `Level ${ch.level} · ${clsLine(ch)}` : ch.multi ? `Level ${ch.level} · ${esc(ch.multi)}` : `Level ${ch.level} ${CLS[ch.cls].n}`}${ch.sub ? ' · ' + esc(ch.sub) : ''}</div>${clsBar()}
-   <div class="row" style="justify-content:center;margin-top:10px">${edBadge()}</div>
+   <div class="row" style="justify-content:center;margin-top:10px;gap:6px">${edBadge()}${ch.build ? `<button class="pill" data-act="hbEdit">✎ Edit character</button>` : ''}</div>
    <div class="row" style="justify-content:center;margin-top:12px">${vitals()}</div>
    ${S.dying ? `<div style="margin-top:12px;text-align:left">${dyingPanel()}</div>` : ''}
    ${ch.source === 'ddb' && sheetNotes().length ? `<div style="margin-top:10px"><button class="tag warn" data-act="notesOpen" style="border:0">${sheetNotes().length} rules note${sheetNotes().length > 1 ? 's' : ''} from your sheet</button></div>` : ''}
@@ -4369,7 +4373,7 @@ function homeView() {
    <div class="row between"><div><div style="font-weight:800">${ch.source === 'ddb' ? 'Update from D&amp;D Beyond' : 'Link D&amp;D Beyond character'}</div><div class="sm mut">${ch.source === 'ddb' ? 'Changed something on your sheet? Bring it in again' : 'Bring in your stats, weapons, spells &amp; gear'}</div></div><button class="btn sm pri" data-act="link">${I.link}${ch.source === 'ddb' ? 'Update' : 'Link'}</button></div>${ch.source === 'ddb' ? `<button class="btn" style="margin-top:10px" data-act="linkOther">Import a different character</button>` : ''}
   </div>
   <div class="card" style="margin-top:10px">
-   <div class="row between"><div><div style="font-weight:800">${ch.source === 'hand' ? (pre ? 'Make it your own' : 'Your character, built by hand') : 'Not on D&amp;D Beyond?'}</div><div class="sm mut">${ch.source === 'hand' ? (pre ? 'Change its species, subclass, gear or spells' : 'Levelled up or changed your sheet? Update it here') : 'Roll20, paper, anything else: enter it yourself'}</div></div><button class="btn sm" data-act="${ch.source === 'hand' ? 'hbEdit' : 'hbStart'}">${ch.source === 'hand' ? 'Edit' : 'Build'}</button></div>
+   <div class="row between"><div><div style="font-weight:800">${ch.source === 'hand' ? (pre ? 'Make it your own' : 'Your character, built by hand') : 'Not on D&amp;D Beyond?'}</div><div class="sm mut">${ch.source === 'hand' ? (pre ? 'Change its species, subclass, gear or spells' : 'Levelled up or changed your sheet? Update it here') : 'Roll20, paper, anything else: enter it yourself'}</div></div><button class="btn sm ${pre ? 'pri' : ''}" data-act="${ch.source === 'hand' ? 'hbEdit' : 'hbStart'}">${ch.source === 'hand' ? 'Edit' : 'Build'}</button></div>
   </div>
   <div class="row between" style="margin:18px 0 10px"><div><div class="xs mut">Or play a ready-made character</div><div class="sm mut" style="margin-top:3px">Pick a level, tap a class. ${ch.source === 'demo' ? '' : 'Yours is kept.'}</div></div>
    <div class="row" style="gap:6px"><span class="sm mut">Level</span><button class="iconbtn" style="width:34px;height:34px" data-act="pgLvl" data-arg="-1">−</button><b class="num" style="min-width:28px;text-align:center">${PG_LVL}</b><button class="iconbtn" style="width:34px;height:34px" data-act="pgLvl" data-arg="1">+</button></div></div>
@@ -12766,6 +12770,39 @@ function hbSet(path, v, re) {
   o[ks[0]] = v;
   if (re) render();
 }
+// drag a score box up/down to change it; a tap without movement still opens typing
+function hbDrag(e, a) {
+  const box = e.currentTarget,
+    inp = box.querySelector('input'),
+    mod = box.querySelector('.hbmod'),
+    y0 = e.clientY,
+    v0 = +HB.ab[a] || 10;
+  let moved = false,
+    v = v0;
+  const mv = ev => {
+      const d = Math.round((y0 - ev.clientY) / 14);
+      if (!moved && Math.abs(y0 - ev.clientY) < 6) return;
+      if (!moved) {
+        moved = true;
+        inp.blur();
+        box.classList.add('drag');
+      }
+      ev.preventDefault();
+      v = Math.max(1, Math.min(30, v0 + d));
+      inp.value = v;
+      mod.textContent = sgn(Math.floor((v - 10) / 2));
+    },
+    up = () => {
+      removeEventListener('pointermove', mv);
+      removeEventListener('pointerup', up);
+      removeEventListener('pointercancel', up);
+      box.classList.remove('drag');
+      if (moved) hbSet('ab.' + a, v, 1);
+    };
+  addEventListener('pointermove', mv, { passive: false });
+  addEventListener('pointerup', up);
+  addEventListener('pointercancel', up);
+}
 function hbHead() {
   return `<div class="hbsteps">${HSTEPS.map((s, i) => `<button class="${i === HSTEP ? 'on' : i < HSTEP ? 'done' : ''}" data-act="hbGo" data-arg="${i}"><b>${i + 1}</b>${s}</button>`).join('')}</div>`;
 }
@@ -12818,9 +12855,9 @@ function hbScores() {
     skx = B.skills || {};
   return `<div class="xs sec" style="margin-top:6px">Ability scores</div>
   <div class="hbab">${ABN.map(
-    a => `<div class="card hbabc"><div class="xs mut">${a}</div>
+    a => `<div class="card hbabc" onpointerdown="hbDrag(event,'${a}')"><div class="xs mut">${a}</div><i class="hbgrip">▲</i>
     <input class="hbnum" type="number" inputmode="numeric" min="1" max="30" value="${B.ab[a]}" onchange="hbSet('ab.${a}',Math.max(1,Math.min(30,+this.value||10)),1)">
-    <div class="sm" style="color:var(--acc);font-weight:800">${sgn(D.m[a])}</div></div>`
+    <i class="hbgrip">▼</i><div class="sm hbmod" style="color:var(--acc);font-weight:800">${sgn(D.m[a])}</div></div>`
   ).join('')}</div>
   <div class="hbrow3">
    <label class="card"><div class="xs mut">Max HP</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${sug}" value="${esc(B.hp)}" oninput="hbSet('hp',this.value)"><div class="xs mut">${B.hp ? '' : 'average: ' + sug}</div></label>
@@ -12897,16 +12934,17 @@ function hbSpells() {
     sl = hbSlots(B),
     top = hbMaxSp(B),
     chosen = B.sp || [];
-  const slotTxt = Object.entries(sl)
-    .map(([k, v]) => (k === 'P' ? `Pact ${v.max}× level ${v.lvl}` : `L${k}×${v.max}`))
-    .join(' · ');
   return `${
     D.scAb
-      ? `<div class="card" style="margin:6px 0 10px"><div class="row between"><span class="sm mut">Spell save DC</span><b>${8 + D.prof + D.m[D.scAb]}</b></div><div class="row between"><span class="sm mut">Spell attack</span><b>${sgn(D.prof + D.m[D.scAb])}</b></div><div class="row between"><span class="sm mut">Ability</span><b>${D.scAb}</b></div>${slotTxt ? `<div class="sm mut" style="margin-top:6px">Slots: ${slotTxt}</div>` : ''}</div>`
+      ? `<div class="card" style="margin:6px 0 10px"><div class="row between"><span class="sm mut">Spell save DC</span><b>${8 + D.prof + D.m[D.scAb]}</b></div><div class="row between"><span class="sm mut">Spell attack</span><b>${sgn(D.prof + D.m[D.scAb])}</b></div><div class="row between"><span class="sm mut">Ability</span><b>${D.scAb}</b></div></div>`
       : `<p class="sm mut" style="line-height:1.5;margin:6px 0 12px">Not a spellcaster. If you have spells from your species or a feat, add them here; otherwise skip this step.</p>`
   }
   ${hbAutoSp()}
-  ${chosen.length ? `<div class="xs sec">Your spells · ${chosen.length}</div><div class="filters" style="flex-wrap:wrap">${chosen.map((s, i) => `<button class="on" data-act="hbSpDel" data-arg="${i}">${esc(typeof s === 'string' ? s : s.n)} ✕</button>`).join('')}</div>` : ''}
+  ${(() => {
+    const auto = new Set(B.cls.flatMap(c => subSpellList(c.n, c.sub, c.lvl, B.ed, B.land).map(x => x.n))),
+      own = chosen.map((s, i) => [typeof s === 'string' ? s : s.n, i]).filter(([n]) => !auto.has(n));
+    return own.length ? `<div class="xs sec">Your spells · ${own.length}</div><div class="filters" style="flex-wrap:wrap">${own.map(([n, i]) => `<button class="on" data-act="hbSpDel" data-arg="${i}">${esc(n)} ✕</button>`).join('')}</div>` : '';
+  })()}
   <div class="xs sec">Add from the list</div>
   <input class="field" placeholder="Search spells" value="${esc(HQ)}" oninput="HQ=this.value;$('#hbList').innerHTML=hbSpellList()">
   <div class="filters" style="flex-wrap:wrap"><button class="${HLV < 0 ? 'on' : ''}" data-act="hbLv" data-arg="-1">Up to level ${Math.max(1, top)}</button>${[0, 1, 2, 3, 4, 5].map(l => `<button class="${HLV === l ? 'on' : ''}" data-act="hbLv" data-arg="${l}">${l ? l : 'Cantrips'}</button>`).join('')}</div>
@@ -13306,7 +13344,7 @@ function hbAutoSp() {
   const L = HB.cls.flatMap(c => subSpellList(c.n, c.sub, c.lvl, HB.ed, HB.land).map(s => ({ ...s, sub: (c.sub || '').trim() })));
   if (!L.length) return '';
   return `<div class="xs sec">Always prepared · from ${esc([...new Set(L.map(s => s.sub))].join(', '))}</div>
-  <div class="filters" style="flex-wrap:wrap">${L.map(s => `<span class="tag" style="padding:7px 10px">${esc(s.n)}${s.lvl ? '' : ' · cantrip'}</span>`).join('')}</div>
+  <div class="filters" style="flex-wrap:wrap">${L.map(s => `<span class="tag auto">${esc(s.n)}${s.lvl ? '' : ' · cantrip'}</span>`).join('')}</div>
   <div class="sm mut" style="margin:6px 0 4px">These come with your subclass and don't count against the spells you prepare.</div>`;
 }
 
@@ -13668,7 +13706,7 @@ Object.assign(ACT, {
       same = old.build && old.build.pregen && old.cls === k;
     pgApply(k, PG_LVL, same ? old.name : '');
     toast(
-      `Level ${PG_LVL} ${CLS[k].n} ready: <b>${esc(CH().name)}</b><br><span class="mut">Tap the name to rename · change the level any time</span>${shelfToast()}`
+      `Level ${PG_LVL} ${CLS[k].n} ready: <b>${esc(CH().name)}</b><br><span class="mut">Tap ✎ Edit character to change it · or the level any time</span>${shelfToast()}`
     );
   },
   pgLvl(d) {
