@@ -5993,7 +5993,7 @@ function acSheet() {
     (adj
       ? `<div class="acrow"><span>Your adjustment in this app</span><b>${adj > 0 ? '+' + adj : adj}</b></div>`
       : '');
-  return `<div class="hpbig">${ch.ac}</div><div class="sm mut" style="text-align:center">${imp != null ? (adj ? `Changed by you · imported value was ${imp}` : ch.source === 'ddb' ? 'As calculated from your D&amp;D Beyond character' : ch.source === 'hand' ? 'Worked out from your armour and shield' : 'Demo character') : 'Armour class'}</div>
+  return `<div class="hpbig">${ch.ac}</div><div class="sm mut" style="text-align:center">${imp != null ? (adj ? `Changed by you · imported value was ${imp}` : ch.source === 'ddb' ? 'As calculated from your D&amp;D Beyond character' : ch.source === 'hand' ? (ch.build && +ch.build.ac ? 'The number from your sheet' : 'Worked out from your armour and shield') : 'Demo character') : 'Armour class'}</div>
   ${parts.length ? `<div class="card" style="margin-top:14px"><div class="xs mut" style="margin-bottom:6px">How it adds up</div>${rows}<div class="acrow total"><span>Armour class</span><b>${ch.ac}</b></div></div>` : ''}
   <div class="stepper" style="grid-template-columns:1fr 1fr"><button data-act="acAdj" data-arg="-1">−1</button><button data-act="acAdj" data-arg="1">+1</button></div>
   ${imp != null && ch.ac !== imp ? `<button class="btn" style="margin-top:10px" data-act="acReset">Reset to ${imp}</button>` : ''}
@@ -11986,7 +11986,7 @@ function hbBuild(B) {
     heavy: !!B.heavy,
     bh: null,
     acImported: ac,
-    acParts: +B.ac ? [{ n: 'From your sheet', v: ac, base: true }] : acA.parts,
+    acParts: acA.parts,
     str: m.STR,
     prof: p,
     sc,
@@ -12856,43 +12856,54 @@ const ARMOUR = [
   ['Ring mail', 14, 'H'],
   ['Chain mail', 16, 'H'],
   ['Splint', 17, 'H'],
-  ['Plate', 18, 'H']
+  ['Plate', 18, 'H'],
+  ['Mage Armor (spell)', 13, 'L']
 ];
 // AC from armour, shield and bonuses, with the class's Unarmored Defense when it's better
+// species with their own AC: [match, name, base or null, ability added, flat bonus]
+const SPC_AC = [
+  [/tortle/i, 'Natural Armor (Tortle)', 17, null, 0],
+  [/lizardfolk/i, 'Natural Armor (Lizardfolk)', 13, 'DEX', 0],
+  [/loxodon/i, 'Natural Armor (Loxodon)', 12, 'CON', 0],
+  [/autognome/i, 'Armored Casing (Autognome)', 13, 'DEX', 0],
+  [/thri-?kreen/i, 'Chameleon Carapace (Thri-kreen)', 13, 'DEX', 0],
+  [/warforged/i, 'Integrated Protection (Warforged)', null, null, 1]
+];
+// AC as separate, checkable lines: armour (or the best way to go without), DEX, species, shield, named bonuses
 function hbAC(B) {
   const D = hbDer(B),
     m = D.m,
     a = ARMOUR[+B.arm || 0],
-    parts = [],
-    pm = (k, v) => `${k} ${sgn(v)}`;
+    sp = SPC_AC.find(x => x[0].test(B.species || '')),
+    ABL = { DEX: 'Dexterity', CON: 'Constitution', WIS: 'Wisdom', CHA: 'Charisma' };
+  let parts = [];
   if (a[1]) {
     const dex = a[2] === 'H' ? 0 : a[2] === 'M' ? Math.min(2, m.DEX) : m.DEX;
-    parts.push({
-      n: a[0],
-      v: a[1] + dex,
-      base: true,
-      f:
-        a[2] === 'H'
-          ? `heavy armour ${a[1]} · DEX doesn't count`
-          : a[2] === 'M'
-            ? `medium armour ${a[1]} + ${pm('DEX', dex)}${m.DEX > 2 ? ' (counts up to +2)' : ''}`
-            : `light armour ${a[1]} + ${pm('DEX', dex)}`
-    });
+    parts.push({ n: a[0] + (a[2] === 'H' ? ' (heavy armour)' : a[2] === 'M' ? ' (medium armour)' : /spell/.test(a[0]) ? '' : ' (light armour)'), v: a[1], base: true });
+    if (a[2] === 'M') parts.push({ n: `Dexterity${m.DEX > 2 ? ' (max +2 in medium armour)' : ''}`, v: dex });
+    else if (a[2] === 'L') parts.push({ n: 'Dexterity', v: dex });
   } else {
-    const opts = [{ n: 'No armour', v: 10 + m.DEX, f: `10 + ${pm('DEX', m.DEX)}` }];
-    if (D.lv('Barbarian')) opts.push({ n: 'Unarmored Defense', v: 10 + m.DEX + m.CON, f: `10 + ${pm('DEX', m.DEX)} + ${pm('CON', m.CON)}` });
-    if (D.lv('Monk') && !B.shield) opts.push({ n: 'Unarmored Defense', v: 10 + m.DEX + m.WIS, f: `10 + ${pm('DEX', m.DEX)} + ${pm('WIS', m.WIS)} · no armour or shield` });
+    const opts = [[{ n: 'No armour', v: 10, base: true }, { n: 'Dexterity', v: m.DEX }]];
+    if (D.lv('Barbarian')) opts.push([{ n: 'Unarmored Defense (Barbarian)', v: 10, base: true }, { n: 'Dexterity', v: m.DEX }, { n: 'Constitution', v: m.CON }]);
+    if (D.lv('Monk') && !B.shield) opts.push([{ n: 'Unarmored Defense (Monk)', v: 10, base: true }, { n: 'Dexterity', v: m.DEX }, { n: 'Wisdom', v: m.WIS }]);
     if (B.cls.some(c => c.n === 'Sorcerer' && /dragon|draconic/i.test(c.sub || '')))
       opts.push(
         B.ed === '2014'
-          ? { n: 'Draconic Resilience', v: 13 + m.DEX, f: `13 + ${pm('DEX', m.DEX)}` }
-          : { n: 'Draconic Resilience', v: 10 + m.DEX + m.CHA, f: `10 + ${pm('DEX', m.DEX)} + ${pm('CHA', m.CHA)}` }
+          ? [{ n: 'Draconic Resilience', v: 13, base: true }, { n: 'Dexterity', v: m.DEX }]
+          : [{ n: 'Draconic Resilience', v: 10, base: true }, { n: 'Dexterity', v: m.DEX }, { n: 'Charisma', v: m.CHA }]
       );
-    parts.push({ ...opts.reduce((x, y) => (y.v > x.v ? y : x)), base: true });
+    if (sp && sp[2]) opts.push([{ n: sp[1], v: sp[2], base: true }, ...(sp[3] ? [{ n: ABL[sp[3]], v: m[sp[3]] }] : [])]);
+    const tot = o => o.reduce((t, p) => t + p.v, 0);
+    parts = opts.reduce((x, y) => (tot(y) > tot(x) ? y : x));
   }
+  if (sp && sp[4]) parts.push({ n: sp[1], v: sp[4] });
   if (B.shield) parts.push({ n: 'Shield', v: 2, shield: true });
-  if (+B.acb) parts.push({ n: 'Other bonus', v: +B.acb, f: 'magic armour, a ring, Defense style…' });
-  return { ac: parts.reduce((t, p) => t + p.v, 0), parts };
+  (B.acx || []).forEach(x => x.v && parts.push({ n: x.n || 'Bonus', v: +x.v }));
+  if (+B.acb) parts.push({ n: 'Other bonus', v: +B.acb });
+  const sum = parts.reduce((t, p) => t + p.v, 0);
+  // a number typed from the sheet wins; whatever the list can't explain is shown as its own line
+  if (+B.ac && +B.ac !== sum) parts.push({ n: +B.ac > sum ? 'Something else on your sheet' : 'Your sheet is lower by', v: +B.ac - sum, gap: true });
+  return { ac: +B.ac || sum, calc: sum, parts };
 }
 function hbArmour(i) {
   HB.arm = +i;
@@ -13005,10 +13016,13 @@ function hbArmourSec() {
   return `<div class="xs sec">Armour &amp; shield</div>
   <select class="field" style="padding:10px 12px" onchange="hbArmour(this.value)">${ARMOUR.map((a, i) => `<option value="${i}" ${(B.arm || 0) === i ? 'selected' : ''}>${a[0]}${i ? ` · AC ${a[1]}${a[2] === 'M' ? ' + DEX (max 2)' : a[2] === 'L' ? ' + DEX' : ''}` : ''}</option>`).join('')}</select>
   <div class="toggle"><span>Shield <span class="sm mut">(+2 AC)</span></span><button class="sw ${B.shield ? 'on' : ''}" data-act="hbTog" data-arg="shield"></button></div>
-  <div class="row between" style="margin-top:6px"><span>Other AC bonus <span class="sm mut">(magic armour, ring, Defense style…)</span></span><div class="row" style="gap:6px"><button class="iconbtn" style="width:34px;height:34px" data-act="hbAcB" data-arg="-1">−</button><b class="num" style="min-width:26px;text-align:center">${sgn(+B.acb || 0)}</b><button class="iconbtn" style="width:34px;height:34px" data-act="hbAcB" data-arg="1">+</button></div></div>
-  <div class="sm mut" style="margin-top:6px">${(() => {
+  ${(B.acx || []).map((x, i) => `<div class="row between item" style="margin-top:6px;padding:10px 12px"><span>${esc(x.n || 'Bonus')}</span><div class="row" style="gap:8px"><b class="num">${sgn(+x.v)}</b><button class="iconbtn" style="width:30px;height:30px" data-act="hbAcxDel" data-arg="${i}" aria-label="Remove">✕</button></div></div>`).join('')}
+  ${+B.acb ? `<div class="row between item" style="margin-top:6px;padding:10px 12px"><span>Other bonus</span><div class="row" style="gap:8px"><b class="num">${sgn(+B.acb)}</b><button class="iconbtn" style="width:30px;height:30px" data-act="hbAcbDel" aria-label="Remove">✕</button></div></div>` : ''}
+  <div class="row" style="gap:8px;margin-top:8px"><input class="field" id="hacxN" style="flex:1;padding:10px 12px" placeholder="AC bonus, e.g. Ring of Protection"><select class="field" id="hacxV" style="width:74px;padding:10px 8px">${[1, 2, 3, -1].map(v => `<option value="${v}">${sgn(v)}</option>`).join('')}</select><button class="btn sm" data-act="hbAcxAdd">Add</button></div>
+  <div class="sm mut" style="margin-top:4px">Magic armour, a ring or cloak, the Defense fighting style, a feat…</div>
+  <div class="card" style="margin-top:10px">${(() => {
     const A = hbAC(B);
-    return B.ac ? `Using AC ${esc(B.ac)} from your sheet. Clear that box to use ${A.ac} (${esc(A.parts.map(p => p.n).join(' + '))}).` : `AC ${A.ac} = ${esc(A.parts.map(p => (p.base ? `${p.n} (${p.f})` : p.n + ' +' + p.v)).join(' + '))}`;
+    return `<div class="xs mut" style="margin-bottom:6px">How it adds up</div>${A.parts.map(p => `<div class="acrow"><span>${esc(p.n)}</span><b>${p.base ? p.v : sgn(p.v)}</b></div>`).join('')}<div class="acrow total"><span>Armour class${B.ac ? ' (from your sheet)' : ''}</span><b>${A.ac}</b></div>`;
   })()}</div>
 `;
 }
@@ -13381,6 +13395,21 @@ Object.assign(ACT, {
     closeSheet();
     ACT.hbEdit();
     HSTEP = 1;
+    render();
+  },
+  hbAcxAdd() {
+    const n = ($('#hacxN').value || '').trim();
+    if (!n) return toast('Name the bonus first, so you can check it later');
+    HB.acx = HB.acx || [];
+    HB.acx.push({ n, v: +$('#hacxV').value });
+    render();
+  },
+  hbAcxDel(i) {
+    HB.acx.splice(+i, 1);
+    render();
+  },
+  hbAcbDel() {
+    HB.acb = 0;
     render();
   },
   hbAcB(d) {
@@ -13823,7 +13852,7 @@ const PG = {
     sec: 'CON',
     third: 'DEX',
     wp: () => [{ b: 'Quarterstaff' }],
-    ac: (L, m) => 13 + m.DEX,
+    arm: () => [13, 0], // Mage Armor
     sp: [
       'Fire Bolt',
       'Mind Sliver',
@@ -13874,8 +13903,7 @@ function pregen(k, L, name, ed) {
   B.pregen = true;
   const m = {};
   ABN.forEach(a => (m[a] = Math.floor((B.ab[a] - 10) / 2)));
-  if (p.arm) [B.arm, B.shield] = p.arm(L);
-  else B.ac = p.ac(L, m); // e.g. Mage Armor
+  [B.arm, B.shield] = p.arm(L);
   B.wp = p.wp(L);
   B.skills = p.sk || {};
   B.on = (p.on || []).slice();
