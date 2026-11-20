@@ -1936,8 +1936,11 @@ function bhSync() {
   };
   R('maledict', 'Blood Maledict', maledictUses(l), 'short');
   if (l >= 6) R('brand', 'Brand of Castigation', 1, 'short');
-  if (isProfane() && l >= 7) R('revealed', 'Revealed Arcana', 1, 'long');
-  if (isProfane() && l >= 15) R('unsealed', 'Unsealed Arcana', 1, 'long');
+  const hasSp = A => A && (ch.spells || []).some(s => s.n === A[0]);
+  if (isProfane() && l >= 7 && !hasSp(REVEALED[b.patron])) R('revealed', 'Revealed Arcana', 1, 'long');
+  else delete ch.res.revealed;
+  if (isProfane() && l >= 15 && !hasSp(UNSEALED[b.patron])) R('unsealed', 'Unsealed Arcana', 1, 'long');
+  else delete ch.res.unsealed;
   if (isProfane() && l >= 18) R('seAmp', 'Souleater amplify', 1, 'long');
   if (isProfane()) {
     // pact magic: Profane Soul table, or warlock + 1/3 BH levels
@@ -2041,7 +2044,7 @@ function bhFeats() {
         n: 'Rite Focus: hexed strike (Hexblade)',
         t: 'F',
         needRite: true,
-        d: `After a blood curse lands on a creature, your next hit on it while the curse lasts deals +${ch.prof || 3} damage.`
+        d: `After a blood curse lands on a creature, your next hit on it while the curse lasts deals +${CH().prof || 3} damage.`
       });
     if (p === 'archfey')
       F2('rf', {
@@ -2085,7 +2088,8 @@ function bhSpells() {
   const b = bh();
   if (!isProfane() || !b.patron) return [];
   const out = [];
-  if (b.level >= 7 && REVEALED[b.patron]) {
+  const imported = n => (CH().spells || []).some(s => s.n === n);
+  if (b.level >= 7 && REVEALED[b.patron] && !imported(REVEALED[b.patron][0])) {
     const [n, c, t] = REVEALED[b.patron];
     out.push({
       _id: 'sxrev',
@@ -2097,7 +2101,7 @@ function bhSpells() {
       d: "Your patron's gift: cast it with a pact slot, once per long rest."
     });
   }
-  if (b.level >= 15 && UNSEALED[b.patron]) {
+  if (b.level >= 15 && UNSEALED[b.patron] && !imported(UNSEALED[b.patron][0])) {
     const [n, c] = UNSEALED[b.patron];
     out.push({
       _id: 'sxuns',
@@ -7020,15 +7024,16 @@ function parseDDB(raw) {
         mx = luMax(lu);
       res[k] = {
         k,
-        n: df.name + ' (free cast)',
+        n: df.name + (x.noslot ? ' (free cast)' : ` (${luMax(lu)}× per ${lu.resetType === 1 ? 'short' : 'long'} rest)`),
         max: mx,
         cur: Math.max(0, mx - (lu.numberUsed || 0)),
         rest: lu.resetType === 1 ? 'short' : 'long'
       };
       x.res = k;
       x.d =
-        `Free cast${s.castAtLevel ? ` at level ${s.castAtLevel}` : ''}, ${mx}× per ${lu.resetType === 1 ? 'short' : 'long'} rest. ` +
-        x.d;
+        (x.noslot
+          ? `Free cast${s.castAtLevel ? ` at level ${s.castAtLevel}` : ''}, ${mx}× per ${lu.resetType === 1 ? 'short' : 'long'} rest. `
+          : `${mx}× per ${lu.resetType === 1 ? 'short' : 'long'} rest, using a spell slot. `) + x.d;
     }
     if (force && s.spellCastingAbilityId) {
       const am = M[s.spellCastingAbilityId - 1];
