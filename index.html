@@ -293,6 +293,13 @@ body.multi .startbtn{background:var(--mcsoft);text-shadow:0 1px 3px rgba(0,0,0,.
 .pips{display:flex;gap:6px;margin-top:6px}.pip{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,.25)}.pip.on.ok{background:var(--ok,#4bd18a);border-color:transparent}.pip.on.bad{background:var(--bad);border-color:transparent}
 .ab{font-weight:800;color:var(--txt);background:rgba(255,255,255,.09);border-radius:5px;padding:0 4px;font-size:.88em;letter-spacing:.03em}
 .dc{font-weight:800;color:var(--acc);white-space:nowrap}
+.petstrip{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.petbar{display:grid;grid-template-columns:1fr auto;gap:2px 10px;text-align:left;padding:11px 14px;border-radius:14px;background:var(--card);border:1px solid var(--line);color:var(--txt)}
+.petbar .pn{font-weight:800}
+.petbar .php{font-weight:800;color:var(--acc);text-align:right}
+.petbar .pw{grid-column:1/-1;font-size:12.5px;color:var(--mut)}
+.petbar.down{opacity:.55}
+.petbar.down .php{color:var(--bad)}
 </style>
 </head>
 <body>
@@ -4268,6 +4275,7 @@ function turnView() {
   </div>
   ${condCard()}${c.status.length || c.held.length || S.cond.prone || condList().length || S.rage ? `<div class="status">${S.rage ? `<span class="tag a">Raging · +${rageDmg()} STR damage · resist B/P/S${is14('rage') ? ` · round ${S.rage.rounds}/10` : ''}</span>` : ''}${S.cond.prone ? `<button class="tag warn" style="border:0" data-act="use" data-arg="xstand">Prone · tap to stand up (${Math.floor((S.ws ? beast().sp.walk || 0 : CH().speed) / 2)} ft)</button>` : ''}${condTags()}${c.status.map(s => `<span class="tag a">${esc(s)}</span>`).join('')}${c.held.length ? `<span class="tag warn">${c.held.length} held action</span>` : ''}</div>` : ''}
   <div style="margin-top:12px">${leftSummary()}</div>
+  ${petStrip('turn')}
   <div class="dock"><div class="row">${hist.length ? `<button class="btn" style="width:auto;padding:15px 16px" data-act="undo" aria-label="Undo">↺</button>` : ''}<button class="btn endc" data-act="endCombatAsk">End combat</button><button class="btn pri" data-act="endTurn">End Turn</button></div></div>`
   );
 }
@@ -4314,6 +4322,7 @@ function offView() {
       : ''
   }
   ${c.held.length ? reactList : ''}
+  ${petStrip('off')}
   <div class="dock"><div class="row">${hist.length ? `<button class="btn" style="width:auto;padding:19px 18px" data-act="undo" aria-label="Undo">↺</button>` : ''}<button class="btn endc tall" data-act="endCombatAsk">End combat</button><button class="startbtn" style="padding:19px;font-size:18px" data-act="startTurn">Start Combat Turn</button></div></div>`
   );
 }
@@ -5751,7 +5760,7 @@ function hpSheet() {
     return `<div class="xs mut" style="text-align:center">${esc(S.ws.n)} HP</div><div class="hpbig">${S.ws.hp}<span class="mut" style="font-size:20px"> / ${S.ws.max}</span></div><div class="sm mut" style="text-align:center">Your own HP: ${hp.cur}/${hp.max}. Damage past 0 carries over when you change back.</div>
   <input class="field" id="hpAmt" type="number" inputmode="numeric" placeholder="Amount" style="margin-top:14px;text-align:center;font-size:20px;font-weight:800">
   <div class="stepper" style="grid-template-columns:1fr 1fr"><button data-act="hpDo" data-arg="dmg" style="color:var(--bad)">Damage</button><button data-act="hpDo" data-arg="heal" style="color:var(--ok)">Heal</button></div>`;
-  return `${S.ws ? `<div class="sm mut" style="text-align:center">In ${esc(S.ws.n)} form: damage hits your temporary HP first.</div>` : ''}<div class="hpbig">${hp.cur}<span class="mut" style="font-size:20px"> / ${hp.max}</span></div>${hp.temp ? `<div class="sm mut" style="text-align:center">+${hp.temp} temporary</div>` : ''}
+  return `${petHitChooser()}${S.ws ? `<div class="sm mut" style="text-align:center">In ${esc(S.ws.n)} form: damage hits your temporary HP first.</div>` : ''}<div class="hpbig">${hp.cur}<span class="mut" style="font-size:20px"> / ${hp.max}</span></div>${hp.temp ? `<div class="sm mut" style="text-align:center">+${hp.temp} temporary</div>` : ''}
   <input class="field" id="hpAmt" type="number" inputmode="numeric" placeholder="Amount" style="margin-top:14px;text-align:center;font-size:20px;font-weight:800">
   ${(() => {
     const rs = [...(S.rage ? ['bludgeoning', 'piercing', 'slashing'] : []), ...(CH().resist || [])];
@@ -5855,6 +5864,7 @@ function menuSheet() {
   })()}
   <div class="stepper" style="grid-template-columns:1fr 1fr"><button data-act="restSheet">Short Rest</button><button data-act="rest" data-arg="long">Long Rest</button></div>
   ${ch.bh ? `<button class="btn" style="margin-top:10px;border-color:var(--line)" data-act="bhSetup">${I.heart} Blood Hunter setup</button>` : ''}
+  <button class="btn" style="margin-top:10px" data-act="pets">Companions${pets().length ? ` <span class="tag">${pets().length}</span>` : ''}</button>
   <button class="btn" style="margin-top:10px" data-act="inspOpen">${ch.insp ? '★' : '☆'} ${is14('insp') ? 'Inspiration' : 'Heroic Inspiration'}: ${ch.insp ? 'you have it' : 'none'}</button>
   <button class="btn" style="margin-top:10px" data-act="colOpen"><i class="cdot"></i> App colour: ${esc(myCol ? (COLS.find(x => x[1] === myCol) || ['Class colour'])[0] : 'Class colour')}</button>
   <button class="btn" style="margin-top:10px" data-act="rules">${I.book} Ruleset: ${ED[ch.edition]}${customCount() ? ` + ${customCount()} house rules` : ''}</button>
@@ -7500,6 +7510,7 @@ function parseDDB(raw) {
     clsKeys: classes.map(c => ({ k: clsKey(c.n), n: c.n, lvl: c.lvl })),
     mods6: M,
     passives,
+    pets: parsePets(d),
     circle:
       Object.values(d.actions || {})
         .flat()
@@ -9588,6 +9599,7 @@ const ACT = {
   },
   rest(type) {
     const ch = CH();
+    if (type === 'long' && S.pets) Object.keys(S.pets).forEach(k => (S.pets[k].cur = (pets().find(p => p.id === k) || { max: S.pets[k].cur }).max));
     S.rite = null;
     S.rage = null;
     S.rr = 0;
@@ -13738,7 +13750,8 @@ function snapState() {
     exhaust: S.cond.exhaust || 0,
     conds: condList().map(c => c.n),
     conc: S.conc || null,
-    ward: ch.ward ? ch.ward.cur : null
+    ward: ch.ward ? ch.ward.cur : null,
+    pets: Object.fromEntries(pets().map(p => [p.id, { n: p.n, cur: petState(p).cur, max: p.max }]))
   };
 }
 function snapStart() {
@@ -13826,6 +13839,11 @@ function combatDiff() {
       `Arcane Ward: ${a.ward} → <b>${b.ward}</b>`,
       'Note it if your table tracks the ward between fights'
     );
+  Object.entries(b.pets || {}).forEach(([id, p]) => {
+    const was = a.pets && a.pets[id];
+    if (was && was.cur !== p.cur)
+      add('pet' + id, `${esc(p.n)}: ${was.cur} → <b>${p.cur}</b> of ${p.max} HP`, p.cur ? `Write down ${p.cur} HP for ${esc(p.n)}` : `${esc(p.n)} dropped to 0 HP`);
+  });
   return L;
 }
 let SHEETDONE = {};
@@ -13874,6 +13892,257 @@ Object.assign(ACT, {
   },
   sheetReopen() {
     if (S.lastDiff) openSheet('Update your sheet', sheetUpdateSheet);
+  }
+});
+
+/* ---------- companions: familiars, pets, mounts and battle companions ----------
+   ch.pets = what the character has (from D&D Beyond's Extras, from class features, or added by hand):
+     { id, n, what, kind: 'turn' | 'own' | 'mount', ac, max, speed, atk: [{ n, hit, dmg, note }], notes: [], cmd: 'B' | '' }
+       turn  = acts right after you on your initiative (battle companions); cmd 'B' = commanding it costs your Bonus Action
+       own   = rolls its own initiative (familiars, pets)
+       mount = a creature you ride: while ridden it acts on your initiative, and can only Dash, Disengage or Dodge
+   S.pets = this fight and since the last rest: { id: { cur, away } } */
+const PET_KIND = {
+  turn: 'Acts right after you',
+  own: 'Its own turn',
+  mount: 'Mount'
+};
+// D&D Beyond Extras → companions (group 1 is Wild Shape forms: not companions)
+function parsePets(d) {
+  const spells = JSON.stringify(d.classSpells || []) + JSON.stringify(d.spells || {});
+  const hasFamiliar = /Find Familiar/.test(spells);
+  return (d.creatures || [])
+    .filter(c => c.groupId !== 1 && c.definition)
+    .map(c => {
+      const df = c.definition,
+        name = c.name || df.name,
+        mv = { 1: '', 2: 'burrow ', 3: 'climb ', 4: 'fly ', 5: 'swim ' },
+        speed = (df.movements || []).map(m => `${mv[m.movementId] || ''}${m.speed} ft`).join(', '),
+        plain = h =>
+          String(h || '')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&minus;|−/g, '-')
+            .replace(/\s+/g, ' ')
+            .trim();
+      const acts = plain(df.actionsDescription),
+        atk = [];
+      const re =
+        /([A-Z][\w' ()-]{1,40})\.\s*(Melee|Ranged|Melee or Ranged)(?: Weapon| Spell)? Attack(?: Roll)?:\s*\+(\d+)(?: to hit)?,\s*(?:reach|range)\s*([^.,]+?)(?:\.|,)[^]*?Hit:\s*(\d+)(?:\s*\(([^)]+)\))?\s*(\w+)\s*damage/gi;
+      let m;
+      while ((m = re.exec(acts))) atk.push({ n: m[1].trim(), hit: +m[3], dmg: m[6] ? m[6].replace(/\s+/g, '') : m[5], type: m[7].toLowerCase(), range: m[4].trim() });
+      const fam = c.groupId === 2 || c.groupId === 3 ? hasFamiliar || /familiar/i.test(c.description || '') : false;
+      const kind = c.groupId === 4 ? 'mount' : 'own';
+      const notes = [];
+      if (fam) notes.push("A familiar can't attack. It can Help, and deliver your touch spells (using your Reaction).");
+      if (kind === 'mount') notes.push('While you ride it, it moves on your turn and can only Dash, Disengage or Dodge.');
+      return {
+        id: 'ddb' + c.id,
+        n: name,
+        what: name !== df.name ? df.name : '',
+        kind,
+        ac: df.armorClass,
+        max: df.averageHitPoints,
+        cur0: Math.max(0, df.averageHitPoints - (c.removedHitPoints || 0)),
+        speed,
+        atk: fam ? [] : atk,
+        notes,
+        acts: atk.length ? '' : acts.slice(0, 300),
+        cmd: ''
+      };
+    });
+}
+// companions from class features (built characters)
+function featurePets() {
+  const ch = CH(),
+    L = [],
+    mods = ch.mods6 || [0, 0, 0, 0, 0, 0],
+    prof = ch.prof || 2;
+  const sub = n => ((ch.classes || []).find(c => c.n === n) || {}).sub || '';
+  const art = clsLvl('Artificer'),
+    rng = clsLvl('Ranger');
+  if (art >= 3 && /Battle Smith/i.test(sub('Artificer')))
+    L.push({
+      id: 'f-defender',
+      n: 'Steel Defender',
+      kind: 'turn',
+      cmd: 'B',
+      ac: 15,
+      max: 2 + mods[3] + 5 * art,
+      speed: '40 ft',
+      atk: [{ n: 'Force-Empowered Rend', hit: prof + mods[3], dmg: `1d8+${prof}`, type: 'force', range: '5 ft' }],
+      notes: [
+        'Reaction: Deflect Attack — a creature it can see attacks someone within 5 ft of it: impose disadvantage.',
+        'Repair (3/day): it or an object regains 2d8+' + prof + ' HP.',
+        "If you don't command it, it takes the Dodge action."
+      ]
+    });
+  if (rng >= 3 && /Beast Master/i.test(sub('Ranger')))
+    L.push({
+      id: 'f-beast',
+      n: 'Primal Companion',
+      kind: 'turn',
+      cmd: 'B',
+      ac: 13 + mods[4],
+      max: 5 + 5 * rng,
+      speed: '40 ft (climb 40 ft as Beast of the Land)',
+      atk: [{ n: "Beast's Strike", hit: prof + mods[4], dmg: `1d8+${2 + mods[4]}`, type: 'piercing or slashing', range: '5 ft' }],
+      notes: [
+        'Land, Sea or Sky beast: pick the form on your sheet.',
+        "If you don't command it, it takes the Dodge action."
+      ]
+    });
+  return L;
+}
+function pets() {
+  const ch = CH();
+  return [...(ch.pets || []), ...(ch.source === 'ddb' ? [] : featurePets()), ...(ch.myPets || [])];
+}
+function petState(p) {
+  S.pets = S.pets || {};
+  if (!S.pets[p.id]) S.pets[p.id] = { cur: p.cur0 != null ? p.cur0 : p.max, away: false };
+  return S.pets[p.id];
+}
+const petsOut = () => pets().filter(p => !petState(p).away);
+// the strip above End Turn: only when a companion is out
+function petStrip(where) {
+  const L = petsOut();
+  if (!L.length) return '';
+  return `<div class="petstrip">${L.map(p => {
+    const st = petState(p),
+      down = st.cur <= 0;
+    const what =
+      p.kind === 'turn'
+        ? `Acts after you${p.cmd === 'B' ? ' · command: Bonus Action' : ''}`
+        : p.kind === 'mount'
+          ? `Mount · ${p.speed.split(',')[0]}`
+          : where === 'off'
+            ? 'Its own turn: tap when it acts'
+            : 'Its own turn';
+    return `<button class="petbar ${down ? 'down' : ''}" data-act="petOpen" data-arg="${p.id}"><span class="pn">${esc(p.n)}</span><span class="php">${down ? 'Down' : `${st.cur}/${p.max} HP`}</span><span class="pw">${what}</span></button>`;
+  }).join('')}</div>`;
+}
+function petSheet(id) {
+  const p = pets().find(x => x.id === id);
+  if (!p) return '<div class="empty">This companion is gone.</div>';
+  const st = petState(p),
+    c = C(),
+    myTurn = c.phase === 'turn';
+  const cmd =
+    p.cmd === 'B'
+      ? myTurn
+        ? c.flags['cmd_' + id]
+          ? '<div class="tag ok" style="margin-top:10px">Commanded this turn</div>'
+          : `<button class="btn pri" style="margin-top:10px" data-act="petCmd" data-arg="${id}" ${c.bonus ? '' : 'disabled'}>Command it (Bonus Action)</button>${c.bonus ? '' : '<div class="sm mut" style="margin-top:6px">Your Bonus Action is used: it takes the Dodge action.</div>'}`
+        : '<div class="sm mut" style="margin-top:10px">On your turn, command it with your Bonus Action. Otherwise it takes the Dodge action.</div>'
+      : '';
+  return `<div class="row between" style="gap:10px"><div><div class="sm mut">${esc([p.what, PET_KIND[p.kind]].filter(Boolean).join(' · '))}</div>
+    <div class="sm mut" style="margin-top:2px">AC <b style="color:var(--txt)">${p.ac}</b> · Speed ${esc(p.speed || '—')}</div></div></div>
+  <div class="hpbig" style="margin-top:6px">${st.cur}<span class="mut" style="font-size:20px"> / ${p.max}</span></div>
+  <input class="field" id="petAmt" type="number" inputmode="numeric" placeholder="Damage or healing" style="margin-top:8px;text-align:center;font-size:18px;font-weight:800">
+  <div class="stepper" style="grid-template-columns:1fr 1fr"><button data-act="petHp" data-arg="${id}|dmg" style="color:var(--bad)">Damage</button><button data-act="petHp" data-arg="${id}|heal" style="color:var(--ok)">Heal</button></div>
+  ${cmd}
+  ${p.atk && p.atk.length ? `<div class="xs sec">Attacks</div><div class="card">${p.atk.map(a => `<div class="wpn"><div><b>${esc(a.n)}</b><div class="sm mut">${esc(a.range || '')}</div></div><div style="text-align:right"><div style="color:var(--acc);font-weight:800">+${a.hit}</div><div class="sm">${esc(a.dmg)} ${esc(a.type)}</div></div></div>`).join('')}</div>` : ''}
+  ${p.acts ? `<p class="sm mut" style="line-height:1.5;margin-top:10px">${esc(p.acts)}</p>` : ''}
+  ${(p.notes || []).map(t => `<div class="rnote">${esc(t)}</div>`).join('')}
+  <button class="btn" style="margin-top:14px" data-act="petAway" data-arg="${id}">Send ${esc(p.n)} away for now</button>`;
+}
+function petsSheet() {
+  const L = pets();
+  return `${L.length ? L.map(p => {
+    const st = petState(p);
+    return `<div class="card row between" style="margin-top:8px;gap:10px"><div><div style="font-weight:800">${esc(p.n)}</div><div class="sm mut">${esc([p.what, PET_KIND[p.kind]].filter(Boolean).join(' · '))} · ${st.cur}/${p.max} HP</div></div>
+      ${st.away ? `<button class="btn pri" style="width:auto;padding:8px 14px" data-act="petBack" data-arg="${p.id}">Bring out</button>` : `<button class="btn" style="width:auto;padding:8px 14px" data-act="petOpen" data-arg="${p.id}">Open</button>`}</div>`;
+  }).join('') : '<p class="sm mut" style="line-height:1.5">No companions yet. Characters from D&amp;D Beyond bring the ones on their Extras tab. You can add one here too.</p>'}
+  <details class="rcat" style="margin-top:14px"><summary>Add a companion</summary>
+   <input class="field" id="pN" placeholder="Name, e.g. Pip the owl" style="margin-top:8px">
+   <div class="row" style="gap:8px;margin-top:8px"><input class="field" id="pAC" type="number" inputmode="numeric" placeholder="AC"><input class="field" id="pHP" type="number" inputmode="numeric" placeholder="HP"><input class="field" id="pSp" placeholder="Speed"></div>
+   <select class="field" id="pK" style="margin-top:8px"><option value="own">Takes its own turn (familiar, pet)</option><option value="turn">Acts after me, commanded with my Bonus Action</option><option value="turnfree">Acts after me, no command needed (summoned)</option><option value="mount">A mount I ride</option></select>
+   <div class="row" style="gap:8px;margin-top:8px"><input class="field" id="pAn" placeholder="Attack (optional)"><input class="field" id="pAh" type="number" inputmode="numeric" placeholder="+hit" style="max-width:80px"><input class="field" id="pAd" placeholder="Damage" style="max-width:110px"></div>
+   <button class="btn pri" style="margin-top:8px" data-act="petAdd">Add companion</button>
+  </details>
+  ${(CH().myPets || []).length ? `<div class="sm mut" style="margin-top:10px">Companions you added: ${(CH().myPets || []).map(p => `${esc(p.n)} <button class="iconbtn" style="width:26px;height:26px;display:inline-grid" data-act="petDel" data-arg="${p.id}" aria-label="Remove">✕</button>`).join(' ')}</div>` : ''}`;
+}
+// hpSheet: when companions are out, the hit may have been theirs
+function petHitChooser() {
+  const L = petsOut();
+  if (!L.length) return '';
+  return `<div class="sm mut" style="text-align:center;margin-bottom:8px">Did a companion take the hit?</div><div class="row" style="gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:12px">${L.map(p => `<button class="tag" style="padding:7px 12px" data-act="petOpen" data-arg="${p.id}">${esc(p.n)} · ${petState(p).cur}/${p.max}</button>`).join('')}</div>`;
+}
+let PET_OPEN = '';
+Object.assign(ACT, {
+  pets() {
+    openSheet('Companions', petsSheet);
+  },
+  petOpen(id) {
+    PET_OPEN = id;
+    const p = pets().find(x => x.id === id);
+    (sheetFn ? pushSheet : openSheet)(p ? p.n : 'Companion', () => (sheetFn && sheetStack && sheetStack.length ? '<button class="backlink" data-act="back">‹ Back</button>' : '') + petSheet(PET_OPEN));
+  },
+  petHp(arg) {
+    const [id, mode] = arg.split('|'),
+      p = pets().find(x => x.id === id),
+      v = Math.max(0, parseInt(($('#petAmt') || {}).value) || 0);
+    if (!p || !v) return toast('Type an amount first');
+    const st = petState(p);
+    st.cur = mode === 'dmg' ? Math.max(0, st.cur - v) : Math.min(p.max, st.cur + v);
+    save();
+    render();
+    toast(mode === 'dmg' ? (st.cur ? `${esc(p.n)} takes ${v}: ${st.cur}/${p.max} HP` : `<b>${esc(p.n)} drops to 0 HP</b>`) : `${esc(p.n)} heals ${v}: ${st.cur}/${p.max} HP`);
+  },
+  petCmd(id) {
+    const p = pets().find(x => x.id === id);
+    if (!p || !C().bonus) return;
+    if (!spend('B', 'Command ' + p.n)) return;
+    C().flags['cmd_' + id] = true;
+    save();
+    render();
+    toast(`${esc(p.n)} acts right after you this turn`);
+  },
+  petAway(id) {
+    const p = pets().find(x => x.id === id);
+    petState(p).away = true;
+    save();
+    closeSheet();
+    render();
+    toast(`${esc(p.n)} is away. Bring them back from the menu → Companions`);
+  },
+  petBack(id) {
+    const p = pets().find(x => x.id === id);
+    petState(p).away = false;
+    save();
+    render();
+  },
+  petAdd() {
+    const n = ($('#pN').value || '').trim();
+    if (!n) return toast('Give your companion a name');
+    const k = $('#pK').value,
+      an = ($('#pAn').value || '').trim();
+    const ch = CH();
+    ch.myPets = ch.myPets || [];
+    const max = Math.max(1, +$('#pHP').value || 1);
+    ch.myPets.push({
+      id: 'my' + Date.now().toString(36),
+      n,
+      what: '',
+      kind: k === 'turnfree' ? 'turn' : k,
+      cmd: k === 'turn' ? 'B' : '',
+      ac: +$('#pAC').value || 10,
+      max,
+      speed: ($('#pSp').value || '').trim() || '30 ft',
+      atk: an ? [{ n: an, hit: +$('#pAh').value || 0, dmg: ($('#pAd').value || '').trim() || '—', type: '', range: '' }] : [],
+      notes: k === 'mount' ? ['While you ride it, it moves on your turn and can only Dash, Disengage or Dodge.'] : []
+    });
+    save();
+    render();
+    toast(`${esc(n)} joins you`);
+  },
+  petDel(id) {
+    const ch = CH();
+    ch.myPets = (ch.myPets || []).filter(p => p.id !== id);
+    if (S.pets) delete S.pets[id];
+    save();
+    render();
   }
 });
 
