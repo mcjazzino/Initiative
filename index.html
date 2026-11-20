@@ -5987,17 +5987,17 @@ function acSheet() {
     parts
       .map(
         (p, i) =>
-          `<div class="acrow" ${p.off ? 'style="opacity:.5"' : ''}><span>${esc(p.n)}${p.off ? ' <span class="sm" style="color:var(--warn)">(not attuned)</span>' : ''}</span><b ${p.off ? 'style="text-decoration:line-through"' : ''}>${p.base ? p.v : p.v >= 0 ? '+' + p.v : p.v}</b></div>`
+          `<div class="acrow" ${p.off ? 'style="opacity:.5"' : ''}><span>${esc(p.n)}${p.off ? ` <span class="sm" style="color:var(--warn)">(${p.down ? 'put away' : 'not attuned'})</span>` : ''}${p.f ? `<div class="sm mut" style="font-weight:500;font-size:12px;margin-top:2px">${esc(p.f)}</div>` : ''}</span><b ${p.off ? 'style="text-decoration:line-through"' : ''}>${p.base ? p.v : p.v >= 0 ? '+' + p.v : p.v}</b></div>`
       )
       .join('') +
     (adj
       ? `<div class="acrow"><span>Your adjustment in this app</span><b>${adj > 0 ? '+' + adj : adj}</b></div>`
       : '');
-  return `<div class="hpbig">${ch.ac}</div><div class="sm mut" style="text-align:center">${imp != null ? (adj ? `Changed by you · imported value was ${imp}` : ch.source === 'ddb' ? 'As calculated from your D&amp;D Beyond character' : 'Demo character') : 'Armour class'}</div>
+  return `<div class="hpbig">${ch.ac}</div><div class="sm mut" style="text-align:center">${imp != null ? (adj ? `Changed by you · imported value was ${imp}` : ch.source === 'ddb' ? 'As calculated from your D&amp;D Beyond character' : ch.source === 'hand' ? 'Worked out from your armour and shield' : 'Demo character') : 'Armour class'}</div>
   ${parts.length ? `<div class="card" style="margin-top:14px"><div class="xs mut" style="margin-bottom:6px">How it adds up</div>${rows}<div class="acrow total"><span>Armour class</span><b>${ch.ac}</b></div></div>` : ''}
   <div class="stepper" style="grid-template-columns:1fr 1fr"><button data-act="acAdj" data-arg="-1">−1</button><button data-act="acAdj" data-arg="1">+1</button></div>
   ${imp != null && ch.ac !== imp ? `<button class="btn" style="margin-top:10px" data-act="acReset">Reset to ${imp}</button>` : ''}
-  <p class="sm mut" style="margin-top:14px">${parts.length ? 'Something missing? ' : ''}If this doesn't match D&amp;D Beyond, set it to match here. Tap the AC on D&amp;D Beyond to see how it's built up — magic items, fighting styles and feats are the usual reasons for a difference.</p>`;
+  ${parts.some(p => p.shield) ? `<div class="toggle" style="margin-top:10px"><span>Holding your shield <span class="sm mut">(drop or stow it: −${parts.find(p => p.shield).v} AC)</span></span><button class="sw ${parts.find(p => p.shield).down ? '' : 'on'}" data-act="acShield"></button></div>` : ''}${ch.source === 'hand' && ch.build ? `<button class="btn" style="margin-top:10px" data-act="hbEditAC">Change armour or shield</button>` : ''}<p class="sm mut" style="margin-top:14px;${ch.source === 'hand' ? 'display:none' : ''}">${parts.length ? 'Something missing? ' : ''}If this doesn't match D&amp;D Beyond, set it to match here. Tap the AC on D&amp;D Beyond to see how it's built up — magic items, fighting styles and feats are the usual reasons for a difference.</p>`;
 }
 function hpSheet() {
   const hp = CH().hp;
@@ -6880,7 +6880,7 @@ function parseDDB(raw) {
         });
     });
   }
-  if (shield) parts.push({ n: shield.definition.name, v: shield.definition.armorClass || 2 });
+  if (shield) parts.push({ n: shield.definition.name, v: shield.definition.armorClass || 2, shield: true });
   acMods.forEach(m => {
     if (m.type === 'bonus' && m.subType === 'armor-class' && m.value)
       parts.push({ n: label(m), v: m.value, aid: m._aid, off: m._off || undefined });
@@ -9352,6 +9352,19 @@ const ACT = {
           : `Used <b>${esc(o.n)}</b>${why ? `<br><span style="color:var(--warn)">House rule: ${esc(why)}</span>` : ''}`
       );
     render();
+  },
+  acShield() {
+    const ch = CH(),
+      p = (ch.acParts || []).find(x => x.shield);
+    if (!p) return;
+    p.down = !p.down;
+    p.off = p.down || undefined;
+    const d = p.down ? -p.v : p.v;
+    ch.ac += d;
+    if (ch.acImported != null) ch.acImported += d;
+    save();
+    render();
+    toast(p.down ? `Shield down: AC ${ch.ac}` : `Shield up: AC ${ch.ac}`);
   },
   castAt(arg) {
     const [id, k] = arg.split('|');
@@ -11940,7 +11953,8 @@ function hbBuild(B) {
   kept.filter(f => f.wpn).forEach(f => weapons.push({ ...f.wpn }));
   weapons.push(hbUnarmed(B));
   const hpMax = +B.hp || hbHpSuggest(B),
-    ac = +B.ac || 10 + m.DEX;
+    acA = hbAC(B),
+    ac = +B.ac || acA.ac;
   const scAb = D.scAb,
     sc = scAb ? { dc: 8 + p + m[scAb], atk: p + m[scAb], ab: scAb } : null;
   const items = [];
@@ -11972,7 +11986,7 @@ function hbBuild(B) {
     heavy: !!B.heavy,
     bh: null,
     acImported: ac,
-    acParts: [{ n: 'From your sheet', v: ac, base: true }],
+    acParts: +B.ac ? [{ n: 'From your sheet', v: ac, base: true }] : acA.parts,
     str: m.STR,
     prof: p,
     sc,
@@ -12828,6 +12842,63 @@ function hbDrag(e, a) {
   addEventListener('pointerup', up);
   addEventListener('pointercancel', up);
 }
+// armour table: name, base AC, type (L light, M medium, H heavy)
+const ARMOUR = [
+  ['No armour', 0, ''],
+  ['Padded', 11, 'L'],
+  ['Leather', 11, 'L'],
+  ['Studded leather', 12, 'L'],
+  ['Hide', 12, 'M'],
+  ['Chain shirt', 13, 'M'],
+  ['Scale mail', 14, 'M'],
+  ['Breastplate', 14, 'M'],
+  ['Half plate', 15, 'M'],
+  ['Ring mail', 14, 'H'],
+  ['Chain mail', 16, 'H'],
+  ['Splint', 17, 'H'],
+  ['Plate', 18, 'H']
+];
+// AC from armour, shield and bonuses, with the class's Unarmored Defense when it's better
+function hbAC(B) {
+  const D = hbDer(B),
+    m = D.m,
+    a = ARMOUR[+B.arm || 0],
+    parts = [],
+    pm = (k, v) => `${k} ${sgn(v)}`;
+  if (a[1]) {
+    const dex = a[2] === 'H' ? 0 : a[2] === 'M' ? Math.min(2, m.DEX) : m.DEX;
+    parts.push({
+      n: a[0],
+      v: a[1] + dex,
+      base: true,
+      f:
+        a[2] === 'H'
+          ? `heavy armour ${a[1]} · DEX doesn't count`
+          : a[2] === 'M'
+            ? `medium armour ${a[1]} + ${pm('DEX', dex)}${m.DEX > 2 ? ' (counts up to +2)' : ''}`
+            : `light armour ${a[1]} + ${pm('DEX', dex)}`
+    });
+  } else {
+    const opts = [{ n: 'No armour', v: 10 + m.DEX, f: `10 + ${pm('DEX', m.DEX)}` }];
+    if (D.lv('Barbarian')) opts.push({ n: 'Unarmored Defense', v: 10 + m.DEX + m.CON, f: `10 + ${pm('DEX', m.DEX)} + ${pm('CON', m.CON)}` });
+    if (D.lv('Monk') && !B.shield) opts.push({ n: 'Unarmored Defense', v: 10 + m.DEX + m.WIS, f: `10 + ${pm('DEX', m.DEX)} + ${pm('WIS', m.WIS)} · no armour or shield` });
+    if (B.cls.some(c => c.n === 'Sorcerer' && /dragon|draconic/i.test(c.sub || '')))
+      opts.push(
+        B.ed === '2014'
+          ? { n: 'Draconic Resilience', v: 13 + m.DEX, f: `13 + ${pm('DEX', m.DEX)}` }
+          : { n: 'Draconic Resilience', v: 10 + m.DEX + m.CHA, f: `10 + ${pm('DEX', m.DEX)} + ${pm('CHA', m.CHA)}` }
+      );
+    parts.push({ ...opts.reduce((x, y) => (y.v > x.v ? y : x)), base: true });
+  }
+  if (B.shield) parts.push({ n: 'Shield', v: 2, shield: true });
+  if (+B.acb) parts.push({ n: 'Other bonus', v: +B.acb, f: 'magic armour, a ring, Defense style…' });
+  return { ac: parts.reduce((t, p) => t + p.v, 0), parts };
+}
+function hbArmour(i) {
+  HB.arm = +i;
+  if (HB.cls.some(c => c.n === 'Barbarian')) HB.heavy = ARMOUR[+i][2] === 'H';
+  render();
+}
 function hbHead() {
   return `${HB._resumed ? `<div class="row between card" style="padding:10px 12px;margin:0 0 10px"><span class="sm">Picked up where you left off</span><button class="btn sm ghost" data-act="hbFresh">Start over</button></div>` : ''}<div class="hbsteps">${HSTEPS.map((s, i) => `<button class="${i === HSTEP ? 'on' : i < HSTEP ? 'done' : ''}" data-act="hbGo" data-arg="${i}"><b>${i + 1}</b>${s}</button>`).join('')}</div>`;
 }
@@ -12911,9 +12982,17 @@ function hbScores() {
   ).join('')}</div>
   <div class="hbrow3">
    <label class="card"><div class="xs mut">Max HP</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${sug}" value="${esc(B.hp)}" oninput="hbSet('hp',this.value)"><div class="xs mut">${B.hp ? '' : 'average: ' + sug}</div></label>
-   <label class="card"><div class="xs mut">AC</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${10 + D.m.DEX}" value="${esc(B.ac)}" oninput="hbSet('ac',this.value)"><div class="xs mut">${B.ac ? '' : 'no armour: ' + (10 + D.m.DEX)}</div></label>
+   <label class="card"><div class="xs mut">AC</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${hbAC(B).ac}" value="${esc(B.ac)}" oninput="hbSet('ac',this.value)" onchange="render()"><div class="xs mut">${B.ac ? 'from your sheet' : 'worked out below'}</div></label>
    <label class="card"><div class="xs mut">Speed</div><input class="hbnum" type="number" inputmode="numeric" value="${esc(B.speed)}" oninput="hbSet('speed',this.value)"><div class="xs mut">feet</div></label>
   </div>
+  <div class="xs sec">Armour &amp; shield</div>
+  <select class="field" style="padding:10px 12px" onchange="hbArmour(this.value)">${ARMOUR.map((a, i) => `<option value="${i}" ${(B.arm || 0) === i ? 'selected' : ''}>${a[0]}${i ? ` · AC ${a[1]}${a[2] === 'M' ? ' + DEX (max 2)' : a[2] === 'L' ? ' + DEX' : ''}` : ''}</option>`).join('')}</select>
+  <div class="toggle"><span>Shield <span class="sm mut">(+2 AC)</span></span><button class="sw ${B.shield ? 'on' : ''}" data-act="hbTog" data-arg="shield"></button></div>
+  <div class="row between" style="margin-top:6px"><span>Other AC bonus <span class="sm mut">(magic armour, ring, Defense style…)</span></span><div class="row" style="gap:6px"><button class="iconbtn" style="width:34px;height:34px" data-act="hbAcB" data-arg="-1">−</button><b class="num" style="min-width:26px;text-align:center">${sgn(+B.acb || 0)}</b><button class="iconbtn" style="width:34px;height:34px" data-act="hbAcB" data-arg="1">+</button></div></div>
+  <div class="sm mut" style="margin-top:6px">${(() => {
+    const A = hbAC(B);
+    return B.ac ? `Using AC ${esc(B.ac)} from your sheet. Clear that box to use ${A.ac} (${esc(A.parts.map(p => p.n).join(' + '))}).` : `AC ${A.ac} = ${esc(A.parts.map(p => (p.base ? `${p.n} (${p.f})` : p.n + ' +' + p.v)).join(' + '))}`;
+  })()}</div>
   ${D.lv('Barbarian') ? `<div class="toggle"><span>Wearing heavy armour <span class="sm mut">(no Rage)</span></span><button class="sw ${B.heavy ? 'on' : ''}" data-act="hbTog" data-arg="heavy"></button></div>` : ''}
   <div class="toggle"><span>Alert feat <span class="sm mut">(initiative bonus)</span></span><button class="sw ${B.alert ? 'on' : ''}" data-act="hbTog" data-arg="alert"></button></div>
   <div class="xs sec">Saving throw proficiencies</div>
@@ -13294,6 +13373,16 @@ Object.assign(ACT, {
     HB.cls.splice(+i, 1);
     render();
   },
+  hbEditAC() {
+    closeSheet();
+    ACT.hbEdit();
+    HSTEP = 1;
+    render();
+  },
+  hbAcB(d) {
+    HB.acb = Math.max(-5, Math.min(10, (+HB.acb || 0) + +d));
+    render();
+  },
   hbTog(k) {
     HB[k] = !HB[k];
     render();
@@ -13479,7 +13568,7 @@ const PG = {
     sec: 'CON',
     third: 'STR',
     wp: L => [{ b: 'Warhammer', mg: L >= 3 ? 1 : 0 }, { b: 'Light Crossbow' }],
-    ac: (L, m) => 15 + Math.min(2, m.DEX) + 2,
+    arm: () => [8, 1],
     sp: [
       'Fire Bolt',
       'Cure Wounds',
@@ -13501,7 +13590,7 @@ const PG = {
     sec: 'CON',
     third: 'DEX',
     wp: () => [{ b: 'Greataxe' }, { b: 'Handaxe' }],
-    ac: (L, m) => 10 + m.DEX + m.CON
+    arm: () => [0, 0]
   },
   bard: {
     n: 'Bard',
@@ -13510,7 +13599,7 @@ const PG = {
     sec: 'DEX',
     third: 'CON',
     wp: () => [{ b: 'Rapier' }],
-    ac: (L, m) => 11 + m.DEX,
+    arm: () => [2, 0],
     sp: [
       'Vicious Mockery',
       'Minor Illusion',
@@ -13535,7 +13624,7 @@ const PG = {
     sec: 'CON',
     third: 'STR',
     wp: () => [{ b: 'Mace' }],
-    ac: () => 18,
+    arm: () => [10, 1],
     sp: [
       'Sacred Flame',
       'Toll the Dead',
@@ -13570,7 +13659,7 @@ const PG = {
     sec: 'CON',
     third: 'DEX',
     wp: () => [{ b: 'Quarterstaff' }],
-    ac: (L, m) => 11 + m.DEX + 2,
+    arm: () => [2, 1],
     sp: [
       'Produce Flame',
       'Thorn Whip',
@@ -13599,7 +13688,7 @@ const PG = {
     sec: 'CON',
     third: 'DEX',
     wp: L => [{ b: 'Longsword', mg: L >= 11 ? 1 : 0 }, { b: 'Heavy Crossbow' }],
-    ac: L => (L >= 6 ? 20 : 18),
+    arm: L => [L >= 6 ? 12 : 10, 1],
     on: ['bm.prec', 'bm.trip', 'bm.rip', 'bm.men', 'bm.push', 'bm.parry', 'bm.rally']
   },
   monk: {
@@ -13610,7 +13699,7 @@ const PG = {
     sec: 'WIS',
     third: 'CON',
     wp: () => [{ b: 'Shortsword' }, { b: 'Dart' }],
-    ac: (L, m) => 10 + m.DEX + m.WIS
+    arm: () => [0, 0]
   },
   paladin: {
     n: 'Paladin',
@@ -13619,7 +13708,7 @@ const PG = {
     sec: 'CHA',
     third: 'CON',
     wp: L => [{ b: 'Longsword', mg: L >= 11 ? 1 : 0 }, { b: 'Javelin' }],
-    ac: L => (L >= 6 ? 20 : 18),
+    arm: L => [L >= 6 ? 12 : 10, 1],
     sp: [
       'Bless',
       'Shield of Faith',
@@ -13645,7 +13734,7 @@ const PG = {
     sec: 'WIS',
     third: 'CON',
     wp: L => [{ b: 'Longbow', mg: L >= 11 ? 1 : 0 }, { b: 'Shortsword' }],
-    ac: (L, m) => 12 + m.DEX,
+    arm: () => [3, 0],
     sp: [
       "Hunter's Mark",
       'Cure Wounds',
@@ -13665,7 +13754,7 @@ const PG = {
     sec: 'CON',
     third: 'WIS',
     wp: L => [{ b: 'Shortsword', mg: L >= 11 ? 1 : 0 }, { b: 'Dagger' }, { b: 'Shortbow' }],
-    ac: (L, m) => 12 + m.DEX,
+    arm: () => [3, 0],
     sk: { stealth: 2, acrobatics: 2, perception: 1, 'sleight-of-hand': 1 },
     on: ['rog.aim']
   },
@@ -13676,7 +13765,7 @@ const PG = {
     sec: 'CON',
     third: 'DEX',
     wp: () => [{ b: 'Dagger' }],
-    ac: (L, m) => 13 + m.DEX,
+    arm: () => [0, 0],
     on: ['mm.quick', 'mm.twin', 'mm.careful', 'mm.emp'],
     sp: [
       'Fire Bolt',
@@ -13706,7 +13795,7 @@ const PG = {
     sec: 'CON',
     third: 'DEX',
     wp: () => [{ b: 'Light Crossbow' }],
-    ac: (L, m) => 11 + m.DEX,
+    arm: () => [2, 0],
     on: ['wl.agon'],
     sp: [
       'Eldritch Blast',
@@ -13781,7 +13870,8 @@ function pregen(k, L, name, ed) {
   B.pregen = true;
   const m = {};
   ABN.forEach(a => (m[a] = Math.floor((B.ab[a] - 10) / 2)));
-  B.ac = p.ac(L, m);
+  if (p.arm) [B.arm, B.shield] = p.arm(L);
+  else B.ac = p.ac(L, m); // e.g. Mage Armor
   B.wp = p.wp(L);
   B.skills = p.sk || {};
   B.on = (p.on || []).slice();
