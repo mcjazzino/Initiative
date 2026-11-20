@@ -12779,7 +12779,7 @@ let HB = null,
   HLV = -1,
   HCUST = null,
   HCW = null;
-const HSTEPS = ['Who', 'Scores', 'Weapons', 'Spells', 'Features'];
+const HSTEPS = ['Who', 'Scores', 'Gear', 'Spells', 'Features'];
 function hbNew() {
   return {
     name: '',
@@ -12982,17 +12982,9 @@ function hbScores() {
   ).join('')}</div>
   <div class="hbrow3">
    <label class="card"><div class="xs mut">Max HP</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${sug}" value="${esc(B.hp)}" oninput="hbSet('hp',this.value)"><div class="xs mut">${B.hp ? '' : 'average: ' + sug}</div></label>
-   <label class="card"><div class="xs mut">AC</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${hbAC(B).ac}" value="${esc(B.ac)}" oninput="hbSet('ac',this.value)" onchange="render()"><div class="xs mut">${B.ac ? 'from your sheet' : 'worked out below'}</div></label>
+   <label class="card"><div class="xs mut">AC</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${hbAC(B).ac}" value="${esc(B.ac)}" oninput="hbSet('ac',this.value)" onchange="render()"><div class="xs mut">${B.ac ? 'from your sheet' : 'set in Gear'}</div></label>
    <label class="card"><div class="xs mut">Speed</div><input class="hbnum" type="number" inputmode="numeric" value="${esc(B.speed)}" oninput="hbSet('speed',this.value)"><div class="xs mut">feet</div></label>
   </div>
-  <div class="xs sec">Armour &amp; shield</div>
-  <select class="field" style="padding:10px 12px" onchange="hbArmour(this.value)">${ARMOUR.map((a, i) => `<option value="${i}" ${(B.arm || 0) === i ? 'selected' : ''}>${a[0]}${i ? ` · AC ${a[1]}${a[2] === 'M' ? ' + DEX (max 2)' : a[2] === 'L' ? ' + DEX' : ''}` : ''}</option>`).join('')}</select>
-  <div class="toggle"><span>Shield <span class="sm mut">(+2 AC)</span></span><button class="sw ${B.shield ? 'on' : ''}" data-act="hbTog" data-arg="shield"></button></div>
-  <div class="row between" style="margin-top:6px"><span>Other AC bonus <span class="sm mut">(magic armour, ring, Defense style…)</span></span><div class="row" style="gap:6px"><button class="iconbtn" style="width:34px;height:34px" data-act="hbAcB" data-arg="-1">−</button><b class="num" style="min-width:26px;text-align:center">${sgn(+B.acb || 0)}</b><button class="iconbtn" style="width:34px;height:34px" data-act="hbAcB" data-arg="1">+</button></div></div>
-  <div class="sm mut" style="margin-top:6px">${(() => {
-    const A = hbAC(B);
-    return B.ac ? `Using AC ${esc(B.ac)} from your sheet. Clear that box to use ${A.ac} (${esc(A.parts.map(p => p.n).join(' + '))}).` : `AC ${A.ac} = ${esc(A.parts.map(p => (p.base ? `${p.n} (${p.f})` : p.n + ' +' + p.v)).join(' + '))}`;
-  })()}</div>
   ${D.lv('Barbarian') ? `<div class="toggle"><span>Wearing heavy armour <span class="sm mut">(no Rage)</span></span><button class="sw ${B.heavy ? 'on' : ''}" data-act="hbTog" data-arg="heavy"></button></div>` : ''}
   <div class="toggle"><span>Alert feat <span class="sm mut">(initiative bonus)</span></span><button class="sw ${B.alert ? 'on' : ''}" data-act="hbTog" data-arg="alert"></button></div>
   <div class="xs sec">Saving throw proficiencies</div>
@@ -13007,6 +12999,18 @@ function hbScores() {
   <div class="xs sec">Damage resistances</div>
   <div class="filters" style="flex-wrap:wrap">${DTYPES.map(t => `<button class="${(B.resist || []).includes(t) ? 'on' : ''}" data-act="hbRes" data-arg="${t}">${t}</button>`).join('')}</div>
   <div class="row between" style="margin-top:14px"><span>Potions of Healing</span><div class="row" style="gap:6px"><button class="iconbtn" style="width:34px;height:34px" data-act="hbPot" data-arg="-1">−</button><b class="num" style="min-width:26px;text-align:center">${B.potions || 0}</b><button class="iconbtn" style="width:34px;height:34px" data-act="hbPot" data-arg="1">+</button></div></div>`;
+}
+function hbArmourSec() {
+  const B = HB;
+  return `<div class="xs sec">Armour &amp; shield</div>
+  <select class="field" style="padding:10px 12px" onchange="hbArmour(this.value)">${ARMOUR.map((a, i) => `<option value="${i}" ${(B.arm || 0) === i ? 'selected' : ''}>${a[0]}${i ? ` · AC ${a[1]}${a[2] === 'M' ? ' + DEX (max 2)' : a[2] === 'L' ? ' + DEX' : ''}` : ''}</option>`).join('')}</select>
+  <div class="toggle"><span>Shield <span class="sm mut">(+2 AC)</span></span><button class="sw ${B.shield ? 'on' : ''}" data-act="hbTog" data-arg="shield"></button></div>
+  <div class="row between" style="margin-top:6px"><span>Other AC bonus <span class="sm mut">(magic armour, ring, Defense style…)</span></span><div class="row" style="gap:6px"><button class="iconbtn" style="width:34px;height:34px" data-act="hbAcB" data-arg="-1">−</button><b class="num" style="min-width:26px;text-align:center">${sgn(+B.acb || 0)}</b><button class="iconbtn" style="width:34px;height:34px" data-act="hbAcB" data-arg="1">+</button></div></div>
+  <div class="sm mut" style="margin-top:6px">${(() => {
+    const A = hbAC(B);
+    return B.ac ? `Using AC ${esc(B.ac)} from your sheet. Clear that box to use ${A.ac} (${esc(A.parts.map(p => p.n).join(' + '))}).` : `AC ${A.ac} = ${esc(A.parts.map(p => (p.base ? `${p.n} (${p.f})` : p.n + ' +' + p.v)).join(' + '))}`;
+  })()}</div>
+`;
 }
 function hbWeapons() {
   const B = HB,
@@ -13032,7 +13036,7 @@ function hbWeapons() {
     `<div class="xs sec">${t}</div><div class="filters" style="flex-wrap:wrap">${WPN.filter(w => w[3] === c)
       .map(w => `<button data-act="hbWpAdd" data-arg="${encodeURIComponent(w[0])}">${w[0]}</button>`)
       .join('')}</div>`;
-  return `<p class="sm mut" style="line-height:1.5;margin:6px 0 12px">Add the weapons you fight with. Numbers come from your scores and proficiency. Use <b>extra</b> for anything else on your sheet (a fighting style, a feat). Unarmed Strike is always there.</p>
+  return `${hbArmourSec()}<div class="xs sec">Weapons</div><p class="sm mut" style="line-height:1.5;margin:6px 0 12px">Add the weapons you fight with. Numbers come from your scores and proficiency. Use <b>extra</b> for anything else on your sheet (a fighting style, a feat). Unarmed Strike is always there.</p>
   ${list || '<div class="empty">No weapons yet.</div>'}
   ${grp('S', 'Simple weapons')}${grp('M', 'Martial weapons')}
   <details class="rcat" style="margin-top:12px" ${HCW ? 'open' : ''}><summary>Something else (a natural weapon, a homebrew item)</summary>
