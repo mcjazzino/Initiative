@@ -6135,12 +6135,40 @@ function menuSheet() {
   ${ch.source === 'ddb' ? `<button class="btn" style="margin-top:10px" data-act="link">${I.link} Update ${esc(ch.name.split(' ')[0])} from D&amp;D Beyond</button><button class="btn" style="margin-top:10px" data-act="linkOther">${I.link} Import a different character</button>` : `<button class="btn" style="margin-top:10px" data-act="link">${I.link} Link D&amp;D Beyond character</button>`}
   <button class="btn" style="margin-top:10px" data-act="${ch.source === 'hand' ? 'hbEdit' : 'hbStart'}">${ch.source === 'hand' ? 'Edit your character' : 'Build a character by hand'}</button>
   ${C().phase !== 'idle' ? `<button class="btn" style="margin-top:10px;color:var(--bad)" data-act="endCombatAsk">End Combat</button>` : ''}
-  <button class="btn" style="margin-top:10px" data-act="aboutOpen">About this beta</button>
+  <div class="row" style="gap:8px;margin-top:10px"><button class="btn" style="flex:1" data-act="fbOpen">Send feedback</button><button class="btn" style="flex:1" data-act="aboutOpen">About this beta</button></div>
   <p class="sm mut" style="margin-top:16px;text-align:center">Initiative · beta ${APP_VERSION} · ${APP_BUILT}<br>Your character is kept on this device.</p>`;
 }
 const APP_VERSION = '0.9',
   APP_BUILT = '21 Nov 2026';
 const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+// feedback leaves through the phone's own share menu (text, mail, group chat): nothing about anyone is stored in the app
+let FB = '';
+function fbDevice() {
+  const u = navigator.userAgent,
+    os = /iphone|ipod/i.test(u) ? 'iPhone' : /ipad/i.test(u) ? 'iPad' : /android/i.test(u) ? 'Android' : /mac/i.test(u) ? 'Mac' : /win/i.test(u) ? 'Windows' : 'other';
+  const br = /crios|chrome/i.test(u) && !/edg/i.test(u) ? 'Chrome' : /fxios|firefox/i.test(u) ? 'Firefox' : /edg/i.test(u) ? 'Edge' : /safari/i.test(u) ? 'Safari' : 'browser';
+  return `${os} · ${br}${installed() ? ' · home-screen app' : ''}`;
+}
+function fbText() {
+  const ch = CH(),
+    c = C(),
+    src = { ddb: 'imported from D&D Beyond', hand: ch.build && ch.build.pregen ? 'ready-made' : 'built in the app', demo: 'demo' }[ch.source] || ch.source;
+  return `Initiative feedback · beta ${APP_VERSION}
+
+${FB.trim() || '(write your note here)'}
+
+—
+${ch.name} · ${clsLine(ch) || CLS[ch.cls].n + ' ' + ch.level}${ch.sub ? ' · ' + ch.sub : ''} · ${ED[ch.edition]} · ${src}
+${c.phase === 'idle' ? 'Not in combat' : 'In combat, round ' + c.round} · ${fbDevice()}`;
+}
+function fbSheet() {
+  return `<p class="sm mut" style="margin:0 0 10px;line-height:1.5">Something off, missing, or lovely? Write it down; the details below are added for you, so it's easy to find.</p>
+  <textarea class="field" id="fbNote" style="min-height:120px;font-size:15px;font-family:inherit;line-height:1.5" placeholder="What happened, or what would help?" oninput="FB=this.value;document.getElementById('fbPrev').textContent=fbText()">${esc(FB)}</textarea>
+  <button class="btn pri" style="margin-top:10px" data-act="fbSend">Send…</button>
+  <p class="sm mut" style="margin:8px 0 4px;text-align:center">Opens your phone's share menu: pick a text, mail or your group chat.</p>
+  <div class="xs sec">What gets sent</div>
+  <pre id="fbPrev" class="card sm mut" style="white-space:pre-wrap;font-family:inherit;margin:0;line-height:1.5">${esc(fbText())}</pre>`;
+}
 function aboutSheet() {
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   return `<div style="text-align:center;margin:4px 0 14px"><div class="appname" style="font-size:22px;color:var(--acc)">Initiative</div><div class="sm mut">Beta ${APP_VERSION} · ${APP_BUILT}</div></div>
@@ -6163,7 +6191,8 @@ function aboutSheet() {
    <li><b>D&amp;D Beyond's online sheet is the one to trust.</b> PDF exports can be off by a point here and there.</li>
    <li><b>Mostly tested in Chrome.</b> On an iPhone something may look a little off: please say so.</li>
    <li>It's a beta: if a number doesn't match your sheet, your sheet wins, and we'd love to hear about it.</li>
-  </ul></div>`;
+  </ul></div>
+  <button class="btn pri" style="margin-top:14px" data-act="fbOpen">Send feedback</button>`;
 }
 let LK = { id: '' };
 function linkSheet() {
@@ -9397,6 +9426,30 @@ const ACT = {
           : `Used <b>${esc(o.n)}</b>${why ? `<br><span style="color:var(--warn)">House rule: ${esc(why)}</span>` : ''}`
       );
     render();
+  },
+  fbOpen() {
+    openSheet('Send feedback', fbSheet);
+  },
+  async fbSend() {
+    if (!FB.trim()) return toast('Write a note first');
+    const text = fbText();
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Initiative feedback', text });
+        FB = '';
+        closeSheet();
+        toast('Thank you!');
+        return;
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return; // they closed the share menu
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Copied: paste it in a text or mail');
+    } catch (e) {
+      location.href = 'mailto:?subject=' + encodeURIComponent('Initiative feedback · beta ' + APP_VERSION) + '&body=' + encodeURIComponent(text);
+    }
   },
   aboutOpen() {
     openSheet('About this beta', aboutSheet);
