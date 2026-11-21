@@ -3925,6 +3925,32 @@ function condTags() {
       )
   ].join('');
 }
+// your own always-on traits, shown next to the condition they're about (Snake Blood next to Poisoned)
+const TRAIT_RE = {
+  poisoned: /poison/i,
+  charmed: /charm/i,
+  frightened: /fright|fear/i,
+  paralyzed: /paraly/i,
+  petrified: /petrif/i,
+  prone: /prone/i,
+  restrained: /restrain/i,
+  stunned: /stun/i,
+  blinded: /blind/i,
+  deafened: /deaf/i,
+  grappled: /grappl/i,
+  incapacitated: /incapacit/i,
+  unconscious: /unconscious|sleep/i
+};
+const myTraits = () => CH().traits || [];
+function traitNote(k) {
+  const re = TRAIT_RE[k];
+  return re
+    ? myTraits()
+        .filter(t => re.test(t.n + ' ' + t.d))
+        .map(t => `<div class="sm" style="color:var(--acc);font-weight:600;margin-top:4px">✦ ${esc(t.n)}${t.d ? ': ' + esc(t.d) : ''}</div>`)
+        .join('')
+    : '';
+}
 function condSheet() {
   const cd = S.cond,
     old = is14('exhaust'),
@@ -3960,7 +3986,7 @@ function condSheet() {
     return p.join(' ');
   };
   const row = c =>
-    `<div class="toggle" style="align-items:flex-start"><div style="padding-right:10px"><div>${esc(c.n)}${c.src ? ` <span class="sm mut">· ${esc(c.src)}</span>` : ''}</div><div class="sm mut" style="font-weight:500;margin-top:3px">${esc(desc(c))}</div></div><button class="sw ${condOn(c.k) ? 'on' : ''}" data-act="cond" data-arg="${c.k}"></button></div>`;
+    `<div class="toggle" style="align-items:flex-start"><div style="padding-right:10px"><div>${esc(c.n)}${c.src ? ` <span class="sm mut">· ${esc(c.src)}</span>` : ''}</div><div class="sm mut" style="font-weight:500;margin-top:3px">${esc(desc(c))}</div>${traitNote(c.k)}</div><button class="sw ${condOn(c.k) ? 'on' : ''}" data-act="cond" data-arg="${c.k}"></button></div>`;
   const now = condSummary();
   return `${now.length ? `<div class="card" style="border-color:rgba(242,184,75,.45);margin-bottom:12px"><div class="xs" style="color:var(--warn);margin-bottom:6px">Right now</div>${now.map(x => `<div class="sm" style="margin-top:3px">${x}</div>`).join('')}</div>` : ''}
   <p class="sm mut" style="margin:0 0 10px;line-height:1.45">Switch on whatever an enemy or an ally puts on you. The app applies it: your attacks, attacks against you, saves, speed and actions.</p>
@@ -3975,7 +4001,8 @@ function condSheet() {
     .join('')}
   <div class="xs sec">From an enemy's spell</div>${CONDS.filter(c => c.g === 'e')
     .map(row)
-    .join('')}`;
+    .join('')}
+  ${myTraits().length ? `<div class="xs sec">Your traits</div><div class="card">${myTraits().map(t => `<div style="margin-bottom:8px"><b>${esc(t.n)}</b>${t.d ? `<div class="sm mut" style="font-weight:500;margin-top:2px">${esc(t.d)}</div>` : ''}</div>`).join('')}</div>` : ''}`;
 }
 function condToggle(k) {
   const was = condOn(k);
@@ -11704,6 +11731,10 @@ function hfGen(B) {
   hfSubs(B, D, F, add, res); // subclass features: builder-subclasses.js
   // features the player added by hand
   (B.cf || []).forEach((f, i) => {
+    if (f.t === 'P') {
+      add('cf.' + i, f.n, 'F', f.d || '', { passive: true, trait: true });
+      return;
+    }
     if (f.p && R.some(r => r.k === f.p)) {
       add('cf.' + i, f.n, f.t || 'A', f.d || '', { res: f.p, step: f.c || 1 });
       return;
@@ -12111,6 +12142,7 @@ function hbBuild(B) {
     conMod: m.CON,
     saves,
     passives: kept.filter(f => f.x.passive).map(f => f.n.replace(/^Elemental Fury: /, '')),
+    traits: kept.filter(f => f.x.trait).map(f => ({ n: f.n, d: f.d })),
     insp: false,
     landStride: false,
     editionSet: true,
@@ -12215,6 +12247,23 @@ function hfMore(B, D, F, add, res) {
         `A 30-ft sphere of twilight around you for 1 minute. When a creature (you included) ends its turn there, choose: it gains 1d6+${k} temporary HP, or one Charmed or Frightened effect on it ends.`,
         { res: 'cd' }
       );
+    if (/Knowledge/i.test(s) && k >= 2) {
+      add(
+        'cle.know',
+        'Channel Divinity: Knowledge of the Ages',
+        'A',
+        'Choose one skill or tool: you are proficient with it for 10 minutes.',
+        { res: 'cd' }
+      );
+      if (k >= 6)
+        add(
+          'cle.thoughts',
+          'Channel Divinity: Read Thoughts',
+          'A',
+          `A creature within 60 ft that you can see: WIS save DC ${8 + D.prof + D.m.WIS}. On a failure you read its surface thoughts for 1 minute, and you can end it to cast Suggestion on the creature without a slot (no save).`,
+          { res: 'cd' }
+        );
+    }
     if (/Grave/i.test(s) && k >= (o ? 2 : 3))
       add(
         'cle.grave',
@@ -13274,13 +13323,13 @@ function hbFeatures() {
   ${(B.cf || []).map((f, i) => `<div class="item"><div class="row between" style="align-items:flex-start;gap:10px"><div style="flex:1;min-width:0"><div class="t">${esc(f.n)}</div>
     <div class="row" style="gap:5px;margin-top:5px">${costTag(f.t)}${cfUseTag(f, G)}</div>${f.d ? `<div class="d">${esc(f.d)}</div>` : ''}</div>
     <button class="iconbtn" style="width:34px;height:34px" data-act="hbCfDel" data-arg="${i}" aria-label="Remove">✕</button></div></div>`).join('')}
-  <details class="rcat" ${(B.cf || []).length ? '' : 'open'}><summary>Missing something? Add it</summary>
+  <details class="rcat" ${(B.cf || []).length && !HCFO ? '' : 'open'} ontoggle="HCFO=this.open"><summary>Missing something? Add it</summary>
    <p class="sm mut" style="line-height:1.5;margin:8px 0">A subclass feature, feat, species trait or magic item you use in a fight. Copy it from your sheet.${pools.length ? ` If it spends ${esc(pools.map(resLabel).slice(0, 2).join(' or '))}, pick that in the list below.` : ''}</p>
    <input class="field" id="hcfN" placeholder="Name, e.g. Wrath of the Sea">
    <div style="margin-top:8px"><select class="field" id="hcfU" onchange="hbCfUses(this.value)"><option value="0">No limit on uses</option>${[1, 2, 3, 4, 5, 6].map(n => `<option value="${n}">${n}× per rest</option>`).join('')}${
       pools.length ? `<optgroup label="Spends from">${pools.map(r => `<option value="p:${r.k}">Spends ${esc(resLabel(r))}</option>`).join('')}</optgroup>` : ''
     }</select></div>
-   <div class="row" style="gap:8px;margin-top:8px"><select class="field" id="hcfT"><option value="A">Action</option><option value="B">Bonus Action</option><option value="R">Reaction</option><option value="F">No action</option></select>
+   <div class="row" style="gap:8px;margin-top:8px"><select class="field" id="hcfT"><option value="A">Action</option><option value="B">Bonus Action</option><option value="R">Reaction</option><option value="F">No action</option><option value="P">Always on (a trait)</option></select>
     <select class="field" id="hcfR" style="display:none"><option value="long">long rest</option><option value="short">short rest</option></select>
     <select class="field" id="hcfC" style="display:none">${[1, 2, 3, 4, 5, 6].map(n => `<option value="${n}">costs ${n}</option>`).join('')}</select></div>
    <textarea class="field" id="hcfD" rows="3" style="margin-top:8px" placeholder="What it does (optional)"></textarea>
@@ -13293,26 +13342,61 @@ function hbSubNote(i) {
   const c = HB.cls[i];
   if (!c || !c.sub || !c.sub.trim()) return '';
   // subclasses the combat engine handles by name (crit range, Sneak Attack riders, wizard school notes)
-  if (/Champion|Assassin|Swashbuckler|Abjur|Blades|Conjur|Divin|Evoc/i.test(c.sub)) return '';
-  const probe = sub => {
+  if (/Champion|Assassin|Swashbuckler|Abjur|Blades|Conjur|Divin|Evoc|Moon/i.test(c.sub)) return '';
+  // compare everything the subclass offers (picked or not) with no subclass at all
+  const probe = (sub, spells) => {
     const B = JSON.parse(JSON.stringify(HB));
     B.cls[i].lvl = 20;
     B.cls[i].sub = sub;
-    const ch = hbBuild(B);
+    const G = hfGen(B),
+      ch = hbBuild(B);
     ch.classes.forEach(x => (x.sub = ''));
-    return JSON.stringify([ch.feats, ch.res, ch.spells, ch.passives, ch.wsMax, ch.weapons]);
+    return JSON.stringify([G.F.map(f => f.id + f.d), G.R.map(r => r.k + r.max), ch.res, ch.passives, ch.wsMax, ch.weapons, spells ? ch.spells : 0]);
   };
-  let same;
+  let same, spellsOnly;
   try {
-    same = probe(c.sub) === probe('');
+    same = probe(c.sub, 1) === probe('', 1);
+    spellsOnly = !same && probe(c.sub) === probe('');
   } catch (e) {
     return '';
   }
+  const add = 'Add the ones you use under Features, with “Missing something? Add it”.';
   return same
-    ? `<div class="sm" style="margin-top:8px;line-height:1.45;color:var(--mut)">Initiative doesn't know the <b>${esc(c.sub.trim())}</b> features yet. Add the ones you use under Features, with “Missing something? Add it”.</div>`
-    : '';
+    ? `<div class="sm" style="margin-top:8px;line-height:1.45;color:var(--mut)">Initiative doesn't know the <b>${esc(c.sub.trim())}</b> features yet. ${add}</div>`
+    : spellsOnly
+      ? `<div class="sm" style="margin-top:8px;line-height:1.45;color:var(--mut)">Initiative knows the <b>${esc(c.sub.trim())}</b> spells, but not its other features yet. ${add}</div>`
+      : '';
 }
 // class pools a home-made feature can spend from: Channel Divinity, Superiority Dice, Focus Points…
+// which weapons a character is proficient with, from their classes (a sensible start; the player can change it)
+function wpnProf(B, n) {
+  const w = WPN.find(x => x[0] === n);
+  if (!w) return true;
+  const o = B.ed === '2014',
+    props = w[4] || '',
+    any = re => B.cls.some(c => re.test(c.n)),
+    sub = re => B.cls.some(c => re.test(c.sub || ''));
+  if (any(/Barbarian|Fighter|Paladin|Ranger|Blood Hunter/)) return true;
+  if (w[3] === 'S') {
+    if (B.cls.some(c => !/Druid|Wizard|Sorcerer/.test(c.n)) || !o) return true;
+    if (any(/Druid/) && /^(Club|Dagger|Dart|Javelin|Mace|Quarterstaff|Sickle|Sling|Spear)$/.test(n)) return true;
+    if (any(/Wizard|Sorcerer/) && /^(Dagger|Dart|Sling|Quarterstaff|Light Crossbow)$/.test(n)) return true;
+    return false;
+  }
+  // martial weapons
+  if (o) {
+    if (any(/Rogue|Bard/) && /^(Hand Crossbow|Longsword|Rapier|Shortsword)$/.test(n)) return true;
+    if (any(/Monk/) && n === 'Shortsword') return true;
+    if (any(/Druid/) && n === 'Scimitar') return true;
+    if (sub(/War Domain|Tempest|Hexblade|Valor|Swords/)) return true;
+    return false;
+  }
+  if (any(/Rogue/) && /\b[FL]\b/.test(props)) return true;
+  if (any(/Monk/) && /\bL\b/.test(props)) return true;
+  if (sub(/Valor|Swords/)) return true;
+  return false;
+}
+let HCFO = false; // keep the add-a-feature form open while someone is adding several
 function cfPools(G) {
   return G.R.filter(r => !/^cf\d|^sp[A-Z]|^wArcaneRecovery$/.test(r.k));
 }
@@ -13553,9 +13637,11 @@ Object.assign(ACT, {
     render();
   },
   hbWpAdd(n) {
-    HB.wp.push({ b: decodeURIComponent(n), mg: 0 });
+    n = decodeURIComponent(n);
+    const pr = wpnProf(HB, n);
+    HB.wp.push({ b: n, mg: 0, ...(pr ? {} : { np: true }) });
     render();
-    toast(`Added ${esc(decodeURIComponent(n))}`);
+    toast(pr ? `Added ${esc(n)}` : `Added ${esc(n)}<br><span class="mut">Not proficient for your class: tap Proficient if your sheet says you are</span>`);
   },
   hbWp(a) {
     const [i, k, v] = a.split('|');
