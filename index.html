@@ -13002,7 +13002,6 @@ function hbScores() {
    <label class="card"><div class="xs mut">AC</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${hbAC(B).ac}" value="${esc(B.ac)}" oninput="hbSet('ac',this.value)" onchange="render()"><div class="xs mut">${B.ac ? 'from your sheet' : 'set in Gear'}</div></label>
    <label class="card"><div class="xs mut">Speed</div><input class="hbnum" type="number" inputmode="numeric" value="${esc(B.speed)}" oninput="hbSet('speed',this.value)"><div class="xs mut">feet</div></label>
   </div>
-  ${D.lv('Barbarian') ? `<div class="toggle"><span>Wearing heavy armour <span class="sm mut">(no Rage)</span></span><button class="sw ${B.heavy ? 'on' : ''}" data-act="hbTog" data-arg="heavy"></button></div>` : ''}
   <div class="xs sec">Saving throw proficiencies</div>
   <div class="filters" style="flex-wrap:wrap">${ABN.map((a, i) => `<button class="${sv.includes(i) ? 'on' : ''}" data-act="hbSave" data-arg="${i}">${a} ${sgn(D.m[a] + (sv.includes(i) ? D.prof : 0))}</button>`).join('')}</div>
   <div class="xs sec">Skills <span class="mut" style="text-transform:none;letter-spacing:0">· tap once for proficient, twice for expertise</span></div>
@@ -13020,6 +13019,7 @@ function hbArmourSec() {
   const B = HB;
   return `<div class="xs sec">Armour &amp; shield</div>
   <select class="field" style="padding:10px 12px" onchange="hbArmour(this.value)">${ARMOUR.map((a, i) => `<option value="${i}" ${(B.arm || 0) === i ? 'selected' : ''}>${a[0]}${i ? ` · AC ${a[1]}${a[2] === 'M' ? ' + DEX (max 2)' : a[2] === 'L' ? ' + DEX' : ''}` : ''}</option>`).join('')}</select>
+  ${B.cls.some(c => c.n === 'Barbarian') ? `<div class="toggle"><span>Wearing heavy armour <span class="sm mut">(no Rage)</span></span><button class="sw ${B.heavy ? 'on' : ''}" data-act="hbTog" data-arg="heavy"></button></div>` : ''}
   <div class="toggle"><span>Shield <span class="sm mut">(+2 AC)</span></span><button class="sw ${B.shield ? 'on' : ''}" data-act="hbTog" data-arg="shield"></button></div>
   ${(B.acx || []).map((x, i) => `<div class="row between item" style="margin-top:6px;padding:10px 12px"><span>${esc(x.n || 'Bonus')}</span><div class="row" style="gap:8px"><b class="num">${sgn(+x.v)}</b><button class="iconbtn" style="width:30px;height:30px" data-act="hbAcxDel" data-arg="${i}" aria-label="Remove">✕</button></div></div>`).join('')}
   ${+B.acb ? `<div class="row between item" style="margin-top:6px;padding:10px 12px"><span>Other bonus</span><div class="row" style="gap:8px"><b class="num">${sgn(+B.acb)}</b><button class="iconbtn" style="width:30px;height:30px" data-act="hbAcbDel" aria-label="Remove">✕</button></div></div>` : ''}
