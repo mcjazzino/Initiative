@@ -310,6 +310,8 @@ body.multi .startbtn{background:var(--mcsoft);text-shadow:0 1px 3px rgba(0,0,0,.
 .petbar .pw{grid-column:1/-1;font-size:12.5px;color:var(--mut)}
 .petbar.down{opacity:.55}
 .petbar.down .php{color:var(--bad)}
+
+.wtog button{min-height:40px;padding:0 16px}
 </style>
 </head>
 <body>
@@ -13047,7 +13049,7 @@ function hbWeapons() {
         : `<div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">
      <div class="filters" style="margin:0">${[0, 1, 2, 3].map(n => `<button class="${(+w.mg || 0) === n ? 'on' : ''}" data-act="hbWp" data-arg="${i}|mg|${n}">${n ? '+' + n : 'Normal'}</button>`).join('')}</div>
      <span class="sm mut" style="margin-left:auto">extra</span><input class="hbsmall" type="number" inputmode="numeric" placeholder="hit" value="${w.hit || ''}" onchange="hbWpSet(${i},'hit',this.value)"><input class="hbsmall" type="number" inputmode="numeric" placeholder="dmg" value="${w.dm || ''}" onchange="hbWpSet(${i},'dm',this.value)"></div>
-     <div class="row between" style="margin-top:8px"><div class="row" style="gap:14px"><button class="sm mut" data-act="hbWp" data-arg="${i}|np|1">${w.np ? '☐ Not proficient' : '☑ Proficient'}</button><button class="sm ${w.sil ? '' : 'mut'}" style="${w.sil ? 'color:var(--acc)' : ''}" data-act="hbWp" data-arg="${i}|sil|1">${w.sil ? '☑ Silvered' : '☐ Silvered'}</button></div><button class="sm" style="color:var(--bad)" data-act="hbWpDel" data-arg="${i}">Remove</button></div>`
+     <div class="row between" style="margin-top:8px"><div class="filters wtog" style="margin:0"><button class="${w.np ? '' : 'on'}" data-act="hbWp" data-arg="${i}|np|1">${w.np ? '' : '✓ '}Proficient</button><button class="${w.sil ? 'on' : ''}" data-act="hbWp" data-arg="${i}|sil|1">${w.sil ? '✓ ' : ''}Silvered</button></div><button class="sm" style="color:var(--bad)" data-act="hbWpDel" data-arg="${i}">Remove</button></div>`
     }
     ${w.cust ? `<div style="text-align:right;margin-top:6px"><button class="sm" style="color:var(--bad)" data-act="hbWpDel" data-arg="${i}">Remove</button></div>` : ''}</div>`;
       })
