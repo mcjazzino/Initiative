@@ -315,6 +315,7 @@ body.multi .startbtn{background:var(--mcsoft);text-shadow:0 1px 3px rgba(0,0,0,.
 .wtog button{min-height:40px;padding:0 16px}
 .appname{font-family:Cinzel,serif;font-weight:700;font-size:16px;letter-spacing:.14em;color:var(--mut)}
 .startbtn.dockgo{padding:19px;border-radius:16px;font-family:inherit;font-size:16px;letter-spacing:0;font-weight:800}
+.starpill{font-size:18px;line-height:1;padding:6px 12px;color:var(--mut)}.starpill.on{color:var(--acc);border-color:var(--line);background:var(--soft);text-shadow:0 0 10px var(--acc)}
 </style>
 </head>
 <body>
@@ -4300,9 +4301,6 @@ function vitals() {
     n = condCount();
   const small = [
     CH().ward ? `<button class="mini" data-act="wardOpen">Ward <b>${CH().ward.cur}</b></button>` : '',
-    ch.insp
-      ? `<button class="mini on" data-act="inspOpen" aria-label="Heroic Inspiration available">★ Inspiration</button>`
-      : '',
     ch.initParts && C().phase === 'idle'
       ? `<button class="mini" data-act="initInfo">Initiative <b>${initVal() >= 0 ? '+' : ''}${initVal()}</b></button>`
       : ''
@@ -4313,6 +4311,7 @@ function vitals() {
    <button class="pill" data-act="hp" style="color:${hp.cur <= hp.max / 4 ? 'var(--bad)' : 'var(--txt)'}">${I.heart}<span>${hp.cur}${hp.temp ? `<span class="mut">+${hp.temp}</span>` : ''}<span class="mut">/${hp.max}</span></span></button>
    <button class="pill" data-act="acEdit">${I.shield}${ch.ac + (S.blade ? intMod() : 0) + condFx().ac}${ch.acImported != null && ch.ac !== ch.acImported ? '<span class="mut" style="font-size:11px">✎</span>' : ''}</button>
    ${n ? `<button class="pill" data-act="conditions" style="border-color:rgba(242,184,75,.5);color:var(--warn)">${I.cond}${n} condition${n > 1 ? 's' : ''}</button>` : `<button class="pill" data-act="conditions" style="color:var(--mut)" aria-label="Conditions">${I.cond}</button>`}
+   <button class="pill starpill ${ch.insp ? 'on' : ''}" data-act="inspOpen" aria-label="${is14('insp') ? 'Inspiration' : 'Heroic Inspiration'}: ${ch.insp ? 'you have it' : 'none'}">${ch.insp ? '★' : '☆'}</button>
    ${S.dying ? `<span class="pill" style="border-color:rgba(242,95,92,.5);color:var(--bad)">${S.dying.dead ? 'Dead' : 'Unconscious'}</span>` : ''}
    ${S.conc ? `<button class="pill" data-act="dropConc" style="border-color:var(--line);background:var(--soft)">${I.conc}<span>${esc(S.conc)}</span><span class="mut">✕</span></button>` : ''}
   </div>${small ? `<div class="minirow">${small}</div>` : ''}</div>`;
