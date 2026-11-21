@@ -13003,7 +13003,6 @@ function hbScores() {
    <label class="card"><div class="xs mut">Speed</div><input class="hbnum" type="number" inputmode="numeric" value="${esc(B.speed)}" oninput="hbSet('speed',this.value)"><div class="xs mut">feet</div></label>
   </div>
   ${D.lv('Barbarian') ? `<div class="toggle"><span>Wearing heavy armour <span class="sm mut">(no Rage)</span></span><button class="sw ${B.heavy ? 'on' : ''}" data-act="hbTog" data-arg="heavy"></button></div>` : ''}
-  <div class="toggle"><span>Alert feat <span class="sm mut">(initiative bonus)</span></span><button class="sw ${B.alert ? 'on' : ''}" data-act="hbTog" data-arg="alert"></button></div>
   <div class="xs sec">Saving throw proficiencies</div>
   <div class="filters" style="flex-wrap:wrap">${ABN.map((a, i) => `<button class="${sv.includes(i) ? 'on' : ''}" data-act="hbSave" data-arg="${i}">${a} ${sgn(D.m[a] + (sv.includes(i) ? D.prof : 0))}</button>`).join('')}</div>
   <div class="xs sec">Skills <span class="mut" style="text-transform:none;letter-spacing:0">· tap once for proficient, twice for expertise</span></div>
@@ -13170,6 +13169,8 @@ function hbFeatures() {
         }).join('')}</div>`
       : ''
   }
+  <div class="xs sec">Feats</div>
+  <div class="toggle"><span>Alert feat <span class="sm mut">(initiative bonus)</span></span><button class="sw ${B.alert ? 'on' : ''}" data-act="hbTog" data-arg="alert"></button></div>
   <div class="xs sec">Your own features</div>
   ${(B.cf || []).map((f, i) => `<div class="item"><div class="row between" style="align-items:flex-start;gap:10px"><div style="flex:1;min-width:0"><div class="t">${esc(f.n)}</div>
     <div class="row" style="gap:5px;margin-top:5px">${costTag(f.t)}${cfUseTag(f, G)}</div>${f.d ? `<div class="d">${esc(f.d)}</div>` : ''}</div>
