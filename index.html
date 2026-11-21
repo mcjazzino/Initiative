@@ -3,6 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0c11">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Initiative">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <title>Initiative — D&amp;D Combat Companion</title>
 <style>
 /* Cinzel · Copyright 2020 The Cinzel Project Authors · SIL Open Font License 1.1 (scripts.sil.org/OFL) */
@@ -316,6 +324,8 @@ body.multi .startbtn{background:var(--mcsoft);text-shadow:0 1px 3px rgba(0,0,0,.
 .appname{font-family:Cinzel,serif;font-weight:700;font-size:16px;letter-spacing:.14em;color:var(--mut)}
 .startbtn.dockgo{padding:19px;border-radius:16px;font-family:inherit;font-size:16px;letter-spacing:0;font-weight:800}
 .starpill{font-size:18px;line-height:1;padding:6px 12px;color:var(--mut)}.starpill.on{color:var(--acc);border-color:var(--line);background:var(--soft);text-shadow:0 0 10px var(--acc)}
+.bul{list-style:none;padding:0;margin:0}.bul li{position:relative;padding:0 0 10px 18px;font-size:14px;line-height:1.5;color:var(--mut)}.bul li:last-child{padding-bottom:0}
+.bul li:before{content:'';position:absolute;left:2px;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--acc)}.bul li b{color:var(--txt)}
 </style>
 </head>
 <body>
@@ -6125,7 +6135,35 @@ function menuSheet() {
   ${ch.source === 'ddb' ? `<button class="btn" style="margin-top:10px" data-act="link">${I.link} Update ${esc(ch.name.split(' ')[0])} from D&amp;D Beyond</button><button class="btn" style="margin-top:10px" data-act="linkOther">${I.link} Import a different character</button>` : `<button class="btn" style="margin-top:10px" data-act="link">${I.link} Link D&amp;D Beyond character</button>`}
   <button class="btn" style="margin-top:10px" data-act="${ch.source === 'hand' ? 'hbEdit' : 'hbStart'}">${ch.source === 'hand' ? 'Edit your character' : 'Build a character by hand'}</button>
   ${C().phase !== 'idle' ? `<button class="btn" style="margin-top:10px;color:var(--bad)" data-act="endCombatAsk">End Combat</button>` : ''}
-  <p class="sm mut" style="margin-top:16px">Your character and combat state are kept on this device.</p>`;
+  <button class="btn" style="margin-top:10px" data-act="aboutOpen">About this beta</button>
+  <p class="sm mut" style="margin-top:16px;text-align:center">Initiative · beta ${APP_VERSION} · ${APP_BUILT}<br>Your character is kept on this device.</p>`;
+}
+const APP_VERSION = '0.9',
+  APP_BUILT = '21 Nov 2026';
+const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+function aboutSheet() {
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  return `<div style="text-align:center;margin:4px 0 14px"><div class="appname" style="font-size:22px;color:var(--acc)">Initiative</div><div class="sm mut">Beta ${APP_VERSION} · ${APP_BUILT}</div></div>
+  <p style="line-height:1.55;margin:0 0 14px">A combat helper made out of love for D&amp;D, and shaped by the people playing with it. Your character sheet stays the source of truth; this keeps the fight in front of you.</p>
+  <div class="xs sec">On your home screen</div>
+  ${
+    installed()
+      ? `<div class="banner">✓ You're using it as an app. It opens without internet, too.</div>`
+      : `<div class="card"><p class="sm" style="margin:0 0 6px;line-height:1.5">Add it to your home screen and it opens like an app, full screen, even without internet.</p>
+   <ol class="steps" style="margin:0">${
+     ios
+       ? `<li>Open this page in <b>Safari</b>.</li><li>Tap <b>Share</b> (the square with the arrow).</li><li>Choose <b>Add to Home Screen</b>.</li>`
+       : `<li>In <b>Chrome</b>, tap the <b>⋮</b> menu.</li><li>Choose <b>Add to Home screen</b> or <b>Install app</b>.</li>`
+   }</ol></div>`
+  }
+  <div class="xs sec">Good to know</div>
+  <div class="card"><ul class="bul">
+   <li><b>Your character lives on this phone</b>, in this browser. Clearing your browser data, or switching phones, starts you fresh.</li>
+   <li><b>Subclasses from books other than the Player's Handbook</b> (Xanathar's, Tasha's and others) may only show their basics. Anything missing, add yourself under Edit character → Features.</li>
+   <li><b>D&amp;D Beyond's online sheet is the one to trust.</b> PDF exports can be off by a point here and there.</li>
+   <li><b>Mostly tested in Chrome.</b> On an iPhone something may look a little off: please say so.</li>
+   <li>It's a beta: if a number doesn't match your sheet, your sheet wins, and we'd love to hear about it.</li>
+  </ul></div>`;
 }
 let LK = { id: '' };
 function linkSheet() {
@@ -9359,6 +9397,9 @@ const ACT = {
           : `Used <b>${esc(o.n)}</b>${why ? `<br><span style="color:var(--warn)">House rule: ${esc(why)}</span>` : ''}`
       );
     render();
+  },
+  aboutOpen() {
+    openSheet('About this beta', aboutSheet);
   },
   acShield() {
     const ch = CH(),
@@ -14661,6 +14702,9 @@ Object.assign(ACT, {
 // everything is defined: draw the first screen
 acMigrate(S && S.char);
 render();
+
+// on the GitHub site, keep a copy on the phone so it opens without internet (the Claude preview can't do this)
+if ('serviceWorker' in navigator && location.hostname.endsWith('github.io')) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 </script>
 </body>
