@@ -3569,6 +3569,10 @@ function applyAttune() {
     if (w.aid != null) {
       w.hit = on(w.aid) ? w.hitOn : w.hitOff;
       w.dmg = on(w.aid) ? w.dmgOn : w.dmgOff;
+      if (w.noteOn !== undefined) {
+        w.condDmg = on(w.aid) ? w.condOn : undefined;
+        w.note = on(w.aid) ? w.noteOn : w.noteOff;
+      }
     }
   });
   const sum = () => (ch.acParts || []).reduce((t, p) => t + (p.off ? 0 : p.v), 0),
@@ -4128,6 +4132,8 @@ function damageHints() {
     const pl = clsLvl('Paladin');
     L.push(`<b>Aura of Protection</b>: +${Math.max(1, chaMod())} to your saves, and to allies' within ${pl >= 18 ? '30 ft (Aura Expansion)' : '10 ft'}.`);
   }
+  if ((CH().attn || []).some(a => a.on && /holy avenger/i.test(a.n)))
+    L.push(`<b>Holy Avenger</b>: while it's drawn, you and allies within ${clsLvl('Paladin') >= 17 ? 30 : 10} ft have advantage on saves against spells and other magical effects.`);
   if (hasP('Gnomish Cunning') || hasP('Gnome Cunning')) L.push('<b>Gnomish Cunning</b>: advantage on INT, WIS and CHA saves.');
   if (hasP('Dark Augmentation')) L.push(`<b>Dark Augmentation</b>: +${Math.max(1, hemoMod())} to STR, DEX and CON saves.`);
   return L.length
@@ -7101,10 +7107,13 @@ function parseDDB(raw) {
       ranged
     };
     if (needs) {
-      Object.assign(wo, { aid: w.id, hitOn: wo.hit, dmgOn: wo.dmg, hitOff, dmgOff });
+      // the item's own extras (like a Holy Avenger's radiant damage) only work while attuned
+      Object.assign(wo, { aid: w.id, hitOn: wo.hit, dmgOn: wo.dmg, hitOff, dmgOff, condOn: wo.condDmg, noteOn: wo.note, noteOff: note });
       if (!w.isAttuned) {
         wo.hit = hitOff;
         wo.dmg = dmgOff;
+        wo.condDmg = undefined;
+        wo.note = note;
       }
     }
     return wo;
