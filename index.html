@@ -10852,11 +10852,12 @@ function hbWeapon(B, w) {
   ].filter(Boolean);
   const mst = MASTERY[n];
   if (mst && !D.o14) props.push(mst);
+  if (w.sil) props.unshift('Silvered');
   return {
     n: mg ? `${n}, +${mg}` : n,
     hit,
     dmg: dice + plus(db),
-    type,
+    type: w.sil ? type + ', silvered' : type,
     range: ranged
       ? `Ranged ${ranged}`
       : thrown
@@ -13046,7 +13047,7 @@ function hbWeapons() {
         : `<div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">
      <div class="filters" style="margin:0">${[0, 1, 2, 3].map(n => `<button class="${(+w.mg || 0) === n ? 'on' : ''}" data-act="hbWp" data-arg="${i}|mg|${n}">${n ? '+' + n : 'Normal'}</button>`).join('')}</div>
      <span class="sm mut" style="margin-left:auto">extra</span><input class="hbsmall" type="number" inputmode="numeric" placeholder="hit" value="${w.hit || ''}" onchange="hbWpSet(${i},'hit',this.value)"><input class="hbsmall" type="number" inputmode="numeric" placeholder="dmg" value="${w.dm || ''}" onchange="hbWpSet(${i},'dm',this.value)"></div>
-     <div class="row between" style="margin-top:8px"><button class="sm mut" data-act="hbWp" data-arg="${i}|np|1">${w.np ? '☐ Not proficient' : '☑ Proficient'}</button><button class="sm" style="color:var(--bad)" data-act="hbWpDel" data-arg="${i}">Remove</button></div>`
+     <div class="row between" style="margin-top:8px"><div class="row" style="gap:14px"><button class="sm mut" data-act="hbWp" data-arg="${i}|np|1">${w.np ? '☐ Not proficient' : '☑ Proficient'}</button><button class="sm ${w.sil ? '' : 'mut'}" style="${w.sil ? 'color:var(--acc)' : ''}" data-act="hbWp" data-arg="${i}|sil|1">${w.sil ? '☑ Silvered' : '☐ Silvered'}</button></div><button class="sm" style="color:var(--bad)" data-act="hbWpDel" data-arg="${i}">Remove</button></div>`
     }
     ${w.cust ? `<div style="text-align:right;margin-top:6px"><button class="sm" style="color:var(--bad)" data-act="hbWpDel" data-arg="${i}">Remove</button></div>` : ''}</div>`;
       })
@@ -13461,7 +13462,7 @@ Object.assign(ACT, {
   hbWp(a) {
     const [i, k, v] = a.split('|');
     const w = HB.wp[+i];
-    if (k === 'np') w.np = !w.np;
+    if (k === 'np' || k === 'sil') w[k] = !w[k];
     else w[k] = +v;
     render();
   },
