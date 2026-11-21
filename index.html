@@ -6166,7 +6166,7 @@ function menuSheet() {
   <p class="sm mut" style="margin-top:16px;text-align:center">Initiative · beta ${APP_VERSION} · ${APP_BUILT}<br>Your character is kept on this device.</p>`;
 }
 const APP_VERSION = '0.9',
-  APP_BUILT = '21 Nov 2026';
+  APP_BUILT = '22 Nov 2026';
 const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 // feedback leaves through the phone's own share menu (text, mail, group chat): nothing about anyone is stored in the app
 let FB = '';
@@ -7069,13 +7069,20 @@ function parseDDB(raw) {
           g =>
             `+${g.dice?.diceString || g.value} ${g.subType} ${g.restriction.charAt(0).toLowerCase() + g.restriction.slice(1)}`
         );
-    const hitOff = m + (isProf ? prof : 0) + atkBonus(ranged ? 'ranged' : 'melee'),
-      dmgOff = fmtDmg(df.damage?.diceString || '1', m);
+    // the player's own "Customize" numbers on this weapon in D&D Beyond: to hit bonus and damage bonus
+    const cvN = t => {
+      const v = (d.characterValues || []).find(v => v.typeId === t && String(v.valueId) === String(w.id));
+      return v && typeof v.value === 'number' ? v.value : 0;
+    };
+    const cHit = cvN(10),
+      cDmg = cvN(12);
+    const hitOff = m + (isProf ? prof : 0) + atkBonus(ranged ? 'ranged' : 'melee') + cHit,
+      dmgOff = fmtDmg(df.damage?.diceString || '1', m + cDmg);
     const wo = {
       ...W(
         cvName(w.id) || df.name,
-        m + (isProf ? prof : 0) + mag + atkBonus(ranged ? 'ranged' : 'melee'),
-        fmtDmg(df.damage?.diceString || '1', m + mag + same) + (other ? ' ' + other : ''),
+        m + (isProf ? prof : 0) + mag + atkBonus(ranged ? 'ranged' : 'melee') + cHit,
+        fmtDmg(df.damage?.diceString || '1', m + mag + same + cDmg) + (other ? ' ' + other : ''),
         (df.damageType || '').toLowerCase(),
         rng,
         props.includes('Light')
@@ -7086,6 +7093,8 @@ function parseDDB(raw) {
       extraDmg: same || undefined,
       noProf: !isProf || undefined,
       str: !ranged && m === STR,
+      dmod: m + mag + same + cDmg,
+      twin: /double-bladed/i.test((df.type || '') + ' ' + df.name) || /\b(opposite|other) blade\b/i.test(df.description || '') || undefined,
       full: paras(df.description),
       note: [...condD, note].filter(Boolean).join(' · '),
       condDmg: condD.length ? condD : undefined,
@@ -7103,6 +7112,18 @@ function parseDDB(raw) {
   const weapons = wp.map(mkW);
   const stowed = wpAll.filter(w => !w.equipped).map(w => ({ ...mkW(w), q: w.quantity || 1 }));
   const customFeats = [];
+  // double-bladed weapons: after the Attack action, a Bonus Action strike with the other blade (1d4)
+  weapons
+    .filter(w => w.twin)
+    .forEach(w =>
+      customFeats.push({
+        n: `${w.n}: other blade`,
+        t: 'B',
+        custom: true,
+        atk: { n: `${w.n} (other blade)`, hit: w.hit, dmg: fmtDmg('1d4', w.dmod), type: w.type },
+        d: `After you take the Attack action and attack with ${w.n}: one more melee attack with the other blade. +${w.hit} to hit · ${fmtDmg('1d4', w.dmod)} ${w.type}.`
+      })
+    );
   const SAVE = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
   (d.customActions || []).forEach(a => {
     const sm = a.statId ? M[a.statId - 1] : 0,
