@@ -2591,8 +2591,15 @@ function colSheet() {
       }"></i><span class="xs">${esc(n)}</span></button>`
   ).join('')}</div>`;
 }
+// while the builder is open, the colour follows the class you're picking there: the app has heard you
+function builderKeys() {
+  if (typeof HB === 'undefined' || !HB || !sheetFn || sheetFn.name !== 'hbSheet') return null;
+  const ks = (HB.cls || []).map(c => (c.n || '').toLowerCase().replace(/\s/g, '')).filter(k => CLS[k]);
+  return ks.length ? ks : null;
+}
 function theme() {
-  const c = myCol || (CLS[S.char.cls] || CLS.wizard).c;
+  const pk = !myCol && builderKeys();
+  const c = myCol || (pk ? CLS[pk[0]].c : (CLS[S.char.cls] || CLS.wizard).c);
   const n = parseInt(c.slice(1), 16);
   const rgb = `${n >> 16},${(n >> 8) & 255},${n & 255}`;
   const r = document.documentElement.style;
@@ -2600,7 +2607,7 @@ function theme() {
   r.setProperty('--ink', lum(c) > 0.42 ? '#15121a' : '#fff');
   r.setProperty('--soft', `rgba(${rgb},.15)`);
   r.setProperty('--line', `rgba(${rgb},.45)`);
-  const L = !myCol && S.char.clsKeys && S.char.clsKeys.length > 1 ? S.char.clsKeys : null,
+  const L = pk ? (pk.length > 1 ? pk.map(k => ({ k })) : null) : !myCol && S.char.clsKeys && S.char.clsKeys.length > 1 ? S.char.clsKeys : null,
     cols = L ? L.map(x => CLS[x.k].c) : [c];
   r.setProperty('--acc2', cols[1] || c);
   // a multiclass blends its class colours on the badge and the start button
@@ -4936,6 +4943,7 @@ function openSheet(title, fn, keep) {
   if (!keep) sheetStack = [];
   document.body.classList.add('sheet-open');
   sheetFn = fn;
+  if (fn.name === 'hbSheet') theme(); // the builder shows its class colour from the start
   $('#stitle').textContent = title;
   $('#sbody').innerHTML = fn();
   $('#sbody').scrollTop = 0;
@@ -4955,7 +4963,8 @@ function backSheet() {
   $('#sbody').scrollTop = p.y || 0;
 }
 function closeSheet() {
-  if (sheetFn && sheetFn.name === 'hbSheet') hbDraftSave();
+  const wasBuilder = sheetFn && sheetFn.name === 'hbSheet';
+  if (wasBuilder) hbDraftSave();
   sheetStack = [];
   GL = null;
   document.body.classList.remove('sheet-open');
@@ -4963,6 +4972,7 @@ function closeSheet() {
   openCast = null;
   $('#sheet').classList.remove('on');
   $('#scrim').classList.remove('on');
+  if (wasBuilder) theme(); // back to your character's colour
 }
 $('#scrim').onclick = closeSheet;
 
