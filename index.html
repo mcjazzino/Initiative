@@ -353,9 +353,11 @@ body.hasroll.sheet-open #toast.on{transform:translate(-50%,0)}
 #roll .rnotes .rex+div,#roll .rnotes div+.rex{border-top:0}
 #roll .rtotal{margin-top:10px;padding-top:10px;border-top:1px solid #2e2939;display:flex;justify-content:space-between;align-items:baseline;font-weight:700}
 #roll .rtotal b{font-size:24px;color:var(--acc);font-variant-numeric:tabular-nums}
-.dicetog{margin-top:10px}
 #rollbg{position:fixed;inset:0;z-index:44;background:rgba(8,7,12,.45);opacity:0;pointer-events:none;transition:.25s}
 body.hasroll #rollbg{opacity:1;pointer-events:auto}
+.dicebtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:10px;padding:15px;border:1px solid #2c2836;border-radius:16px;font-weight:800;font-size:16px;color:var(--mut);transition:.2s}
+.dicebtn svg{width:19px;height:19px}
+.dicebtn.on{color:var(--acc);border-color:var(--acc);background:var(--soft);box-shadow:0 0 18px var(--soft)}
 </style>
 </head>
 <body>
@@ -4487,7 +4489,7 @@ function homeView() {
     )
     .join('')}</div>
   </details>
-  <div class="toggle dicetog"><span class="cclbl">${I.dice} Digital dice <span class="sm mut">${DICE ? 'tap Roll on an attack' : 'off: roll your own'}</span></span><button class="sw ${DICE ? 'on' : ''}" data-act="diceTog" aria-label="Digital dice"></button></div>`;
+  <button class="dicebtn ${DICE ? 'on' : ''}" data-act="diceTog" aria-pressed="${DICE}">${I.dice}<span>Digital dice</span></button>`;
 }
 function bonusOpts() {
   return [
