@@ -6236,7 +6236,7 @@ function menuSheet() {
   <p class="sm mut" style="margin-top:16px;text-align:center">Initiative · beta ${APP_VERSION} · ${APP_BUILT}<br>Your character is kept on this device.</p>`;
 }
 const APP_VERSION = '0.9',
-  APP_BUILT = '22 Nov 2026';
+  APP_BUILT = '23 Nov 2026';
 const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 // feedback leaves through the phone's own share menu (text, mail, group chat): nothing about anyone is stored in the app
 let FB = '';
@@ -14359,13 +14359,23 @@ function shelfLine(ch) {
   const src = ch.source === 'ddb' ? 'D&D Beyond' : ch.build && ch.build.pregen ? 'Ready-made' : 'Built by hand';
   return `Level ${ch.level || '?'} ${ch.multi || (CLS[ch.cls] ? CLS[ch.cls].n : '')} · ${src}`;
 }
+// each Play button wears its own character's colour (a multiclass blends its classes)
+function playStyle(x) {
+  const ch = (x.S && x.S.char) || {},
+    c = myCol || (CLS[ch.cls] || CLS.wizard).c,
+    keys = !myCol && ch.clsKeys && ch.clsKeys.length > 1 ? ch.clsKeys.map(k => k.k).filter(k => CLS[k]) : [],
+    bg = keys.length > 1 ? `linear-gradient(135deg,${keys.map(k => CLS[k].c).join(',')})` : c;
+  const cols = keys.length > 1 ? keys.map(k => CLS[k].c) : [c],
+    avg = cols.reduce((t, x) => t + lum(x), 0) / cols.length; // dark or light text that reads on the whole blend
+  return `background:${bg};color:${avg > 0.42 || Math.max(...cols.map(lum)) > 0.6 ? '#15121a' : '#fff'};box-shadow:0 10px 30px -8px ${c}`;
+}
 function shelfCard() {
   const L = shelf().filter(x => x.id !== charId(CH()));
   if (!L.length) return '';
   return `<div class="xs mut" style="margin:14px 0 8px">Your characters</div>
   ${L.map(
     (x, i) => `<div class="card row between" style="margin-top:8px;gap:10px"><div style="min-width:0"><div style="font-weight:800">${esc(x.n)}</div><div class="sm mut">${esc(x.line)}</div></div>
-    <div class="row" style="gap:6px"><button class="btn pri" style="width:auto;padding:8px 14px" data-act="shelfLoad" data-arg="${esc(x.id)}">Play</button>
+    <div class="row" style="gap:6px"><button class="btn pri" style="width:auto;padding:8px 14px;${playStyle(x)}" data-act="shelfLoad" data-arg="${esc(x.id)}">Play</button>
     <button class="iconbtn" style="width:34px;height:34px" data-act="shelfDelAsk" data-arg="${esc(x.id)}" aria-label="Remove">✕</button></div></div>`
   ).join('')}`;
 }
