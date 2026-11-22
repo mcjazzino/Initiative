@@ -10966,6 +10966,22 @@ function hbMartialDie(B) {
   if (!k) return 0;
   return D.o14 ? (k >= 17 ? 10 : k >= 11 ? 8 : k >= 5 ? 6 : 4) : k >= 17 ? 12 : k >= 11 ? 10 : k >= 5 ? 8 : 6;
 }
+// damage written as dice: 1d6+4, 2d8 - 1, 1d4 + 1d6, or a flat 5
+// and within reason: up to 20 dice of a real size per part, flat numbers up to 50, at most 4 parts
+const DMG_RE = /^\s*(\d*d\d+|\d+)(\s*[+-]\s*(\d*d\d+|\d+))*\s*$/i;
+const DMG_OK = {
+  test(x) {
+    if (!DMG_RE.test(x || '')) return false;
+    const parts = x.replace(/\s/g, '').split(/[+-]/);
+    return (
+      parts.length <= 4 &&
+      parts.every(p => {
+        const m = p.match(/^(\d*)d(\d+)$/i);
+        return m ? (m[1] === '' || (+m[1] >= 1 && +m[1] <= 20)) && [2, 3, 4, 6, 8, 10, 12, 20, 100].includes(+m[2]) : +p <= 50;
+      })
+    );
+  }
+};
 function hbWeapon(B, w) {
   const D = hbDer(B),
     m = D.m,
@@ -10973,8 +10989,8 @@ function hbWeapon(B, w) {
   if (w.cust)
     return {
       n: w.n || 'Weapon',
-      hit: +w.hit || 0,
-      dmg: w.dmg || '1d6',
+      hit: Math.max(-5, Math.min(20, Math.round(+w.hit || 0))),
+      dmg: DMG_OK.test(w.dmg || '') ? w.dmg : '1d6',
       type: w.type || '',
       range: w.rng || 'Melee 5 ft',
       light: false,
@@ -13264,7 +13280,7 @@ function hbWeapons() {
   ${list || '<div class="empty">No weapons yet.</div>'}
   ${grp('S', 'Simple weapons')}${grp('M', 'Martial weapons')}
   <details class="rcat" style="margin-top:12px" ${HCW ? 'open' : ''}><summary>Something else (a natural weapon, a homebrew item)</summary>
-   <div style="margin-top:10px"><input class="field" id="hcwN" placeholder="Name, e.g. Claws"><div class="row" style="gap:8px;margin-top:8px"><input class="field" id="hcwH" type="number" inputmode="numeric" placeholder="To hit, e.g. 5"><input class="field" id="hcwD" placeholder="Damage, e.g. 1d6+3"></div>
+   <div style="margin-top:10px"><input class="field" id="hcwN" placeholder="Name, e.g. Claws"><div class="row" style="gap:8px;margin-top:8px"><input class="field" id="hcwH" type="number" inputmode="numeric" min="-5" max="20" placeholder="To hit, e.g. 5"><input class="field" id="hcwD" placeholder="Damage, e.g. 1d6+3"></div>
    <div class="row" style="gap:8px;margin-top:8px"><input class="field" id="hcwT" placeholder="Damage type"><select class="field" id="hcwR"><option>Melee 5 ft</option><option>Melee 10 ft</option><option>Ranged 80/320</option><option>Thrown 20/60</option></select></div>
    <button class="btn" style="margin-top:8px" data-act="hbCwAdd">Add this weapon</button></div></details>`;
 }
@@ -13717,11 +13733,15 @@ Object.assign(ACT, {
       toast('Give it a name');
       return;
     }
+    const hit = Math.round(+$('#hcwH').value || 0),
+      dmg = $('#hcwD').value.trim() || '1d4';
+    if (hit < -5 || hit > 20) return toast('To hit goes from −5 to +20');
+    if (!DMG_OK.test(dmg)) return toast('Write damage as dice, like 1d6+4<br><span class="mut">Up to 20 dice of a real size (d4 to d12, d20, d100), numbers up to 50</span>');
     HB.wp.push({
       cust: true,
       n,
-      hit: +$('#hcwH').value || 0,
-      dmg: $('#hcwD').value.trim() || '1d4',
+      hit,
+      dmg,
       type: $('#hcwT').value.trim(),
       rng: $('#hcwR').value
     });
