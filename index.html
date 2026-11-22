@@ -4352,7 +4352,7 @@ function vitals() {
     .join('');
   return `<div class="vit"><div class="row" style="flex-wrap:wrap;gap:7px">
    <button class="pill" data-act="hp" style="color:${hp.cur <= hp.max / 4 ? 'var(--bad)' : 'var(--txt)'}">${I.heart}<span>${hp.cur}${hp.temp ? `<span class="mut">+${hp.temp}</span>` : ''}<span class="mut">/${hp.max}</span></span></button>
-   <button class="pill" data-act="acEdit">${I.shield}${ch.ac + (S.blade ? intMod() : 0) + condFx().ac}${ch.acImported != null && ch.ac !== ch.acImported ? '<span class="mut" style="font-size:11px">✎</span>' : ''}</button>
+   <button class="pill" data-act="acEdit">${I.shield}${Math.max(1, ch.ac + (S.blade ? intMod() : 0) + condFx().ac)}${ch.acImported != null && ch.ac !== ch.acImported ? '<span class="mut" style="font-size:11px">✎</span>' : ''}</button>
    ${n ? `<button class="pill" data-act="conditions" style="border-color:rgba(242,184,75,.5);color:var(--warn)">${I.cond}${n} condition${n > 1 ? 's' : ''}</button>` : `<button class="pill" data-act="conditions" style="color:var(--mut)" aria-label="Conditions">${I.cond}</button>`}
    <button class="pill starpill ${ch.insp ? 'on' : ''}" data-act="inspOpen" aria-label="${is14('insp') ? 'Inspiration' : 'Heroic Inspiration'}: ${ch.insp ? 'you have it' : 'none'}">${ch.insp ? '★' : '☆'}</button>
    ${S.dying ? `<span class="pill" style="border-color:rgba(242,95,92,.5);color:var(--bad)">${S.dying.dead ? 'Dead' : 'Unconscious'}</span>` : ''}
@@ -6039,7 +6039,7 @@ function readySheet() {
 function acSheet() {
   // temporary effects that change the AC shown in combat (Bladesong, Haste, Shield of Faith, Slow…)
   const now = [...(S.blade ? [{ n: 'Bladesong (INT)', v: intMod() }] : []), ...condList().filter(c => c.ac).map(c => ({ n: c.n, v: c.ac }))],
-    live = CH().ac + now.reduce((t, x) => t + x.v, 0);
+    live = Math.max(1, CH().ac + now.reduce((t, x) => t + x.v, 0));
   const ch = CH(),
     imp = ch.acImported;
   const parts = ch.acParts || [],
@@ -9531,7 +9531,7 @@ const ACT = {
     p.down = !p.down;
     p.off = p.down || undefined;
     const d = p.down ? -p.v : p.v;
-    ch.ac += d;
+    ch.ac = Math.max(1, ch.ac + d);
     if (ch.acImported != null) ch.acImported += d;
     save();
     render();
@@ -12130,9 +12130,9 @@ function hbBuild(B) {
   const weapons = (B.wp || []).map(w => hbWeapon(B, w)).filter(Boolean);
   kept.filter(f => f.wpn).forEach(f => weapons.push({ ...f.wpn }));
   weapons.push(hbUnarmed(B));
-  const hpMax = +B.hp || hbHpSuggest(B),
+  const hpMax = +B.hp > 0 ? Math.min(999, Math.round(+B.hp)) : hbHpSuggest(B),
     acA = hbAC(B),
-    ac = +B.ac || acA.ac;
+    ac = acA.ac; // hbAC keeps a typed AC between 1 and 30
   const scAb = D.scAb,
     sc = scAb ? { dc: 8 + p + m[scAb], atk: p + m[scAb], ab: scAb } : null;
   const items = [];
@@ -12145,7 +12145,7 @@ function hbBuild(B) {
     sub: main.sub || '',
     level: D.L,
     ac,
-    speed: +B.speed || 30,
+    speed: B.speed === '' || B.speed == null || isNaN(+B.speed) ? 30 : Math.max(0, Math.min(120, Math.round(+B.speed))),
     attacks: hbAttacks(B),
     edition: E,
     rules: {},
@@ -13067,6 +13067,7 @@ const SPC_AC = [
 ];
 // AC as separate, checkable lines: armour (or the best way to go without), DEX, species, shield, named bonuses
 function hbAC(B) {
+  B = { ...B, ac: +B.ac >= 1 ? Math.min(30, Math.round(+B.ac)) : '' }; // a typed AC only counts from 1 to 30
   const D = hbDer(B),
     m = D.m,
     a = ARMOUR[+B.arm || 0],
@@ -13101,12 +13102,23 @@ function hbAC(B) {
   if (+B.acb) parts.push({ n: 'Other bonus', v: +B.acb });
   const sum = parts.reduce((t, p) => t + p.v, 0);
   // a number typed from the sheet wins; whatever the list can't explain is shown as its own line
-  if (+B.ac && +B.ac !== sum) parts.push({ n: +B.ac > sum ? 'Not entered in Gear yet' : 'Your sheet is lower by', v: +B.ac - sum, gap: true });
+  if (+B.ac && +B.ac !== sum) parts.push({ n: +B.ac > sum ? 'Not entered in Gear yet' : 'Lower on your sheet', v: +B.ac - sum, gap: true });
   return { ac: +B.ac || sum, calc: sum, parts };
 }
 function hbArmour(i) {
   HB.arm = +i;
   if (HB.cls.some(c => c.n === 'Barbarian')) HB.heavy = ARMOUR[+i][2] === 'H';
+  render();
+}
+// keep typed numbers sensible: an empty box means "work it out for me"
+function hbClamp(k, lo, hi, el) {
+  if (el.value === '') {
+    HB[k] = '';
+  } else {
+    const v = Math.max(lo, Math.min(hi, Math.round(+el.value || lo)));
+    if (String(v) !== el.value) toast(`${k === 'ac' ? 'AC' : k === 'hp' ? 'Max HP' : 'Speed'} goes from ${lo} to ${hi}`);
+    HB[k] = String(v);
+  }
   render();
 }
 function hbHead() {
@@ -13191,9 +13203,9 @@ function hbScores() {
     <i class="hbgrip">▼</i><div class="sm hbmod" style="color:var(--acc);font-weight:800">${sgn(D.m[a])}</div></div>`
   ).join('')}</div>
   <div class="hbrow3">
-   <label class="card"><div class="xs mut">Max HP</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${sug}" value="${esc(B.hp)}" oninput="hbSet('hp',this.value)"><div class="xs mut">${B.hp ? '' : 'average: ' + sug}</div></label>
-   <label class="card"><div class="xs mut">AC</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${hbAC(B).ac}" value="${esc(B.ac)}" oninput="hbSet('ac',this.value)" onchange="render()"><div class="xs mut">${B.ac ? 'from your sheet' : 'set in Gear'}</div></label>
-   <label class="card"><div class="xs mut">Speed</div><input class="hbnum" type="number" inputmode="numeric" value="${esc(B.speed)}" oninput="hbSet('speed',this.value)"><div class="xs mut">feet</div></label>
+   <label class="card"><div class="xs mut">Max HP</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${sug}" value="${esc(B.hp)}" min="1" max="999" oninput="hbSet('hp',this.value)" onchange="hbClamp('hp',1,999,this)"><div class="xs mut">${B.hp ? '' : 'average: ' + sug}</div></label>
+   <label class="card"><div class="xs mut">AC</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${hbAC(B).ac}" value="${esc(B.ac)}" min="1" max="30" oninput="hbSet('ac',this.value)" onchange="hbClamp('ac',1,30,this)"><div class="xs mut">${B.ac ? 'from your sheet' : 'set in Gear'}</div></label>
+   <label class="card"><div class="xs mut">Speed</div><input class="hbnum" type="number" inputmode="numeric" value="${esc(B.speed)}" min="0" max="120" step="5" oninput="hbSet('speed',this.value)" onchange="hbClamp('speed',0,120,this)"><div class="xs mut">feet</div></label>
   </div>
   <div class="xs sec">Saving throw proficiencies</div>
   <div class="filters" style="flex-wrap:wrap">${ABN.map((a, i) => `<button class="${sv.includes(i) ? 'on' : ''}" data-act="hbSave" data-arg="${i}">${a} ${sgn(D.m[a] + (sv.includes(i) ? D.prof : 0))}</button>`).join('')}</div>
