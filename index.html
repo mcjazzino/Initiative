@@ -5934,14 +5934,18 @@ function checkNeeds() {
   const bhGap =
     ch.bh &&
     (!ch.bh.curses.length || (!ch.bh.rites.length && ch.bh.level >= 2) || (isProfane() && !ch.bh.patron));
+  // attunable items that are switched off while there's room: often a box nobody ticked on D&D Beyond
+  const attn = ch.attnChecked || attOn().length >= ATT_MAX ? [] : (ch.attn || []).filter(a => !a.on);
   return {
     un,
     mc,
     bhGap,
+    attn,
     edition: !pendingGuess && pendingGuess !== undefined && ch.source === 'ddb' && !ch.editionSet,
-    any: un.length || mc.length || bhGap || (!pendingGuess && !ch.editionSet)
+    any: un.length || mc.length || bhGap || attn.length || (!pendingGuess && !ch.editionSet)
   };
 }
+let ICA = false;
 function importCheckSheet() {
   const ch = CH(),
     n = checkNeeds();
@@ -5975,6 +5979,13 @@ function importCheckSheet() {
     parts.push(
       `<div class="xs sec">Blood Hunter</div><div class="sm mut" style="margin-bottom:8px">The app couldn't find all your curses, rites or patron.</div><button class="btn sm" style="width:100%" data-act="bhSetup">Fill in Blood Hunter setup</button>`
     );
+  if (n.attn.length) ICA = true; // keep the list up while they switch items on, until Done
+  if (ICA && !ch.attnChecked && (ch.attn || []).length)
+    parts.push(`<div class="xs sec">Attunement · ${attOn().length}/${ATT_MAX}</div>
+    <div class="sm mut" style="margin-bottom:8px;line-height:1.45">On your sheet you're not attuned to ${n.attn.length > 1 ? 'these' : 'this'}, so ${n.attn.length > 1 ? 'their' : 'its'} magic is off. Attuned after all? Switch on what you're attuned to.</div>
+    ${(CH().attn || [])
+      .map(a => `<div class="toggle"><span>${esc(a.n)}</span><button class="sw ${a.on ? 'on' : ''}" data-act="attToggle" data-arg="${a.id}" aria-label="Attuned to ${esc(a.n)}"></button></div>`)
+      .join('')}`);
   if (n.mc.length)
     parts.push(
       `<div class="xs sec">Multiclass</div><div class="sm" style="color:var(--warn)">${n.mc.map(x => `${esc(x.c.n)} needs ${esc(x.txt)} (you have ${esc(x.miss.join(', '))}) — check with your DM.`).join('<br>')}</div>`
@@ -8226,6 +8237,8 @@ const ACT = {
   },
   icDone() {
     CH().editionSet = true;
+    CH().attnChecked = true;
+    ICA = false;
     unconfirmed().forEach(sp => {
       sp.unconfirmed = false;
       sp.d = sp.d.replace(/ The app filled this in.*$/, ' Confirmed by you.');
@@ -9973,6 +9986,8 @@ const ACT = {
           if (i >= 0) ch.spells.splice(i, 1);
         });
         ch.removedAuto = old.removedAuto || [];
+        // don't ask about attunement again, unless the sheet just switched off something you had on
+        ch.attnChecked = !!old.attnChecked && !(old.attn || []).some(a => a.on && !((ch.attn || []).find(b => b.id === a.id) || {}).on);
         Object.assign(ch, {
           edition: old.edition,
           editionSet: true,
