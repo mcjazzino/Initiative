@@ -326,6 +326,18 @@ body.multi .startbtn{background:var(--mcsoft);text-shadow:0 1px 3px rgba(0,0,0,.
 .starpill{font-size:18px;line-height:1;padding:6px 12px;color:var(--mut)}.starpill.on{color:var(--acc);border-color:var(--line);background:var(--soft);text-shadow:0 0 10px var(--acc)}
 .bul{list-style:none;padding:0;margin:0}.bul li{position:relative;padding:0 0 10px 18px;font-size:14px;line-height:1.5;color:var(--mut)}.bul li:last-child{padding-bottom:0}
 .bul li:before{content:'';position:absolute;left:2px;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--acc)}.bul li b{color:var(--txt)}
+#roll{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 10px);transform:translate(-50%,-20px);opacity:0;pointer-events:none;z-index:45;width:min(92vw,400px);background:#221e2b;border:1px solid var(--line);border-radius:18px;padding:14px 16px 12px;box-shadow:0 14px 40px rgba(0,0,0,.55);transition:.25s}
+#roll.on{transform:translate(-50%,0);opacity:1;pointer-events:auto}
+#roll .rx{position:absolute;right:8px;top:8px;width:34px;height:34px;border-radius:10px;color:var(--mut);font-size:15px}
+#roll .rn{font-weight:800;font-size:16px;padding-right:36px;line-height:1.3}
+#roll .rstats{display:flex;gap:10px;margin-top:10px}
+#roll .rstats>div{flex:1;background:var(--soft);border-radius:12px;padding:8px 10px;text-align:center}
+#roll .rstats b{display:block;font-weight:800;font-variant-numeric:tabular-nums;font-size:24px;color:var(--acc);line-height:1.15;word-break:break-word}
+#roll .rstats span{display:block;font-size:12.5px;color:var(--mut);font-weight:600;margin-top:2px}
+#roll .rnotes{margin-top:10px;font-size:14px;font-weight:600;line-height:1.45}
+#roll .rnotes>div{padding:3px 0}#roll .rnotes>div+div{border-top:1px solid #2e2939}
+body.hasroll.sheet-open #toast{top:auto;bottom:calc(env(safe-area-inset-bottom) + 24px);transform:translate(-50%,40px)}
+body.hasroll.sheet-open #toast.on{transform:translate(-50%,0)}
 </style>
 </head>
 <body>
@@ -333,6 +345,7 @@ body.multi .startbtn{background:var(--mcsoft);text-shadow:0 1px 3px rgba(0,0,0,.
 <div id="scrim"></div>
 <div id="sheet"><div class="grab"></div><header><h2 id="stitle"></h2><button class="iconbtn" data-act="sheetX" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div id="sbody"></div></div>
 <div id="toast"></div>
+<div id="roll" role="status" aria-live="polite"></div>
 
 <script>
 /* ---------- icons ---------- */
@@ -2621,7 +2634,33 @@ function theme() {
   document.body.classList.toggle('multi', !!L);
 }
 let tt;
+// an attack's numbers stay on screen until you close them, attack again, or end your turn
+function rollCard(m) {
+  const x = m.match(/^<b>(.*?)<\/b>(?: \(([^)]*)\))?: \+?(-?\d+) to hit · (.*?)(<br>[\s\S]*)?$/);
+  if (!x) return false;
+  const hit = +x[3],
+    dt = x[4].trim(),
+    d = dt.match(/^([\dd+\-−\s]+?)(?:\s+([^\d].*))?$/i),
+    dice = d ? d[1].trim() : dt,
+    type = d && d[2] ? d[2] : '',
+    notes = (x[5] || '').split('<br>').filter(l => l.replace(/<[^>]+>/g, '').trim());
+  const r = $('#roll');
+  r.innerHTML = `<button class="rx" onclick="rollClose()" aria-label="Close">✕</button>
+  <div class="rn">${x[1]}${x[2] ? ` <span class="mut">(${x[2]})</span>` : ''}</div>
+  <div class="rstats"><div><b>${hit < 0 ? '−' + -hit : '+' + hit}</b><span>to hit</span></div><div><b>${dice}</b><span>${type || 'damage'}</span></div></div>
+  ${notes.length ? `<div class="rnotes">${notes.map(l => `<div>${l}</div>`).join('')}</div>` : ''}`;
+  r.classList.remove('on');
+  void r.offsetWidth; // replay the entrance when a second attack replaces the first
+  r.classList.add('on');
+  document.body.classList.add('hasroll');
+  return true;
+}
+function rollClose() {
+  $('#roll').classList.remove('on');
+  document.body.classList.remove('hasroll');
+}
 function toast(m) {
+  if (rollCard(m)) return;
   const t = $('#toast');
   t.innerHTML = m;
   t.classList.add('on');
@@ -9016,6 +9055,7 @@ const ACT = {
       );
   },
   endTurnGo() {
+    rollClose();
     closeSheet();
     ACT.endTurnNow();
   },
@@ -14381,6 +14421,19 @@ let SHELF_DEL = '';
 // changed by hand (+1/−1) is kept.
 function acMigrate(ch) {
   if (!ch) return;
+  // built before the builder had limits: rebuild the weapons from the saved build, and pull AC and speed into range
+  try {
+    if (ch.source === 'hand' && ch.build) {
+      const wild = (ch.weapons || []).some(w => Math.abs(+w.hit || 0) > 40 || /\d{3,}/.test(w.dmg || ''));
+      if (wild) {
+        const nb = hbBuild(JSON.parse(JSON.stringify(ch.build)));
+        ch.weapons = nb.weapons;
+      }
+      if (ch.ac > 30 || ch.ac < 1) ch.ac = Math.max(1, Math.min(30, ch.ac));
+      if (ch.acImported != null && (ch.acImported > 30 || ch.acImported < 1)) ch.acImported = Math.max(1, Math.min(30, ch.acImported));
+      if (!(ch.speed >= 0 && ch.speed <= 120)) ch.speed = Math.max(0, Math.min(120, +ch.speed || 30));
+    }
+  } catch (e) {}
   try {
     if (ch.source === 'hand' && ch.build) {
       const B = ch.build;
@@ -14568,6 +14621,7 @@ Object.assign(ACT, {
     closeSheet();
   },
   endCombatGo() {
+    rollClose();
     SHEETDONE = {};
     ACT.endCombat();
     S.lastDiff = combatDiff();
