@@ -13128,6 +13128,13 @@ function hbArmour(i) {
   render();
 }
 // keep typed numbers sensible: an empty box means "work it out for me"
+// while typing: never let a box run past its top (the bottom is checked when you leave, so "-" can be typed)
+function hbCap(el) {
+  if (el.value !== '' && +el.value > +el.max) {
+    el.value = el.max;
+    toast(`Goes up to ${el.max}`);
+  }
+}
 function hbClamp(k, lo, hi, el) {
   if (el.value === '') {
     HB[k] = '';
@@ -13220,9 +13227,9 @@ function hbScores() {
     <i class="hbgrip">▼</i><div class="sm hbmod" style="color:var(--acc);font-weight:800">${sgn(D.m[a])}</div></div>`
   ).join('')}</div>
   <div class="hbrow3">
-   <label class="card"><div class="xs mut">Max HP</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${sug}" value="${esc(B.hp)}" min="1" max="999" oninput="hbSet('hp',this.value)" onchange="hbClamp('hp',1,999,this)"><div class="xs mut">${B.hp ? '' : 'average: ' + sug}</div></label>
-   <label class="card"><div class="xs mut">AC</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${hbAC(B).ac}" value="${esc(B.ac)}" min="1" max="30" oninput="hbSet('ac',this.value)" onchange="hbClamp('ac',1,30,this)"><div class="xs mut">${B.ac ? 'from your sheet' : 'set in Gear'}</div></label>
-   <label class="card"><div class="xs mut">Speed</div><input class="hbnum" type="number" inputmode="numeric" value="${esc(B.speed)}" min="0" max="120" step="5" oninput="hbSet('speed',this.value)" onchange="hbClamp('speed',0,120,this)"><div class="xs mut">feet</div></label>
+   <label class="card"><div class="xs mut">Max HP</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${sug}" value="${esc(B.hp)}" min="1" max="999" oninput="hbCap(this);hbSet('hp',this.value)" onchange="hbClamp('hp',1,999,this)"><div class="xs mut">${B.hp ? '' : 'average: ' + sug}</div></label>
+   <label class="card"><div class="xs mut">AC</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${hbAC(B).ac}" value="${esc(B.ac)}" min="1" max="30" oninput="hbCap(this);hbSet('ac',this.value)" onchange="hbClamp('ac',1,30,this)"><div class="xs mut">${B.ac ? 'from your sheet' : 'set in Gear'}</div></label>
+   <label class="card"><div class="xs mut">Speed</div><input class="hbnum" type="number" inputmode="numeric" value="${esc(B.speed)}" min="0" max="120" step="5" oninput="hbCap(this);hbSet('speed',this.value)" onchange="hbClamp('speed',0,120,this)"><div class="xs mut">feet</div></label>
   </div>
   <div class="xs sec">Saving throw proficiencies</div>
   <div class="filters" style="flex-wrap:wrap">${ABN.map((a, i) => `<button class="${sv.includes(i) ? 'on' : ''}" data-act="hbSave" data-arg="${i}">${a} ${sgn(D.m[a] + (sv.includes(i) ? D.prof : 0))}</button>`).join('')}</div>
@@ -13267,7 +13274,7 @@ function hbWeapons() {
         ? ''
         : `<div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">
      <div class="filters" style="margin:0">${[0, 1, 2, 3].map(n => `<button class="${(+w.mg || 0) === n ? 'on' : ''}" data-act="hbWp" data-arg="${i}|mg|${n}">${n ? '+' + n : 'Normal'}</button>`).join('')}</div>
-     <span class="sm mut" style="margin-left:auto">extra</span><input class="hbsmall" type="number" inputmode="numeric" placeholder="hit" min="-10" max="10" value="${w.hit || ''}" onchange="hbWpSet(${i},'hit',this.value)"><input class="hbsmall" type="number" inputmode="numeric" placeholder="dmg" min="-10" max="10" value="${w.dm || ''}" onchange="hbWpSet(${i},'dm',this.value)"></div>
+     <span class="sm mut" style="margin-left:auto">extra</span><input class="hbsmall" type="number" inputmode="numeric" placeholder="hit" min="-10" max="10" oninput="hbCap(this)" value="${w.hit || ''}" onchange="hbWpSet(${i},'hit',this.value)"><input class="hbsmall" type="number" inputmode="numeric" placeholder="dmg" min="-10" max="10" oninput="hbCap(this)" value="${w.dm || ''}" onchange="hbWpSet(${i},'dm',this.value)"></div>
      <div class="row between" style="margin-top:8px"><div class="filters wtog" style="margin:0"><button class="${w.np ? '' : 'on'}" data-act="hbWp" data-arg="${i}|np|1">${w.np ? '' : '✓ '}Proficient</button><button class="${w.sil ? 'on' : ''}" data-act="hbWp" data-arg="${i}|sil|1">${w.sil ? '✓ ' : ''}Silvered</button></div><button class="sm" style="color:var(--bad)" data-act="hbWpDel" data-arg="${i}">Remove</button></div>`
     }
     ${w.cust ? `<div style="text-align:right;margin-top:6px"><button class="sm" style="color:var(--bad)" data-act="hbWpDel" data-arg="${i}">Remove</button></div>` : ''}</div>`;
@@ -13281,7 +13288,7 @@ function hbWeapons() {
   ${list || '<div class="empty">No weapons yet.</div>'}
   ${grp('S', 'Simple weapons')}${grp('M', 'Martial weapons')}
   <details class="rcat" style="margin-top:12px" ${HCW ? 'open' : ''}><summary>Something else (a natural weapon, a homebrew item)</summary>
-   <div style="margin-top:10px"><input class="field" id="hcwN" placeholder="Name, e.g. Claws"><div class="row" style="gap:8px;margin-top:8px"><input class="field" id="hcwH" type="number" inputmode="numeric" min="-5" max="20" placeholder="To hit, e.g. 5"><input class="field" id="hcwD" placeholder="Damage, e.g. 1d6+3"></div>
+   <div style="margin-top:10px"><input class="field" id="hcwN" placeholder="Name, e.g. Claws"><div class="row" style="gap:8px;margin-top:8px"><input class="field" id="hcwH" type="number" inputmode="numeric" min="-5" max="20" oninput="hbCap(this)" placeholder="To hit, e.g. 5"><input class="field" id="hcwD" placeholder="Damage, e.g. 1d6+3"></div>
    <div class="row" style="gap:8px;margin-top:8px"><input class="field" id="hcwT" placeholder="Damage type"><select class="field" id="hcwR"><option>Melee 5 ft</option><option>Melee 10 ft</option><option>Ranged 80/320</option><option>Thrown 20/60</option></select></div>
    <button class="btn" style="margin-top:8px" data-act="hbCwAdd">Add this weapon</button></div></details>`;
 }
