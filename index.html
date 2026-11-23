@@ -4045,7 +4045,7 @@ function condSheet() {
     if (c.vs === 'adv') p.push(`Attacks against you have advantage${c.vsWhy ? ' ' + c.vsWhy : ''}.`);
     if (c.vs === 'dis') p.push('Attacks against you have disadvantage.');
     if (c.crit) p.push('Hits from within 5 ft are critical hits.');
-    if (c.ac) p.push(`${c.ac > 0 ? '+' : ''}${c.ac} AC.`);
+    if (c.ac && !/\bAC\b/.test(c.d || '')) p.push(`${c.ac > 0 ? '+' : ''}${c.ac} AC.`);
     if (c.sv) p.push(c.sv);
     if (c.ck) p.push(c.ck);
     if (o14 && c.d14) p.push(c.d14);
@@ -11316,13 +11316,17 @@ function hfGen(B) {
       const s = sub('Cleric');
       const dsT = /\bLight\b|Knowledge|Arcana|Grave|Peace/i.test(s)
         ? ''
-        : /Life|Order/i.test(s)
+        : /Order/i.test(s)
+          ? 'psychic'
+          : /Life/i.test(s)
           ? 'radiant'
           : /Nature/i.test(s)
             ? 'cold, fire or lightning'
             : /Tempest/i.test(s)
               ? 'thunder'
-              : /Trickery|Death/i.test(s)
+              : /Death/i.test(s)
+                ? 'necrotic'
+                : /Trickery/i.test(s)
                 ? 'poison'
                 : /Twilight/i.test(s)
                   ? 'radiant'
@@ -11358,7 +11362,7 @@ function hfGen(B) {
           'cle.bpotent',
           'Blessed Strikes: Potent Spellcasting',
           'F',
-          `Add +${m.WIS} to the damage of your cleric cantrips.`,
+          `Add +${m.WIS} to the damage of your cleric cantrips.${k >= 14 ? ` When a cantrip deals damage: you or a creature within 60 ft gain ${2 * Math.max(1, m.WIS)} temporary HP.` : ''}`,
           { passive: true },
           true
         );
@@ -11384,8 +11388,8 @@ function hfGen(B) {
           'cle.war',
           'Channel Divinity: Guided Strike',
           'F',
-          'When you make an attack roll: +10 to the roll.',
-          { res: 'cd' }
+          'When you or a creature within 30 ft misses with an attack roll: +10 to the roll, possibly turning it into a hit (a Reaction for someone else).',
+          { res: 'cd', d14: 'When you make an attack roll: +10 to the roll.' }
         );
       if (/Tempest/i.test(s) && k >= (o ? 2 : 3))
         add(
@@ -12345,7 +12349,8 @@ function hbBuild(B) {
     conMod: m.CON,
     saves,
     passives: kept.filter(f => f.x.passive).map(f => f.n.replace(/^Elemental Fury: /, '')),
-    traits: kept.filter(f => f.x.trait).map(f => ({ n: f.n, d: f.d })),
+    // species traits, then always-on class features with what they do (the names above drive the in-play hints)
+    traits: [...kept.filter(f => f.x.trait), ...kept.filter(f => f.x.passive && !f.x.trait && f.d)].map(f => ({ n: f.n, d: f.d })),
     insp: false,
     landStride: false,
     editionSet: true,
