@@ -12174,6 +12174,7 @@ function hbBuild(B) {
     main = classes[0];
   const on = f => (f.opt ? (B.on || []).includes(f.id) : !(B.off || []).includes(f.id));
   const kept = G.F.filter(on),
+    IMM = [...(G.F.filter(on).some(f => f.id === 'sub.land10') && E === '2014' ? ['poison'] : []), ...(G.F.filter(on).some(f => f.id === 'sub.forge17') ? ['fire'] : [])],
     druSub = D.sub('Druid'),
     sk = spcKey(B.species),
     so = spcOpt(B);
@@ -12248,6 +12249,9 @@ function hbBuild(B) {
       return;
     }
     if (ab) x.d = x.d.replace(/\+ ?(CHA|WIS|INT)\b/g, a => a.replace(/CHA|WIS|INT/, ab));
+    // Life Domain: the healing bonus right where you cast
+    if (kept.some(f => f.id === 'sub.life1') && (x.lvl || 0) >= 1 && /regains?\b[^.]*\bhit points|regains?\b[^.]*\bHP|\bheal/i.test(x.d) && !/Disciple of Life/.test(x.d))
+      x.d += ` Disciple of Life: +${2 + x.lvl} HP (2 + slot level).${kept.some(f => f.id === 'sub.life17') ? ' Supreme Healing: dice count as their maximum.' : ''}`;
     // a multiclass caster: a spell from a class with a different casting ability gets that class's numbers
     if (!x.spc && ab && ab !== D.scAb && x.atk == null) (x.atk = p + m[ab]), (x.dc = 8 + p + m[ab]);
   });
@@ -12317,10 +12321,12 @@ function hbBuild(B) {
         ...(B.resist || []),
         ...(kept.some(f => f.id === 'gor.venom') ? ['poison'] : []),
         ...(kept.some(f => f.id === 'sub.land10') && E !== '2014' && LAND_WARD[B.land] ? [LAND_WARD[B.land]] : []),
+        ...(kept.some(f => f.id === 'sub.war17') && E !== '2014' ? ['bludgeoning', 'piercing', 'slashing'] : []),
+        ...(kept.some(f => f.id === 'sub.forge6') ? ['fire'] : []),
         ...hbSpcResist(B)
       ])
-    ],
-    immune: kept.some(f => f.id === 'sub.land10') && E === '2014' ? ['poison'] : [],
+    ].filter(x => !IMM.includes(x)),
+    immune: IMM,
     species: (B.species || '').trim(),
     barbLevel: D.lv('Barbarian'),
     heavy: !!B.heavy,
@@ -12521,6 +12527,8 @@ function hfMore(B, D, F, add, res) {
     }
   }
 
+  if (!o && lv('Cleric') && B.divine)
+    pas('cle.divine1', `Divine Order: ${B.divine}`, B.divine === 'Protector' ? 'Proficiency with martial weapons and training with heavy armour.' : `One extra cleric cantrip, and ${sgn(Math.max(1, m.WIS))} to Intelligence (Arcana or Religion) checks.`);
   // 2024 Primal Order, chosen on the Who step (it decides weapon and armour training)
   if (!o && lv('Druid') && B.primal)
     pas('dru.primal1', `Primal Order: ${B.primal}`, B.primal === 'Warden' ? 'Proficiency with martial weapons and training with medium armour.' : `One extra druid cantrip, and ${sgn(Math.max(1, m.WIS))} to Intelligence (Arcana or Nature) checks.`);
@@ -12826,6 +12834,82 @@ function hfSubs(B, D, F, add, res) {
   }
 
   /* ---------- Druid ---------- */
+  /* ---------- Cleric domains (Channel Divinity options live with the class) ---------- */
+  if ((k = lv('Cleric')) && k >= (o ? 1 : 3)) {
+    const w = mx(m.WIS);
+    if (is('Cleric', /Life/i)) {
+      pas('sub.life1', 'Disciple of Life', 'Your healing spells of level 1+ restore an extra 2 + the slot level HP.');
+      if (k >= 6) pas('sub.life6', 'Blessed Healer', 'When you heal another creature with a spell of level 1+, you regain 2 + the slot level HP.');
+      if (k >= 17) pas('sub.life17', 'Supreme Healing', 'When you roll dice to heal with a spell, use the highest number on each die instead.');
+    }
+    if (is('Cleric', /Light/i)) {
+      res('flare', 'Warding Flare', w, o || k < 6 ? 'long' : 'short');
+      add('sub.light1', 'Warding Flare', 'R', o && k < 6 ? 'When a creature within 30 ft that you can see attacks you: it has disadvantage on that attack roll.' : `When a creature within 30 ft that you can see attacks you${k >= 6 || !o ? ' or another creature' : ''}: it has disadvantage on that attack roll.${!o && k >= 6 ? ` The target also gains 2d6+${m.WIS} temporary HP.` : ''}`, { res: 'flare' });
+      if (k >= 17) {
+        if (!o) res('corona', 'Corona of Light', w, 'long');
+        add('sub.light17', 'Corona of Light', 'A', 'For 1 minute you shed bright light in a 60-ft radius. Enemies in it have disadvantage on saves against Radiance of the Dawn and spells that deal fire or radiant damage.', o ? {} : { res: 'corona' });
+      }
+    }
+    if (is('Cleric', /War/i)) {
+      res('warpriest', 'War Priest', w, o ? 'long' : 'short');
+      add('sub.war1', 'War Priest', 'B', o ? 'When you take the Attack action: one extra weapon attack.' : 'One attack with a weapon or an Unarmed Strike.', { res: 'warpriest' });
+      if (k >= 6) add('sub.war6', "War God's Blessing", o ? 'R' : 'B', o ? 'Channel Divinity: when a creature within 30 ft makes an attack roll, give it +10.' : 'Channel Divinity: cast Shield of Faith or Spiritual Weapon without a slot. It lasts 1 minute and needs no concentration.', { res: 'cd' });
+      if (k >= 17) pas('sub.war17', 'Avatar of Battle', `Resistance to bludgeoning, piercing and slashing damage${o ? ' from nonmagical attacks' : ''}.`);
+    }
+    if (is('Cleric', /Trickery/i)) {
+      add('sub.trick1', 'Blessing of the Trickster', 'A', `${o ? 'A willing creature you touch' : 'You or a willing creature within 30 ft'} has advantage on Stealth checks for 1 hour.`);
+      if (k >= 6 && o) add('sub.trick6', 'Channel Divinity: Cloak of Shadows', 'A', 'You become invisible until the end of your next turn (ends early if you attack or cast a spell).', { res: 'cd' });
+      if (k >= 6 && !o) pas('sub.trick6', "Trickster's Transposition", 'When you create or move your Invoke Duplicity illusion, you can teleport to swap places with it.');
+      if (k >= 17) pas('sub.trick17', 'Improved Duplicity', o ? 'Invoke Duplicity makes up to four duplicates, and you can move any number of them.' : 'You and your allies have advantage on attacks against a creature within 5 ft of the illusion. When it ends, you or a creature within 5 ft of it regains HP equal to your cleric level.');
+    }
+    if (is('Cleric', /Nature/i)) {
+      if (k >= 2) add('sub.nat2', 'Channel Divinity: Charm Animals and Plants', 'A', `Beasts and plant creatures within 30 ft: WIS save DC ${dc('WIS')} or Charmed by you for 1 minute (ends if it takes damage).`, { res: 'cd' });
+      if (k >= 6) add('sub.nat6', 'Dampen Elements', 'R', 'When you or a creature within 30 ft takes acid, cold, fire, lightning or thunder damage: grant resistance to that instance.');
+      if (k >= 17) pas('sub.nat17', 'Master of Nature', 'As a Bonus Action, command creatures you charmed with Charm Animals and Plants.');
+    }
+    if (is('Cleric', /Tempest/i)) {
+      res('wrath', 'Wrath of the Storm', w, 'long');
+      add('sub.temp1', 'Wrath of the Storm', 'R', `When a creature within 5 ft that you can see hits you: DEX save DC ${dc('WIS')} or 2d8 lightning or thunder damage (half on a success).`, { res: 'wrath' });
+      if (k >= 6) pas('sub.temp6', 'Thunderbolt Strike', 'When you deal lightning damage to a Large or smaller creature, you can push it up to 10 ft away.');
+      if (k >= 17) pas('sub.temp17', 'Stormborn', 'Flying speed equal to your walking speed when not underground or indoors.');
+    }
+    if (is('Cleric', /Forge/i)) {
+      pas('sub.forge1', 'Blessing of the Forge', 'After a long rest: one weapon gets +1 to attack and damage, or one suit of armour or shield +1 AC, until your next long rest.');
+      if (k >= 6) pas('sub.forge6', 'Soul of the Forge', 'Resistance to fire damage, and +1 AC while wearing heavy armour.');
+      if (k >= 17) pas('sub.forge17', 'Saint of Forge and Fire', 'Immune to fire damage. In heavy armour: resistance to bludgeoning, piercing and slashing damage from nonmagical attacks.');
+    }
+    if (is('Cleric', /Grave/i)) {
+      pas('sub.grave1', 'Circle of Mortality', 'Healing a creature at 0 HP: use the highest number on each die. Spare the Dying is a Bonus Action with 30 ft range.');
+      if (k >= 6) {
+        res('sentinel', "Sentinel at Death's Door", w, 'long');
+        add('sub.grave6', "Sentinel at Death's Door", 'R', 'When you or a creature within 30 ft that you can see suffers a critical hit: it becomes a normal hit.', { res: 'sentinel' });
+      }
+      if (k >= 17) add('sub.grave17', 'Keeper of Souls', 'F', 'Once per turn, when an enemy you can see dies within 60 ft: you or a creature within 60 ft regains HP equal to its number of Hit Dice.', { once: 'keeper' });
+    }
+    if (is('Cleric', /Twilight/i)) {
+      add('sub.twi1', 'Vigilant Blessing', 'A', 'You or a creature you touch has advantage on the next initiative roll.');
+      if (k >= 6) {
+        res('steps', 'Steps of Night', p, 'long');
+        add('sub.twi6', 'Steps of Night', 'B', 'In dim light or darkness: a flying speed equal to your walking speed for 1 minute.', { res: 'steps' });
+      }
+      if (k >= 17) pas('sub.twi17', 'Twilight Shroud', 'You and your allies have half cover (+2 AC) while in your Twilight Sanctuary.');
+    }
+    if (is('Cleric', /Peace/i)) {
+      res('bond', 'Emboldening Bond', p, 'long');
+      add('sub.peace1', 'Emboldening Bond', 'A', `Bond up to ${p} willing creatures within 30 ft (you can include yourself) for 10 minutes. Once per turn, a bonded creature within ${k >= 17 ? 60 : 30} ft of another can add 1d4 to an attack roll, ability check or save.`, { res: 'bond' });
+      if (k >= 2) add('sub.peace2', 'Channel Divinity: Balm of Peace', 'A', `Move up to your speed without provoking opportunity attacks. Each creature of your choice you pass within 5 ft of regains 2d6+${m.WIS} HP.`, { res: 'cd' });
+      if (k >= 6) add('sub.peace6', 'Protective Bond', 'R', `When a bonded creature is about to take damage, another bonded creature within ${k >= 17 ? 60 : 30} ft can teleport next to it and take the damage instead${k >= 17 ? ', with resistance to it' : ''}.`);
+    }
+    if (is('Cleric', /Order/i)) {
+      add('sub.order1', 'Voice of Authority', 'F', 'When you cast a spell of level 1+ that targets an ally: that ally can use its Reaction for one weapon attack against a creature you choose.');
+      if (k >= 2) add('sub.order2', "Channel Divinity: Order's Demand", 'A', `Creatures of your choice within 30 ft: WIS save DC ${dc('WIS')} or Charmed by you until the end of your next turn; they can also drop what they hold.`, { res: 'cd' });
+      if (k >= 6) {
+        res('eotl', 'Embodiment of the Law', w, 'long');
+        add('sub.order6', 'Embodiment of the Law', 'F', 'Cast an enchantment spell of level 1+ that takes an Action as a Bonus Action instead.', { res: 'eotl' });
+      }
+      if (k >= 17) pas('sub.order17', "Order's Wrath", 'Once per turn, when your Divine Strike hits: curse the target. The next ally hit on it before the end of your next turn deals +2d8 psychic.');
+    }
+  }
   if ((k = lv('Druid')) >= (o ? 2 : 3)) {
     if (is('Druid', /Land/i)) {
       if (!o) {
@@ -13709,7 +13793,7 @@ function wpnProf(B, n) {
     any = re => B.cls.some(c => re.test(c.n)),
     sub = re => B.cls.some(c => re.test(c.sub || ''));
   if (any(/Barbarian|Fighter|Paladin|Ranger|Blood Hunter/)) return true;
-  if (!o && B.primal === 'Warden' && any(/Druid/)) return true;
+  if (!o && ((B.primal === 'Warden' && any(/Druid/)) || (B.divine === 'Protector' && any(/Cleric/)))) return true;
   // 2014 Elf/Drow Weapon Training
   if (o && spcKey(B.species) === 'elf') {
     const ln = spcOpt(B);
@@ -13726,7 +13810,7 @@ function wpnProf(B, n) {
     if (any(/Rogue|Bard/) && /^(Hand Crossbow|Longsword|Rapier|Shortsword)$/.test(n)) return true;
     if (any(/Monk/) && n === 'Shortsword') return true;
     if (any(/Druid/) && n === 'Scimitar') return true;
-    if (sub(/War Domain|Tempest|Hexblade|Valor|Swords/)) return true;
+    if (sub(/War Domain|Tempest|Twilight|Hexblade|Valor|Swords/)) return true;
     return false;
   }
   if (any(/Rogue/) && /\b[FL]\b/.test(props)) return true;
@@ -14141,11 +14225,18 @@ Object.assign(ACT, {
 }
 
 // 2024 Druid, level 1: Primal Order (Warden decides weapon and armour training, so it's chosen before Gear)
+// and the 2024 Cleric's Divine Order, for the same reason (Protector: martial weapons, heavy armour)
+const ORDERS = {
+  Druid: ['primal', 'Primal Order', [['Magician', 'extra cantrip'], ['Warden', 'weapons &amp; armour']]],
+  Cleric: ['divine', 'Divine Order', [['Thaumaturge', 'extra cantrip'], ['Protector', 'weapons &amp; armour']]]
+};
 function hbPrimalPick(i) {
-  const c = HB.cls[i];
-  if (!c || c.n !== 'Druid' || HB.ed === '2014') return '';
-  const cur = HB.primal || '';
-  return `<div class="row" style="gap:8px;margin-top:8px;align-items:center"><span class="sm mut">Primal Order</span><select class="field" style="flex:1;padding:8px 10px" onchange="HB.primal=this.value;render()"><option value="" ${cur ? '' : 'selected'}>Pick one</option><option value="Magician" ${cur === 'Magician' ? 'selected' : ''}>Magician · extra cantrip</option><option value="Warden" ${cur === 'Warden' ? 'selected' : ''}>Warden · weapons &amp; armour</option></select></div>`;
+  const c = HB.cls[i],
+    O = c && ORDERS[c.n];
+  if (!O || HB.ed === '2014') return '';
+  const [key, label, opts] = O,
+    cur = HB[key] || '';
+  return `<div class="row" style="gap:8px;margin-top:8px;align-items:center"><span class="sm mut">${label}</span><select class="field" style="flex:1;padding:8px 10px" onchange="HB.${key}=this.value;render()"><option value="" ${cur ? '' : 'selected'}>Pick one</option>${opts.map(([v, t]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${v} · ${t}</option>`).join('')}</select></div>`;
 }
 // Circle of the Land: which land (it decides the circle spells)
 function hbLandPick(i) {
