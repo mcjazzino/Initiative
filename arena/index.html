@@ -65,6 +65,14 @@ h2{font-family:Cinzel,serif;font-size:24px;margin:0 0 6px}
 #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 20px);transform:translate(-50%,30px);opacity:0;background:#2a2633;padding:10px 16px;border-radius:12px;font-weight:700;font-size:14px;transition:.25s;pointer-events:none;max-width:90vw;text-align:center}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 
+.turn.ask{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc),0 8px 30px rgba(0,0,0,.4);animation:pop .2s ease-out}
+.turn.ask .sec{margin-top:0;color:var(--acc)}
+.turn.ask p{margin:0 0 10px;line-height:1.5;font-size:15px}
+.act.react{border-color:var(--line);background:var(--soft)}
+.act.react b{color:var(--acc)}
+.fine.rx{margin:10px 0 0}
+@keyframes pop{from{transform:scale(.97);opacity:.4}}
+
 </style>
 </head>
 <body>
@@ -321,7 +329,15 @@ function kit(ch) {
   });
   const pots = (ch.items || []).filter(i => /potion of (greater |superior |supreme )?healing/i.test(i.n || ''));
   const second = (ch.feats || []).find(f => /^Second Wind/.test(f.n));
-  return { m, sc, spells, pots, second };
+  // reactions: the fight stops and asks when one of these applies
+  const sp = n => (ch.spells || []).find(s => (s.n || '').trim().toLowerCase() === n),
+    R = {
+      shield: sp('shield'),
+      absorb: sp('absorb elements'),
+      rebuke: sp('hellish rebuke'),
+      uncanny: (ch.feats || []).some(f => /^Uncanny Dodge/.test(f.n || '')) || (ch.cls === 'rogue' && !ch.multi && (ch.level || 0) >= 5)
+    };
+  return { m, sc, spells, pots, second, R };
 }
 
 /* ---------- the fight ---------- */
@@ -338,13 +354,16 @@ function startFight(ch, mon) {
     ch,
     K,
     mon,
-    me: { hp: ch.hp ? ch.hp.max : 10, max: ch.hp ? ch.hp.max : 10, slots: JSON.parse(JSON.stringify(ch.slots || {})), pots: K.pots.reduce((t, p) => t + (+p.q || +p.qty || 1), 0), second: K.second ? 1 : 0, prone: false, dodge: false },
+    me: { hp: ch.hp ? ch.hp.max : 10, max: ch.hp ? ch.hp.max : 10, slots: JSON.parse(JSON.stringify(ch.slots || {})), pots: K.pots.reduce((t, p) => t + (+p.q || +p.qty || 1), 0), second: K.second ? 1 : 0, prone: false, dodge: false, react: true, acb: 0, absorbRes: '', absorbHit: null },
     them: { hp: mon.hp, max: mon.hp, breath: !!mon.breath },
     close: false, // start about 30 ft apart
     round: 1,
     order: pI >= mI ? ['me', 'them'] : ['them', 'me'],
     turn: 0,
     t: null,
+    q: [], // steps of the monster's turn, so it can pause to ask about your reaction
+    ask: null,
+    qDone: null,
     log: [],
     over: ''
   };
@@ -360,6 +379,10 @@ function beginTurn() {
   if (who() === 'me') {
     F.t = { action: true, bonus: true, move: true, attacksLeft: 0 };
     F.me.dodge = false;
+    F.me.react = true;
+    if (F.me.acb) log('Your Shield fades.', 'sys');
+    F.me.acb = 0;
+    F.me.absorbRes = '';
     if (F.me.prone) {
       F.me.prone = false;
       F.t.move = false;
@@ -372,6 +395,7 @@ function beginTurn() {
   }
 }
 function endTurn() {
+  if (who() === 'me') F.me.absorbHit = null;
   F.turn = (F.turn + 1) % 2;
   if (F.turn === 0) F.round++;
   beginTurn();
@@ -390,7 +414,8 @@ function hurt(target, amt, type) {
   }
   let a = amt,
     note = '';
-  if ((F.ch.resist || []).some(r => new RegExp(type, 'i').test(r))) (a = Math.floor(a / 2)), (note = ' (you resist: halved)');
+  if (F.me.absorbRes && F.me.absorbRes === type) (a = Math.floor(a / 2)), (note = ' (Absorb Elements: halved)');
+  else if ((F.ch.resist || []).some(r => new RegExp(type, 'i').test(r))) (a = Math.floor(a / 2)), (note = ' (you resist: halved)');
   F.me.hp = Math.max(0, F.me.hp - a);
   if (!F.me.hp) F.over = 'lose';
   return { amt: a, note };
@@ -416,7 +441,15 @@ function weaponAttack(i) {
   if (hit) {
     const dm = roll(w.dmg, crit),
       h = hurt('them', dm.total, (w.type || '').split(',')[0].trim());
-    line += `${crit ? '<b>critical hit!</b> ' : 'hit! '}${dm.txt.join(' ')} = <b>${h.amt}</b> ${esc(w.type || '')}${h.note}.`;
+    line += `${crit ? '<b>critical hit!</b> ' : 'hit! '}${dm.txt.join(' ')} = <b>${h.amt}</b> ${esc(w.type || '')}${h.note}`;
+    if (!ranged && F.me.absorbHit && !F.over) {
+      const A = F.me.absorbHit,
+        ex = roll(A.dice, crit),
+        h2 = hurt('them', ex.total, A.type);
+      F.me.absorbHit = null;
+      line += ` + Absorb Elements ${ex.txt.join(' ')} = <b>${h2.amt}</b> ${A.type}${h2.note}`;
+    }
+    line += '.';
   } else line += r.nat === 1 ? 'natural 1, miss.' : 'miss.';
   log(line, 'me');
   show();
@@ -428,11 +461,7 @@ function castSpell(i) {
     isB = s.t === 'B';
   if (isB ? !F.t.bonus : !F.t.action) return;
   if (S.melee && !F.close) return toastA('Too far: move in first.');
-  if (lvl) {
-    const k = Object.keys(F.me.slots).find(k => (k === 'P' ? F.me.slots[k].lvl >= lvl : +k >= lvl) && F.me.slots[k].max - (F.me.slots[k].used || 0) > 0);
-    if (!k) return toastA('No spell slot left for that.');
-    F.me.slots[k].used = (F.me.slots[k].used || 0) + 1;
-  }
+  if (lvl && !spendSlot(lvl)) return toastA('No spell slot left for that.');
   isB ? (F.t.bonus = false) : (F.t.action = false);
   const sc = F.K.sc;
   if (S.kind === 'atk') {
@@ -480,6 +509,19 @@ function castSpell(i) {
   }
   show();
 }
+// the lowest slot that can cast a spell of this level
+const slotLv = k => (k === 'P' ? F.me.slots.P.lvl || 1 : +k);
+function slotFor(lvl) {
+  return Object.keys(F.me.slots)
+    .filter(k => slotLv(k) >= lvl && F.me.slots[k].max - (F.me.slots[k].used || 0) > 0)
+    .sort((a, b) => slotLv(a) - slotLv(b))[0];
+}
+function spendSlot(lvl) {
+  const k = slotFor(lvl);
+  if (!k) return 0;
+  F.me.slots[k].used = (F.me.slots[k].used || 0) + 1;
+  return slotLv(k);
+}
 function monSave(i) {
   const sv = F.mon.sv || {};
   return sv[i] != null ? sv[i] : mod(F.mon.ab[i]);
@@ -522,34 +564,151 @@ function move(toClose, disengage) {
   }
   if (!F.t.move) return;
   F.t.move = false;
-  if (!toClose && F.close && !disengage && F.them.hp) {
+  const done = () => {
+    F.close = toClose;
+    log(toClose ? `You close in on the ${F.mon.n}.` : `You ${disengage ? 'disengage and ' : ''}move back to range.`, 'me');
+  };
+  const a = F.mon.atk.find(x => x.melee);
+  if (!toClose && F.close && !disengage && F.them.hp && a) {
     log(`You step away without disengaging: the ${F.mon.n} gets an <b>opportunity attack</b>.`, 'sys');
-    const a = F.mon.atk.find(x => x.melee);
-    if (a) monsterAttack(a);
+    F.q = [() => monsterAttack(a), done];
+    F.qDone = null;
+    return run();
   }
-  F.close = toClose;
-  log(toClose ? `You close in on the ${F.mon.n}.` : `You ${disengage ? 'disengage and ' : ''}move back to range.`, 'me');
+  done();
   show();
+}
+
+/* ---------- steps that can pause for your reaction ---------- */
+function run() {
+  while (F.q.length && !F.ask && !F.over) F.q.shift()();
+  if (F.over) (F.q = []), (F.ask = null), (F.qDone = null);
+  show();
+  if (!F.q.length && !F.ask && F.qDone) {
+    const f = F.qDone;
+    F.qDone = null;
+    f();
+  }
+}
+// pause and offer reactions; `no` runs when you let it happen
+function ask(text, opts, no, noLabel) {
+  F.ask = { text, opts, no, noLabel: noLabel || 'No reaction' };
+}
+function answer(i) {
+  const A = F.ask;
+  if (!A) return;
+  F.ask = null;
+  i < 0 ? A.no() : A.opts[i].fn();
+  run();
+}
+const ELEM = ['acid', 'cold', 'fire', 'lightning', 'thunder'];
+const myAC = () => (F.ch.ac || 10) + (F.me.acb || 0);
+const canCast = sp => sp && F.me.react && slotFor(sp.lvl || 1);
+function useReaction(sp) {
+  F.me.react = false;
+  return sp ? spendSlot(sp.lvl || 1) : 0;
+}
+function slotNote(sp) {
+  const k = slotFor(sp.lvl || 1);
+  return k === 'P' ? 'uses a Pact slot' : `uses a level ${k} slot`;
+}
+// Absorb Elements and Uncanny Dodge are offered once the damage is known
+function damageReacts(parts, isAttack, src) {
+  const R = F.K.R,
+    opts = [],
+    el = parts.find(p => ELEM.includes(p.type) && p.amt > 0);
+  if (isAttack && R.uncanny && F.me.react) opts.push({ b: 'Uncanny Dodge', s: 'halve this attack’s damage', fn: () => ((F.me.react = false), src.apply('uncanny')) });
+  if (el && canCast(R.absorb))
+    opts.push({
+      b: 'Absorb Elements',
+      s: `resist ${el.type} until your next turn, +1d6 ${el.type} on your next melee hit · ${slotNote(R.absorb)}`,
+      fn: () => {
+        const lv = useReaction(R.absorb);
+        F.me.absorbRes = el.type;
+        F.me.absorbHit = { type: el.type, dice: `${lv}d6` };
+        src.apply('absorb');
+      }
+    });
+  return opts;
+}
+// Hellish Rebuke: after something damages you
+function rebukeCheck(took) {
+  const sp = F.K.R.rebuke;
+  if (!took || F.over || !F.them.hp || !canCast(sp)) return;
+  ask(
+    `The ${esc(F.mon.n)} just hurt you.`,
+    [
+      {
+        b: 'Hellish Rebuke',
+        s: `it makes a DEX save vs DC ${F.K.sc.dc || 10}, fire damage (half on a success) · ${slotNote(sp)}`,
+        fn: () => {
+          const lv = useReaction(sp),
+            sv = monSave(1),
+            r = d20(),
+            tot = r.nat + sv,
+            ok = tot >= (F.K.sc.dc || 10),
+            dm = roll(`${lv + 1}d10`),
+            amt = ok ? Math.floor(dm.total / 2) : dm.total,
+            h = hurt('them', amt, 'fire');
+          log(`<b>Hellish Rebuke</b> (reaction): ${F.mon.n} DEX save d20 ${r.nat} ${sgn(sv)} = ${tot} vs DC ${F.K.sc.dc || 10}: ${ok ? 'saves, half damage' : 'fails'} · ${dm.txt.join(' ')}${ok ? ' ÷ 2' : ''} = <b>${h.amt}</b> fire${h.note}.`, 'me');
+        }
+      }
+    ],
+    () => {}
+  );
 }
 
 /* the monster's turn */
 function monsterAttack(a) {
+  if (F.over) return;
   const adv = F.me.prone && a.melee,
     dis = F.me.dodge || (a.ranged && F.close) || (F.me.prone && a.ranged),
     r = d20(modeOf(adv, dis)),
     tot = r.nat + a.hit,
     crit = r.nat === 20,
-    hit = crit || (r.nat !== 1 && tot >= F.ch.ac);
-  let line = `<b>${esc(a.n)}</b>: d20 ${r.dice.join(' & ')}${adv && !dis ? ' (advantage: you’re prone)' : ''}${dis && !adv ? ' (disadvantage)' : ''} ${sgn(a.hit)} = <b>${tot}</b> vs your AC ${F.ch.ac}: `;
-  if (hit) {
-    const dm = roll(a.dmg, crit),
-      h = hurt('me', dm.total, a.type);
-    line += `${crit ? '<b>critical hit!</b> ' : 'hits, '}${dm.txt.join(' ')} = <b>${h.amt}</b> ${a.type}${h.note}`;
-    if (a.extra && !F.over) {
-      const ex = roll(a.extra, crit),
-        h2 = hurt('me', ex.total, a.extraType);
-      line += ` + ${ex.txt.join(' ')} = <b>${h2.amt}</b> ${a.extraType}${h2.note}`;
-    }
+    ac = myAC(),
+    hit = crit || (r.nat !== 1 && tot >= ac),
+    head = `<b>${esc(a.n)}</b>: d20 ${r.dice.join(' & ')}${adv && !dis ? ' (advantage: you’re prone)' : ''}${dis && !adv ? ' (disadvantage)' : ''} ${sgn(a.hit)} = <b>${tot}</b> vs your AC ${ac}${F.me.acb ? ' (Shield)' : ''}: `;
+  if (!hit) return log(head + (r.nat === 1 ? 'natural 1, misses.' : 'misses.'), 'them');
+  const sp = F.K.R.shield;
+  // Shield: only when +5 would actually turn this hit into a miss
+  if (!crit && !F.me.acb && tot < ac + 5 && canCast(sp))
+    return ask(
+      `The ${esc(F.mon.n)}’s ${esc(a.n)} hits you: <b>${tot}</b> against your AC ${ac}.`,
+      [
+        {
+          b: 'Shield',
+          s: `+5 AC (${ac + 5}) until your next turn turns this into a miss · ${slotNote(sp)}`,
+          fn: () => {
+            useReaction(sp);
+            F.me.acb = 5;
+            log(head + `hits… but you cast <b>Shield</b> (reaction): AC ${ac + 5}, it misses.`, 'them');
+          }
+        }
+      ],
+      () => attackLands(a, head, crit),
+      'Take the hit'
+    );
+  attackLands(a, head, crit);
+}
+function attackLands(a, head, crit) {
+  const dm = roll(a.dmg, crit),
+    parts = [{ amt: dm.total, type: a.type, txt: dm.txt.join(' ') }];
+  if (a.extra) {
+    const ex = roll(a.extra, crit);
+    parts.push({ amt: ex.total, type: a.extraType, txt: ex.txt.join(' ') });
+  }
+  const apply = how => {
+    let took = 0;
+    const bits = parts.map(p => {
+      let amt = p.amt,
+        pre = '';
+      if (how === 'uncanny') (amt = Math.floor(amt / 2)), (pre = ' ÷ 2');
+      const h = F.over ? { amt: 0, note: '' } : hurt('me', amt, p.type);
+      took += h.amt;
+      return `${p.txt}${pre} = <b>${h.amt}</b> ${p.type}${h.note}`;
+    });
+    let line = head + `${crit ? '<b>critical hit!</b> ' : 'hits, '}${bits.join(' + ')}${how === 'uncanny' ? ' (Uncanny Dodge)' : ''}`;
     if (a.prone && !F.over && !F.me.prone) {
       const sr = d20(),
         st = sr.nat + (F.ch.saves ? F.ch.saves[0] : F.K.m[0]);
@@ -558,15 +717,38 @@ function monsterAttack(a) {
         line += `. STR save ${st} vs DC ${a.prone.dc}: <b>you're knocked prone</b>`;
       } else line += `. STR save ${st} vs DC ${a.prone.dc}: you keep your feet`;
     }
-    line += '.';
-  } else line += r.nat === 1 ? 'natural 1, misses.' : 'misses.';
-  log(line, 'them');
+    log(line + '.', 'them');
+    rebukeCheck(took);
+  };
+  const opts = damageReacts(parts, true, { apply });
+  if (!opts.length) return apply('');
+  const sum = parts.map(p => `${p.amt} ${p.type}`).join(' + ');
+  ask(`${crit ? 'Critical hit! ' : ''}The ${esc(F.mon.n)}’s ${esc(a.n)} hits you for <b>${sum}</b>.`, opts, () => apply(''), 'Take it');
+}
+function breathStep() {
+  const B = F.mon.breath,
+    sr = d20(),
+    sv = F.ch.saves ? F.ch.saves[B.ab] : F.K.m[B.ab],
+    st = sr.nat + sv,
+    ok = st >= B.dc,
+    dm = roll(B.dmg),
+    amt = ok ? (B.half ? Math.floor(dm.total / 2) : 0) : dm.total;
+  const apply = () => {
+    const h = hurt('me', amt, B.type);
+    log(`<b>${B.n}</b>! ${AB[B.ab]} save: d20 ${sr.nat} ${sgn(sv)} = ${st} vs DC ${B.dc}: ${ok ? 'half damage' : 'full damage'} · ${dm.txt.join(' ')}${ok ? ' ÷ 2' : ''} = <b>${h.amt}</b> ${B.type}${h.note}.`, 'them');
+    rebukeCheck(h.amt);
+  };
+  const opts = amt ? damageReacts([{ amt, type: B.type }], false, { apply }) : [];
+  if (!opts.length) return apply();
+  ask(`<b>${B.n}</b>! Your ${AB[B.ab]} save: ${st} vs DC ${B.dc}, ${ok ? 'half' : 'full'} damage: <b>${amt} ${B.type}</b>.`, opts, apply, 'Take it');
 }
 function monsterTurn() {
   if (F.over) return show();
   const M = F.mon,
     melee = M.atk.filter(a => a.melee),
-    ranged = M.atk.find(a => a.ranged);
+    ranged = M.atk.find(a => a.ranged),
+    Q = (F.q = []);
+  F.qDone = finishMonster;
   // breath weapon: recharges on 5–6 at the start of its turn
   if (M.breath && !F.them.breath) {
     const r = d(6);
@@ -577,36 +759,23 @@ function monsterTurn() {
   }
   if (M.breath && F.them.breath && (d(2) === 1 || F.round === 1)) {
     F.them.breath = false;
-    const B = M.breath,
-      sr = d20(),
-      sv = F.ch.saves ? F.ch.saves[B.ab] : F.K.m[B.ab],
-      st = sr.nat + sv,
-      ok = st >= B.dc,
-      dm = roll(B.dmg),
-      amt = ok ? (B.half ? Math.floor(dm.total / 2) : 0) : dm.total,
-      h = hurt('me', amt, B.type);
-    log(`<b>${B.n}</b>! ${AB[B.ab]} save: d20 ${sr.nat} ${sgn(sv)} = ${st} vs DC ${B.dc}: ${ok ? 'half damage' : 'full damage'} · ${dm.txt.join(' ')}${ok ? ' ÷ 2' : ''} = <b>${h.amt}</b> ${B.type}${h.note}.`, 'them');
-    return finishMonster();
+    Q.push(breathStep);
+  } else if (M.style === 'skirmish' && ranged) {
+    // skirmishers: slip out of reach (Nimble Escape) and shoot
+    if (F.close) {
+      F.close = false;
+      log(`The ${M.n} disengages (Nimble Escape) and darts back.`, 'them');
+    }
+    Q.push(() => monsterAttack(ranged));
+  } else {
+    if (!F.close && melee.length) {
+      log(M.style === 'aggressive' ? `The ${M.n} charges in (Aggressive).` : `The ${M.n} closes in.`, 'them');
+      F.close = true;
+    }
+    if (F.close && melee.length) (M.multi ? melee : [melee[0]]).forEach(a => Q.push(() => monsterAttack(a)));
+    else if (ranged) Q.push(() => monsterAttack(ranged));
   }
-  // skirmishers: slip out of reach and shoot
-  if (M.style === 'skirmish' && F.close && ranged) {
-    F.close = false;
-    log(`The ${M.n} disengages (Nimble Escape) and darts back.`, 'them');
-    monsterAttack(ranged);
-    return finishMonster();
-  }
-  if (M.style === 'skirmish' && !F.close && ranged) {
-    monsterAttack(ranged); // a skirmisher keeps its distance and shoots
-    return finishMonster();
-  }
-  if (!F.close && melee.length) {
-    if (M.style === 'aggressive') log(`The ${M.n} charges in (Aggressive).`, 'them');
-    else log(`The ${M.n} closes in.`, 'them');
-    F.close = true;
-  }
-  if (F.close && melee.length) (M.multi ? melee : [melee[0]]).forEach(a => !F.over && monsterAttack(a));
-  else if (ranged) monsterAttack(ranged);
-  finishMonster();
+  run();
 }
 function finishMonster() {
   show();
@@ -691,10 +860,18 @@ function fightScreen() {
       return `<button class="act ${isB ? 'ba' : ''}" ${off ? 'disabled' : ''} onclick="castSpell(${i})"><b>${esc(s.n)}</b><small>${lvl ? 'Level ' + lvl + ' · ' : 'Cantrip · '}${isB ? 'Bonus · ' : ''}${esc(what)}${!hasSlot ? ' · no slot' : ''}</small></button>`;
     })
     .join('');
-  const ed14 = c.edition === '2014';
+  const ed14 = c.edition === '2014',
+    R = K.R,
+    rList = [R.shield && 'Shield', R.absorb && 'Absorb Elements', R.rebuke && 'Hellish Rebuke', R.uncanny && 'Uncanny Dodge'].filter(Boolean),
+    A = F.ask,
+    askCard = A
+      ? `<div class="turn ask"><div class="sec">Your reaction${who() === 'me' ? '' : ` · the ${esc(M.n)}’s turn`}</div><p>${A.text}</p>
+        ${A.opts.map((o, i) => `<button class="act react" onclick="answer(${i})"><b>${esc(o.b)}</b><small>${esc(o.s)}</small></button>`).join('')}
+        <button class="btn" onclick="answer(-1)">${esc(A.noLabel)}</button></div>`
+      : '';
   return `<div class="top"><button class="back" onclick="if(confirm('Leave this fight?')){SCREEN='mon';show()}">‹ Leave</button><div class="appname">Round ${F.round}</div></div>
   <div class="vs">
-    <div class="side me ${who() === 'me' ? 'now' : ''}"><b>${esc(c.name)}</b><small>AC ${c.ac}${F.me.prone ? ' · <em>prone</em>' : ''}${F.me.dodge ? ' · dodging' : ''}</small>${bar(F.me.hp, F.me.max, 'mine')}<span class="hp">${F.me.hp}/${F.me.max}</span></div>
+    <div class="side me ${who() === 'me' ? 'now' : ''}"><b>${esc(c.name)}</b><small>AC ${myAC()}${F.me.acb ? ' (Shield)' : ''}${F.me.prone ? ' · <em>prone</em>' : ''}${F.me.dodge ? ' · dodging' : ''}</small>${bar(F.me.hp, F.me.max, 'mine')}<span class="hp">${F.me.hp}/${F.me.max}</span></div>
     <div class="dist">${F.close ? 'In reach' : '~30 ft apart'}</div>
     <div class="side them ${who() === 'them' ? 'now' : ''}"><b>${esc(M.n)}</b><small>AC ${M.ac}</small>${bar(F.them.hp, F.them.max, 'theirs')}<span class="hp">${F.them.hp}/${F.them.max}</span></div>
   </div>
@@ -702,8 +879,10 @@ function fightScreen() {
     F.over
       ? `<div class="end ${F.over}"><h2>${F.over === 'win' ? 'Victory!' : 'You drop to 0 HP'}</h2><p>${F.over === 'win' ? `The ${M.n} falls in round ${F.round}.` : `The ${M.n} wins this one, in round ${F.round}. At a real table you'd now roll death saves.`}</p>
         <button class="btn pri" onclick="startFight(F.ch,F.mon)">Fight again</button><button class="btn" onclick="SCREEN='mon';show()">Another monster</button></div>`
-      : mine
-        ? `<div class="turn"><div class="chips"><span class="${t.action ? '' : 'used'}">Action</span><span class="${t.bonus ? '' : 'used'}">Bonus</span><span class="${t.move ? '' : 'used'}">Move</span>${t.attacksLeft > 0 ? `<span class="hot">${t.attacksLeft} attack${t.attacksLeft > 1 ? 's' : ''} left</span>` : ''}</div>
+      : A
+        ? askCard
+        : mine
+        ? `<div class="turn"><div class="chips"><span class="${t.action ? '' : 'used'}">Action</span><span class="${t.bonus ? '' : 'used'}">Bonus</span><span class="${t.move ? '' : 'used'}">Move</span>${rList.length ? `<span class="${F.me.react ? '' : 'used'}">Reaction</span>` : ''}${F.me.absorbHit ? `<span class="hot">+${esc(F.me.absorbHit.dice)} ${esc(F.me.absorbHit.type)} on a melee hit</span>` : ''}${t.attacksLeft > 0 ? `<span class="hot">${t.attacksLeft} attack${t.attacksLeft > 1 ? 's' : ''} left</span>` : ''}</div>
         <div class="sec">Attack${(c.attacks || 1) > 1 ? ` · ${c.attacks} per action` : ''}</div>${atkBtns}
         ${spBtns ? `<div class="sec">Spells${slotsTxt ? ` · ${slotsTxt}` : ''}</div>${spBtns}` : ''}
         <div class="sec">Other</div>
@@ -714,6 +893,7 @@ function fightScreen() {
           ${F.me.pots ? `<button class="act" ${!(ed14 ? t.action : t.bonus) ? 'disabled' : ''} onclick="drinkPotion()"><b>Healing potion ×${F.me.pots}</b><small>${ed14 ? 'Action' : 'Bonus Action'}</small></button>` : ''}
           ${F.me.second ? `<button class="act" ${!t.bonus ? 'disabled' : ''} onclick="secondWind()"><b>Second Wind</b><small>Bonus: heal 1d10+${c.level}</small></button>` : ''}
         </div>
+        ${rList.length ? `<p class="fine rx">Reactions: ${rList.join(', ')}. The fight stops and asks you when one applies.</p>` : ''}
         <button class="btn pri endt" onclick="endTurn()">End turn</button></div>`
         : `<div class="turn wait"><div class="spin"></div> The ${esc(M.n)} is acting…</div>`
   }
