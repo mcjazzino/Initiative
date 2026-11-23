@@ -8204,6 +8204,16 @@ function doEffect(o) {
   addStatus(o.status);
   addStatus(o.status2);
   if (o.status === 'Innate Sorcery') c.innateFrom = c.round || 1;
+  // a feature that summons a companion (Wildfire Spirit): it appears at full HP
+  if (o.pet) {
+    const p = pets().find(x => x.id === o.pet);
+    if (p) {
+      const st = petState(p);
+      st.away = false;
+      st.cur = p.max;
+      toast(`${esc(p.n)} appears · ${p.max} HP`);
+    }
+  }
   if (o.effect === 'dash') {
     c.dash += effSpeed();
     toast(`Dash! +${effSpeed()} ft${o.tempHp ? ` · ${o.tempHp} temporary HP` : ''}`);
@@ -12500,7 +12510,15 @@ function hfMore(B, D, F, add, res) {
     if (k >= 20)
       note('dru.ws', o ? 'Archdruid: Wild Shape as often as you like.' : 'Archdruid: when you roll initiative with no Wild Shape uses left, you regain one.');
     if (k >= 20) pas('dru.arch', 'Archdruid');
+    if (k >= 20 && !o) {
+      res('natmag', 'Nature Magician', 1, 'long');
+      add('dru.natmag', 'Nature Magician', 'F', 'Turn Wild Shape uses into one spell slot: 2 slot levels per use (2 uses: a level 4 slot). Once per long rest.', { res: 'natmag' });
+    }
   }
+
+  // 2024 Primal Order, chosen on the Who step (it decides weapon and armour training)
+  if (!o && lv('Druid') && B.primal)
+    pas('dru.primal1', `Primal Order: ${B.primal}`, B.primal === 'Warden' ? 'Proficiency with martial weapons and training with medium armour.' : `One extra druid cantrip, and ${sgn(Math.max(1, m.WIS))} to Intelligence (Arcana or Nature) checks.`);
 
   if ((k = lv('Fighter'))) {
     if (!o && k >= 2)
@@ -12823,6 +12841,63 @@ function hfSubs(B, D, F, add, res) {
       if (o && k >= 6) pas('sub.land6', "Land's Stride", 'Nonmagical difficult terrain costs no extra movement; advantage on saves against magical plants.');
       if (k >= 10) pas('sub.land10', "Nature's Ward", o ? "Immune to poison and disease; elementals and fey can't charm or frighten you." : `Immune to Poisoned; resistance to ${LAND_WARD[B.land] || 'the damage type of your chosen land'} damage (${B.land || 'your land'}). Change your land in Edit character after a long rest.`);
       if (o && k >= 14) pas('sub.land14p', "Nature's Sanctuary", `Beasts and plants that attack you make a WIS save DC ${dc('WIS')} or must choose another target.`);
+    }
+    if (is('Druid', /Moon/i)) {
+      // Wild Shape itself (CR, AC floor, temporary HP, 2014 healing) is handled by the Wild Shape screen
+      if (o) {
+        if (k >= 6) pas('sub.moon6', 'Primal Strike', 'Your attacks in beast form count as magical for overcoming resistance and immunity to nonmagical damage.');
+        if (k >= 10) add('sub.moon10', 'Elemental Wild Shape', 'B', 'Spend two Wild Shape uses: turn into an air, earth, fire or water elemental.', { res: 'ws', step: 2 });
+        if (k >= 14) pas('sub.moon14', 'Thousand Forms', 'Cast Alter Self at will, without a spell slot.');
+      } else {
+        pas('sub.moon3', 'Circle Forms', `In Wild Shape: AC at least ${13 + m.WIS}, ${3 * k} temporary HP, beasts up to CR ${Math.max(1, Math.floor(k / 3))}. You can cast your Circle of the Moon spells in beast form.`);
+        if (k >= 6) pas('sub.moon6', 'Improved Circle Forms', `In Wild Shape: your attacks can deal radiant damage instead of their normal type, and you add ${sgn(m.WIS)} to Constitution saves.`);
+        if (k >= 10) {
+          res('mstep', 'Moonlight Step', mx(m.WIS), 'long');
+          add('sub.moon10', 'Moonlight Step', 'B', `Teleport up to 30 ft to a space you can see, with advantage on your next attack roll this turn.${k >= 14 ? ' Moonlight Step also takes one willing creature within 10 ft of you to within 10 ft of where you arrive (Lunar Form).' : ''} Out of uses: spend a level 2+ slot to regain one.`, { res: 'mstep' });
+        }
+        if (k >= 14) add('sub.moon14', 'Lunar Form', 'F', 'Once per turn, when you hit with an attack in Wild Shape: +2d10 radiant damage.', { once: 'lunar' });
+      }
+    }
+    if (is('Druid', /Spores/i)) {
+      const hd = k >= 14 ? 10 : k >= 10 ? 8 : k >= 6 ? 6 : 4;
+      add('sub.spor2', 'Halo of Spores', 'R', `When a creature you can see moves within 10 ft of you or starts its turn there: CON save DC ${dc('WIS')} or 1d${hd} necrotic (2d${hd} with Symbiotic Entity).`);
+      add('sub.spor2s', 'Symbiotic Entity', 'A', `Spend a Wild Shape use: ${4 * k} temporary HP for up to 10 minutes. While they last: Halo of Spores rolls its die twice, and your melee weapon hits deal +1d6 necrotic.`, { res: 'ws', tempHp: 4 * k, status: 'Symbiotic Entity' });
+      if (k >= 6) {
+        res('fungal', 'Fungal Infestation', mx(m.WIS), 'long');
+        add('sub.spor6', 'Fungal Infestation', 'R', 'When a Small or Medium beast or humanoid dies within 10 ft: it rises as a zombie with 1 HP for 1 hour, acting right after you (Bonus Action to command, or it attacks the nearest creature).', { res: 'fungal' });
+      }
+      if (k >= 10) add('sub.spor10', 'Spreading Spores', 'B', 'While Symbiotic Entity lasts: hurl spores into a 10-ft cube within 30 ft for 1 minute. Halo of Spores damage happens there instead of around you.');
+      if (k >= 14) pas('sub.spor14', 'Fungal Body', "Immune to Blinded, Deafened, Frightened and Poisoned. A critical hit against you counts as a normal hit, unless you're Incapacitated.");
+    }
+    if (is('Druid', /Wildfire/i)) {
+      add('sub.wf2', 'Summon Wildfire Spirit', 'A', `Spend a Wild Shape use: the spirit appears within 30 ft for 1 hour. Creatures within 10 ft of it (not you): DEX save DC ${dc('WIS')} or 2d6 fire. It acts right after you: command it with a Bonus Action.`, { res: 'ws', pet: 'f-wildfire' });
+      if (k >= 6) add('sub.wf6', 'Enhanced Bond', 'F', 'While the spirit is out: add 1d8 to one damage roll of a fire spell or one healing roll of a healing spell, and you can cast spells with a range other than self as if from the spirit.');
+      if (k >= 10) {
+        res('cauter', 'Cauterizing Flames', p, 'long');
+        add('sub.wf10', 'Cauterizing Flames', 'R', `When a Small or larger creature dies within 30 ft of you or the spirit, a flame fills its space for 1 minute. When a creature you can see enters it: it regains or takes 2d10+${m.WIS} fire damage (your choice); the flame goes out.`, { res: 'cauter' });
+      }
+      if (k >= 14) {
+        res('blazing', 'Blazing Revival', 1, 'long');
+        add('sub.wf14', 'Blazing Revival', 'F', 'When you drop to 0 HP with the spirit within 120 ft: it drops to 0 HP instead, and you regain half your HP maximum and stand up.', { res: 'blazing' });
+      }
+    }
+    if (is('Druid', /Dreams/i)) {
+      res('balm', 'Balm of the Summer Court', k, 'long');
+      add('sub.dream2', 'Balm of the Summer Court', 'B', `Spend up to ${Math.max(1, Math.floor(k / 2))} d6s from the pool: a creature within 120 ft regains HP equal to the roll, plus 1 temporary HP per die.`, { res: 'balm' });
+      if (k >= 10) {
+        res('hidden', 'Hidden Paths', mx(m.WIS), 'long');
+        add('sub.dream10', 'Hidden Paths', 'B', 'Teleport up to 60 ft to a space you can see (or, as an Action, teleport a willing creature you touch up to 30 ft).', { res: 'hidden' });
+      }
+    }
+    if (is('Druid', /Shepherd/i)) {
+      res('totem', 'Spirit Totem', 1, 'short');
+      add('sub.shep2', 'Spirit Totem', 'B', `A 30-ft aura within 60 ft for 1 minute. Bear: creatures of your choice in it gain ${5 + k} temporary HP and advantage on STR checks and saves. Hawk: your Reaction gives advantage on one attack against a target in the aura. Unicorn: when you heal with a spell slot, each creature of your choice in it regains ${k} HP.`, { res: 'totem' });
+      if (k >= 6) pas('sub.shep6', 'Mighty Summoner', 'Beasts and fey you summon get +2 HP per Hit Die, and their natural weapons count as magical.');
+      if (k >= 10) pas('sub.shep10', 'Guardian Spirit', `Your summoned beasts and fey that end their turn in your Spirit Totem aura regain ${Math.floor(k / 2)} HP.`);
+      if (k >= 14) {
+        res('faithful', 'Faithful Summons', 1, 'long');
+        add('sub.shep14', 'Faithful Summons', 'F', 'When you drop to 0 HP or are Incapacitated against your will: four beasts of CR 2 or lower appear to protect you (Conjure Animals at 9th level) for 1 hour.', { res: 'faithful' });
+      }
     }
     if (is('Druid', /Sea/i)) {
       add(
@@ -13365,7 +13440,7 @@ function hbWho() {
      <select class="field" style="flex:1;padding:10px 12px" onchange="hbCls(${i},'n',this.value)">${HCN.map(n => `<option ${n === c.n ? 'selected' : ''} ${n !== c.n && used.includes(n) ? 'disabled' : ''}>${n}</option>`).join('')}</select>
      ${i ? `<button class="iconbtn" style="width:38px;height:38px" data-act="hbClsDel" data-arg="${i}" aria-label="Remove class">✕</button>` : ''}</div>
     <div class="row between" style="margin-top:10px"><span class="sm mut">Level</span><div class="row" style="gap:6px"><button class="iconbtn" style="width:34px;height:34px" data-act="hbLvl" data-arg="${i}|-1">−</button><b class="num" style="min-width:30px;text-align:center">${c.lvl}</b><button class="iconbtn" style="width:34px;height:34px" data-act="hbLvl" data-arg="${i}|1">+</button></div></div>
-    <div style="margin-top:10px">${hbPick(HC[c.n].subs, c.sub, c._other, 'No subclass yet', `hbSubPick(${i},this.value)`, `<input class="field" style="margin-top:8px;padding:10px 12px" placeholder="Type the subclass" value="${esc(c.sub || '')}" oninput="hbCls(${i},'sub',this.value,1)" onchange="render()">`)}</div>${hbSubNote(i)}${hbLandPick(i)}</div>`
+    <div style="margin-top:10px">${hbPick(HC[c.n].subs, c.sub, c._other, 'No subclass yet', `hbSubPick(${i},this.value)`, `<input class="field" style="margin-top:8px;padding:10px 12px" placeholder="Type the subclass" value="${esc(c.sub || '')}" oninput="hbCls(${i},'sub',this.value,1)" onchange="render()">`)}</div>${hbPrimalPick(i)}${hbSubNote(i)}${hbLandPick(i)}</div>`
     )
     .join('')}
   ${B.cls.length < 3 ? `<button class="btn ghost" data-act="hbClsAdd">+ Add a class (multiclass)</button>` : ''}
@@ -13594,7 +13669,7 @@ function hbSubNote(i) {
   const c = HB.cls[i];
   if (!c || !c.sub || !c.sub.trim()) return '';
   // subclasses the combat engine handles by name (crit range, Sneak Attack riders, wizard school notes)
-  if (/Champion|Assassin|Swashbuckler|Abjur|Blades|Conjur|Divin|Evoc|Moon/i.test(c.sub)) return '';
+  if (/Champion|Assassin|Swashbuckler|Abjur|Blades|Conjur|Divin|Evoc/i.test(c.sub)) return '';
   // compare everything the subclass offers (picked or not) with no subclass at all
   const probe = (sub, spells) => {
     const B = JSON.parse(JSON.stringify(HB));
@@ -13629,6 +13704,7 @@ function wpnProf(B, n) {
     any = re => B.cls.some(c => re.test(c.n)),
     sub = re => B.cls.some(c => re.test(c.sub || ''));
   if (any(/Barbarian|Fighter|Paladin|Ranger|Blood Hunter/)) return true;
+  if (!o && B.primal === 'Warden' && any(/Druid/)) return true;
   // 2014 Elf/Drow Weapon Training
   if (o && spcKey(B.species) === 'elf') {
     const ln = spcOpt(B);
@@ -14059,6 +14135,13 @@ Object.assign(ACT, {
   };
 }
 
+// 2024 Druid, level 1: Primal Order (Warden decides weapon and armour training, so it's chosen before Gear)
+function hbPrimalPick(i) {
+  const c = HB.cls[i];
+  if (!c || c.n !== 'Druid' || HB.ed === '2014') return '';
+  const cur = HB.primal || '';
+  return `<div class="row" style="gap:8px;margin-top:8px;align-items:center"><span class="sm mut">Primal Order</span><select class="field" style="flex:1;padding:8px 10px" onchange="HB.primal=this.value;render()"><option value="" ${cur ? '' : 'selected'}>Pick one</option><option value="Magician" ${cur === 'Magician' ? 'selected' : ''}>Magician · extra cantrip</option><option value="Warden" ${cur === 'Warden' ? 'selected' : ''}>Warden · weapons &amp; armour</option></select></div>`;
+}
 // Circle of the Land: which land (it decides the circle spells)
 function hbLandPick(i) {
   const c = HB.cls[i];
@@ -14897,6 +14980,24 @@ function featurePets() {
         "If you don't command it, it takes the Dodge action."
       ]
     });
+  const dru = clsLvl('Druid');
+  if (dru >= 2 && /Wildfire/i.test(sub('Druid')))
+    L.push({
+      id: 'f-wildfire',
+      n: 'Wildfire Spirit',
+      kind: 'turn',
+      cmd: 'B',
+      away0: true, // summoned with a Wild Shape use
+      ac: 13,
+      max: 5 + 5 * dru,
+      speed: '30 ft, fly 30 ft (hover)',
+      atk: [{ n: 'Flame Seed', hit: prof + mods[4], dmg: `1d6+${prof}`, type: 'fire', range: '60 ft' }],
+      notes: [
+        `Fiery Teleportation (Action): it and willing creatures within 5 ft teleport up to 15 ft. Creatures within 5 ft of where it left: DEX save DC ${8 + prof + mods[4]} or 1d6+${prof} fire.`,
+        'Lasts 1 hour, until it drops to 0 HP, or until you summon it again.',
+        "If you don't command it, it takes the Dodge action."
+      ]
+    });
   if (rng >= 3 && /Beast Master/i.test(sub('Ranger')))
     L.push({
       id: 'f-beast',
@@ -14920,7 +15021,7 @@ function pets() {
 }
 function petState(p) {
   S.pets = S.pets || {};
-  if (!S.pets[p.id]) S.pets[p.id] = { cur: p.cur0 != null ? p.cur0 : p.max, away: false };
+  if (!S.pets[p.id]) S.pets[p.id] = { cur: p.cur0 != null ? p.cur0 : p.max, away: !!p.away0 };
   return S.pets[p.id];
 }
 const petsOut = () => pets().filter(p => !petState(p).away);
