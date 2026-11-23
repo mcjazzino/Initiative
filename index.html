@@ -1394,7 +1394,7 @@ const DEMO_AC = {
   rogue: [P('Leather (light armour)', 11, 1), P('Dexterity', 4)],
   sorcerer: [P('Draconic Resilience', 13, 1), P('Dexterity', 2)],
   warlock: [P('Leather (light armour)', 11, 1), P('Dexterity', 2)],
-  wizard: [P('Mage Armor (spell, cast before combat)', 13, 1), P('Dexterity', 2)],
+  wizard: [{ ...P('Mage Armor (spell, 8 hours)', 13, 1), ma: true }, P('Dexterity', 2)],
   artificer: [P('Half Plate (medium armour)', 15, 1), P('Dexterity', 1), P('Shield', 2)]
 };
 function demoChar(k, edition = '2024', L) {
@@ -3411,6 +3411,21 @@ function palAdds(w) {
   if (ranged || (old && w.unarmed)) return null;
   return `+1d8 radiant (${old ? 'Improved Divine Smite' : 'Radiant Strikes'})${/^Thrown/.test(w.range || '') ? ' when you attack in melee' : ''}`;
 }
+/* Mage Armor: a line in the AC breakdown that's up (13 + DEX) or not (10 + DEX) */
+const maPart = () => (CH().acParts || []).find(x => x.ma);
+function maSet(up, quiet) {
+  const ch = CH(),
+    p = maPart();
+  if (!p || !p.down === up) return;
+  p.down = !up || undefined;
+  p.off = p.down;
+  const d = up ? 3 : -3;
+  ch.ac = Math.max(1, ch.ac + d);
+  if (ch.acImported != null) ch.acImported += d;
+  save();
+  if (!quiet) toast(up ? `Mage Armor is up: AC ${ch.ac}` : `Mage Armor is down: AC ${ch.ac}`);
+  render();
+}
 // 2024 Great Weapon Master: +proficiency damage on a Heavy weapon hit in the Attack action
 function gwmAdds(w) {
   if (!w || w.beast || is14('demo') || !hasP('Great Weapon Master')) return null;
@@ -4255,6 +4270,8 @@ function startHints() {
       `<b>Uncanny Metabolism</b>: when you roll initiative, regain all Focus and 1d${L2 >= 17 ? 12 : L2 >= 11 ? 10 : L2 >= 5 ? 8 : 6}+${L2} HP (once per long rest)`
     );
   }
+  const ma = (ch.acParts || []).find(x => x.ma);
+  if (ma && ma.down) L.push(`<b>Mage Armor isn't up</b>: your AC is ${ch.ac}. Cast it (a level 1 slot) for ${ch.ac + 3}, or tap your AC.`);
   const insp = Object.values(ch.res || {}).find(r => /Bardic Inspiration/i.test(r.n));
   if (hasP('Superior Inspiration') && insp && insp.cur < (is14('insp') ? 1 : 2))
     L.push(`<b>Superior Inspiration</b>: when you roll initiative, regain Bardic Inspiration up to ${is14('insp') ? 1 : 2}`);
@@ -4884,6 +4901,7 @@ function castSpell(s, slotKey) {
     CH().slots[slotKey].used++;
   }
   if (s.res && !fb) spendRes(s.res);
+  if (/^Mage Armou?r$/i.test(s.n) && maPart() && maPart().down) setTimeout(() => maSet(true), 0);
   if (CH().bh && isProfane() && bh().level >= 7 && s.lvl === 0 && t === 'A' && c.phase === 'turn')
     c.flags.frenzy = true;
   const counts = !(s.smite && is14('smite'));
@@ -6141,7 +6159,9 @@ function acSheet() {
     parts
       .map(
         (p, i) =>
-          `<div class="acrow" ${p.off ? 'style="opacity:.5"' : ''}><span>${esc(p.n)}${p.off ? ` <span class="sm" style="color:var(--warn)">(${p.down ? 'put away' : 'not attuned'})</span>` : ''}${p.f ? `<div class="sm mut" style="font-weight:500;font-size:12px;margin-top:2px">${esc(p.f)}</div>` : ''}</span><b ${p.off ? 'style="text-decoration:line-through"' : ''}>${p.base ? p.v : p.v >= 0 ? '+' + p.v : p.v}</b></div>`
+          p.ma && p.down
+            ? `<div class="acrow"><span>No armour <span class="sm" style="color:var(--warn)">(Mage Armor isn't up)</span></span><b>10</b></div>`
+            : `<div class="acrow" ${p.off ? 'style="opacity:.5"' : ''}><span>${esc(p.n)}${p.off ? ` <span class="sm" style="color:var(--warn)">(${p.down ? 'put away' : 'not attuned'})</span>` : ''}${p.f ? `<div class="sm mut" style="font-weight:500;font-size:12px;margin-top:2px">${esc(p.f)}</div>` : ''}</span><b ${p.off ? 'style="text-decoration:line-through"' : ''}>${p.base ? p.v : p.v >= 0 ? '+' + p.v : p.v}</b></div>`
       )
       .join('') +
     (adj
@@ -6151,6 +6171,7 @@ function acSheet() {
   ${parts.length ? `<div class="card" style="margin-top:14px"><div class="xs mut" style="margin-bottom:6px">How it adds up</div>${rows}${now.length ? `<div class="xs mut" style="margin:10px 0 2px">Right now</div>${now.map(x => `<div class="acrow"><span>${esc(x.n)}</span><b>${sgn(x.v)}</b></div>`).join('')}` : ''}<div class="acrow total"><span>Armour class${now.length ? ' right now' : ''}</span><b>${live}</b></div></div>` : ''}
   <div class="stepper" style="grid-template-columns:1fr 1fr"><button data-act="acAdj" data-arg="-1">−1</button><button data-act="acAdj" data-arg="1">+1</button></div>
   ${imp != null && ch.ac !== imp ? `<button class="btn" style="margin-top:10px" data-act="acReset">Reset to ${imp}</button>` : ''}
+  ${parts.some(p => p.ma) ? `<div class="toggle" style="margin-top:10px"><span>Mage Armor is up <span class="sm mut">(lasts 8 hours; a long rest ends it)</span></span><button class="sw ${parts.find(p => p.ma).down ? '' : 'on'}" data-act="acMage"></button></div>` : ''}
   ${parts.some(p => p.shield) ? `<div class="toggle" style="margin-top:10px"><span>Holding your shield</span><button class="sw ${parts.find(p => p.shield).down ? '' : 'on'}" data-act="acShield"></button></div>` : ''}${ch.source === 'hand' && ch.build ? `${parts.some(p => p.n === 'From your sheet') ? '<p class="sm mut" style="margin-top:12px">Pick your armour, shield and bonuses in Gear and this shows how your AC adds up.</p>' : ''}<button class="btn" style="margin-top:10px" data-act="hbEditAC">${parts.some(p => p.n === 'From your sheet') ? 'Add armour &amp; shield' : 'Change armour or shield'}</button>` : ''}<p class="sm mut" style="margin-top:14px;${ch.source === 'hand' ? 'display:none' : ''}">${parts.length ? 'Something missing? ' : ''}If this doesn't match D&amp;D Beyond, set it to match here. Tap the AC on D&amp;D Beyond to see how it's built up — magic items, fighting styles and feats are the usual reasons for a difference.</p>`;
 }
 function hpSheet() {
@@ -9630,6 +9651,11 @@ const ACT = {
   aboutOpen() {
     openSheet('About this beta', aboutSheet);
   },
+  // Mage Armor is up (13 + DEX) or not (10 + DEX)
+  acMage() {
+    const p = maPart();
+    if (p) maSet(!!p.down); // down → put it up, up → take it down
+  },
   acShield() {
     const ch = CH(),
       p = (ch.acParts || []).find(x => x.shield);
@@ -9966,6 +9992,8 @@ const ACT = {
     render();
   },
   rest(type) {
+    // 8 hours have passed: Mage Armor needs casting again
+    if (type === 'long' && maPart() && !maPart().down) maSet(false, true);
     const ch = CH();
     if (type === 'long' && S.fam && S.fam.fey) {
       S.fam = null;
@@ -10691,6 +10719,7 @@ const CANT = {
 };
 // higher-level spells the app's built-in lists don't carry: [level, cast time, concentration, text, text in 2014 if different]
 const EXTRA_SP = {
+  'Mage Armor': [1, 'A', 0, "A willing creature you touch that isn't wearing armour: its AC becomes 13 + DEX for 8 hours (it ends if it puts on armour). Cast on yourself, it turns your AC's Mage Armor on."],
   'Inflict Wounds': [
     1,
     'A',
@@ -10870,6 +10899,7 @@ const SCHOOL = {
   'Healing Word': 'Evocation',
   'Hellish Rebuke': 'Evocation',
   'Magic Missile': 'Evocation',
+  'Mage Armor': 'Abjuration',
   'Searing Smite': 'Evocation',
   'Thunderous Smite': 'Evocation',
   'Wrathful Smite': 'Evocation',
@@ -11104,7 +11134,7 @@ function hbSpeedSuggest(B) {
     sp = String(B.species || ''),
     a = (typeof ARMOUR !== 'undefined' && ARMOUR[+B.arm || 0]) || ['', 0, ''],
     heavy = a[2] === 'H',
-    noArmour = !a[1] && !B.shield,
+    noArmour = (!a[1] || a[2] === 'S') && !B.shield,
     parts = [];
   let base = 30,
     why = 'walking speed';
@@ -13808,7 +13838,7 @@ function hbHold(e, a, d) {
   addEventListener('pointerup', stop);
   addEventListener('pointercancel', stop);
 }
-// armour table: name, base AC, type (L light, M medium, H heavy)
+// armour table: name, base AC, type (L light, M medium, H heavy, S a spell for when you wear none)
 const ARMOUR = [
   ['No armour', 0, ''],
   ['Padded', 11, 'L'],
@@ -13823,7 +13853,7 @@ const ARMOUR = [
   ['Chain mail', 16, 'H'],
   ['Splint', 17, 'H'],
   ['Plate', 18, 'H'],
-  ['Mage Armor (spell)', 13, 'L']
+  ['Mage Armor (spell)', 13, 'S']
 ];
 // AC from armour, shield and bonuses, with the class's Unarmored Defense when it's better
 // species with their own AC: [match, name, base or null, ability added, flat bonus]
@@ -13847,13 +13877,16 @@ function hbAC(B) {
   // typed from the sheet but nothing entered in Gear yet: say so, rather than a misleading "No armour" line
   if (+B.ac && B.arm == null && !B.shield && !(B.acx || []).length && !+B.acb)
     return { ac: +B.ac, calc: +B.ac, parts: [{ n: 'From your sheet', v: +B.ac, base: true, todo: true }] };
-  if (a[1]) {
+  const isMA = a[2] === 'S';
+  if (a[1] && !isMA) {
     const dex = a[2] === 'H' ? 0 : a[2] === 'M' ? Math.min(2, m.DEX) : m.DEX;
     parts.push({ n: a[0] + (a[2] === 'H' ? ' (heavy armour)' : a[2] === 'M' ? ' (medium armour)' : /spell/.test(a[0]) ? '' : ' (light armour)'), v: a[1], base: true });
     if (a[2] === 'M') parts.push({ n: `Dexterity${m.DEX > 2 ? ' (max +2 in medium armour)' : ''}`, v: dex });
     else if (a[2] === 'L') parts.push({ n: 'Dexterity', v: dex });
   } else {
     const opts = [[{ n: 'No armour', v: 10, base: true }, { n: 'Dexterity', v: m.DEX }]];
+    // Mage Armor: 13 + DEX while it's up (cast it with a level 1 slot; it lasts 8 hours)
+    if (isMA) opts.push([{ n: 'Mage Armor (spell, 8 hours)', v: 13, base: true, ma: true }, { n: 'Dexterity', v: m.DEX }]);
     if (D.lv('Barbarian')) opts.push([{ n: 'Unarmored Defense (Barbarian)', v: 10, base: true }, { n: 'Dexterity', v: m.DEX }, { n: 'Constitution', v: m.CON }]);
     if (D.lv('Monk') && !B.shield) opts.push([{ n: 'Unarmored Defense (Monk)', v: 10, base: true }, { n: 'Dexterity', v: m.DEX }, { n: 'Wisdom', v: m.WIS }]);
     if (B.cls.some(c => c.n === 'Sorcerer' && /dragon|draconic/i.test(c.sub || '')))
@@ -13867,7 +13900,7 @@ function hbAC(B) {
     parts = opts.reduce((x, y) => (tot(y) > tot(x) ? y : x));
   }
   if (sp && sp[4]) parts.push({ n: sp[1], v: sp[4] });
-  if (a[1] && a[2] && featOn(B, 'Defense')) parts.push({ n: 'Defense (fighting style)', v: 1 });
+  if (a[1] && /[LMH]/.test(a[2]) && featOn(B, 'Defense')) parts.push({ n: 'Defense (fighting style)', v: 1 });
   if (B.shield) parts.push({ n: 'Shield', v: 2, shield: true });
   (B.acx || []).forEach(x => x.v && parts.push({ n: x.n || 'Bonus', v: +x.v }));
   if (+B.acb) parts.push({ n: 'Other bonus', v: +B.acb });
@@ -14012,7 +14045,7 @@ function hbScores() {
 function hbArmourSec() {
   const B = HB;
   return `<div class="xs sec">Armour &amp; shield</div>
-  <select class="field" style="padding:10px 12px" onchange="hbArmour(this.value)">${ARMOUR.map((a, i) => `<option value="${i}" ${(B.arm || 0) === i ? 'selected' : ''}>${a[0]}${i ? ` · AC ${a[1]}${a[2] === 'M' ? ' + DEX (max 2)' : a[2] === 'L' ? ' + DEX' : ''}` : ''}</option>`).join('')}</select>
+  <select class="field" style="padding:10px 12px" onchange="hbArmour(this.value)">${ARMOUR.map((a, i) => `<option value="${i}" ${(B.arm || 0) === i ? 'selected' : ''}>${a[0]}${i ? ` · AC ${a[1]}${a[2] === 'M' ? ' + DEX (max 2)' : a[2] === 'L' || a[2] === 'S' ? ' + DEX' : ''}${a[2] === 'S' ? ', level 1 slot, 8 hours' : ''}` : ''}</option>`).join('')}</select>
   ${B.cls.some(c => c.n === 'Barbarian') ? `<div class="toggle"><span>Wearing heavy armour <span class="sm mut">(no Rage)</span></span><button class="sw ${B.heavy ? 'on' : ''}" data-act="hbTog" data-arg="heavy"></button></div>` : ''}
   <div class="toggle"><span>Shield <span class="sm mut">(+2 AC)</span></span><button class="sw ${B.shield ? 'on' : ''}" data-act="hbTog" data-arg="shield"></button></div>
   ${(B.acx || []).map((x, i) => `<div class="row between item" style="margin-top:6px;padding:10px 12px"><span>${esc(x.n || 'Bonus')}</span><div class="row" style="gap:8px"><b class="num">${sgn(+x.v)}</b><button class="iconbtn" style="width:30px;height:30px" data-act="hbAcxDel" data-arg="${i}" aria-label="Remove">✕</button></div></div>`).join('')}
@@ -15063,6 +15096,7 @@ const PG = {
       'Mind Sliver',
       'Ray of Frost',
       'Shield',
+      'Mage Armor',
       'Magic Missile',
       'Burning Hands',
       'Misty Step',
@@ -15305,6 +15339,10 @@ let SHELF_DEL = '';
 // changed by hand (+1/−1) is kept.
 function acMigrate(ch) {
   if (!ch) return;
+  // a Mage Armor line saved before it could be switched up and down
+  (ch.acParts || []).forEach(p => {
+    if (/^Mage Armou?r/i.test(p.n || '') && p.base && !p.ma) (p.ma = true), (p.n = 'Mage Armor (spell, 8 hours)');
+  });
   // built before the builder had limits: rebuild the weapons from the saved build, and pull AC and speed into range
   try {
     if (ch.source === 'hand' && ch.build) {
