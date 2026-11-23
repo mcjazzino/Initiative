@@ -358,6 +358,10 @@ body.hasroll #rollbg{opacity:1;pointer-events:auto}
 .dicebtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:10px;padding:15px;border:1px solid #2c2836;border-radius:16px;font-weight:800;font-size:16px;color:var(--mut);transition:.2s}
 .dicebtn svg{width:19px;height:19px}
 .dicebtn.on{color:var(--acc);border-color:var(--acc);background:var(--soft);box-shadow:0 0 18px var(--soft)}
+
+.spcls{padding:8px 0;border-bottom:1px solid var(--line2,#2a2633);gap:10px}
+.spcls>span{font-weight:700;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.clstag{font:inherit;font-size:12.5px;font-weight:800;padding:6px 11px;border-radius:999px;border:1px solid var(--cc);color:var(--cc);background:color-mix(in srgb,var(--cc) 14%,transparent);white-space:nowrap}
 </style>
 </head>
 <body>
@@ -10978,6 +10982,23 @@ function spcAb(B, D) {
   if (['INT', 'WIS', 'CHA'].includes(D.scAb)) return D.scAb;
   return ['INT', 'WIS', 'CHA'].reduce((a, b) => (D.m[b] > D.m[a] ? b : a), sk === 'elf' && spcOpt(B) === 'High' ? 'INT' : 'CHA');
 }
+// multiclass casters whose classes use different abilities: each hand-picked spell says which class it's from
+function spCasters(B) {
+  return B.cls.filter(c => HC[c.n] && (HC[c.n].ab || /Eldritch Knight|Arcane Trickster/i.test(c.sub || ''))).map(c => ({ n: c.n, ab: HC[c.n].ab || 'INT' }));
+}
+const spNeedCls = B => new Set(spCasters(B).map(c => c.ab)).size > 1;
+function spClsOf(B, n) {
+  const C = spCasters(B),
+    had = B.spCls && B.spCls[n];
+  if (had && C.some(c => c.n === had)) return had;
+  // a first guess: the class whose ready-made character knows it
+  const k = n.toLowerCase(),
+    g = C.find(c => {
+      const dm = DEMO[clsKey(c.n)];
+      return dm && (dm.spells || []).some(s => s.n.toLowerCase() === k);
+    });
+  return (g || C[0] || {}).n;
+}
 const SPC_OPTS = {
   dragonborn: ['Draconic ancestry', Object.keys(DRAGONS)],
   goliath: ['Giant ancestry', ['Stone', 'Fire', 'Frost', 'Hill', 'Storm', 'Cloud']],
@@ -12155,12 +12176,13 @@ function hbBuild(B) {
         ...(f.id.startsWith('pal.') ? { cls: 'Paladin' } : f.id.startsWith('rng.') ? { cls: 'Ranger' } : {})
       })
     );
+  const tagCls = spNeedCls(B);
   (B.sp || []).forEach(s => {
     if (typeof s === 'string') {
       if (spells.some(x => x.n === s)) return;
       const l = lib.find(x => x.n === s);
-      if (l) spells.push(JSON.parse(JSON.stringify(l)));
-    } else spells.push({ ...s, custom: true });
+      if (l) spells.push({ ...JSON.parse(JSON.stringify(l)), ...(tagCls ? { cls: spClsOf(B, s) } : {}) });
+    } else spells.push({ ...s, custom: true, ...(tagCls ? { cls: spClsOf(B, s.n) } : {}) });
   });
   // the High Elf cantrip: cast with INT, whatever the class
   if (sk === 'elf' && so === 'High') {
@@ -12190,8 +12212,11 @@ function hbBuild(B) {
   });
   // the shared spell list was written for one class: "+ CHA" becomes the casting ability of whoever has it
   spells.forEach(x => {
-    if (x.custom || !x.d) return;
     const ab = x.spc || (x.cls && HC[x.cls] && HC[x.cls].ab) || D.scAb;
+    if (x.custom || !x.d) {
+      if (x.cls && ab && ab !== D.scAb && x.atk == null) (x.atk = p + m[ab]), (x.dc = 8 + p + m[ab]);
+      return;
+    }
     if (ab) x.d = x.d.replace(/\+ ?(CHA|WIS|INT)\b/g, a => a.replace(/CHA|WIS|INT/, ab));
     // a multiclass caster: a spell from a class with a different casting ability gets that class's numbers
     if (!x.spc && ab && ab !== D.scAb && x.atk == null) (x.atk = p + m[ab]), (x.dc = 8 + p + m[ab]);
@@ -13406,7 +13431,11 @@ function hbSpells() {
     top = hbMaxSp(B),
     chosen = B.sp || [];
   return `${
-    D.scAb
+    D.scAb && spNeedCls(B)
+      ? `<div class="card" style="margin:6px 0 10px">${spCasters(B)
+          .map(c => `<div class="row between"><span class="sm mut">${esc(c.n)} · ${c.ab}</span><b>DC ${8 + D.prof + D.m[c.ab]} · ${sgn(D.prof + D.m[c.ab])}</b></div>`)
+          .join('')}</div>`
+      : D.scAb
       ? `<div class="card" style="margin:6px 0 10px"><div class="row between"><span class="sm mut">Spell save DC</span><b>${8 + D.prof + D.m[D.scAb]}</b></div><div class="row between"><span class="sm mut">Spell attack</span><b>${sgn(D.prof + D.m[D.scAb])}</b></div><div class="row between"><span class="sm mut">Ability</span><b>${D.scAb}</b></div></div>`
       : `<p class="sm mut" style="line-height:1.5;margin:6px 0 12px">Not a spellcaster. If you have spells from your species or a feat, add them here; otherwise skip this step.</p>`
   }
@@ -13414,7 +13443,16 @@ function hbSpells() {
   ${(() => {
     const auto = new Set(B.cls.flatMap(c => subSpellList(c.n, c.sub, c.lvl, B.ed, B.land).map(x => x.n))),
       own = chosen.map((s, i) => [typeof s === 'string' ? s : s.n, i]).filter(([n]) => !auto.has(n));
-    return own.length ? `<div class="xs sec">Your spells · ${own.length}</div><div class="filters" style="flex-wrap:wrap">${own.map(([n, i]) => `<button class="on" data-act="hbSpDel" data-arg="${i}">${esc(n)} ✕</button>`).join('')}</div>` : '';
+    if (!own.length) return '';
+    if (spNeedCls(B))
+      return `<div class="xs sec">Your spells · ${own.length}</div><p class="sm mut" style="line-height:1.45;margin:4px 0 8px">Your classes cast with different abilities. Tap a class to switch which one a spell comes from.</p>${own
+        .map(([n, i]) => {
+          const c = spClsOf(B, n),
+            ab = (spCasters(B).find(x => x.n === c) || {}).ab;
+          return `<div class="row between spcls"><span>${esc(n)}</span><div class="row" style="gap:6px"><button class="clstag" style="--cc:${CLS[clsKey(c)].c}" data-act="hbSpCls" data-arg="${encodeURIComponent(n)}">${esc(c)} · ${ab} ${sgn(D.prof + D.m[ab])}</button><button class="iconbtn" style="width:32px;height:32px" data-act="hbSpDel" data-arg="${i}" aria-label="Remove ${esc(n)}">✕</button></div></div>`;
+        })
+        .join('')}`;
+    return `<div class="xs sec">Your spells · ${own.length}</div><div class="filters" style="flex-wrap:wrap">${own.map(([n, i]) => `<button class="on" data-act="hbSpDel" data-arg="${i}">${esc(n)} ✕</button>`).join('')}</div>`;
   })()}
   <div class="xs sec">Add from the list</div>
   <input class="field" placeholder="Search spells" value="${esc(HQ)}" oninput="HQ=this.value;$('#hbList').innerHTML=hbSpellList()">
@@ -13893,6 +13931,14 @@ Object.assign(ACT, {
     const y = $('#sbody').scrollTop;
     render();
     $('#sbody').scrollTop = y;
+  },
+  hbSpCls(n) {
+    n = decodeURIComponent(n);
+    const C = spCasters(HB),
+      j = C.findIndex(c => c.n === spClsOf(HB, n));
+    HB.spCls = HB.spCls || {};
+    HB.spCls[n] = C[(j + 1) % C.length].n;
+    render();
   },
   hbSpDel(i) {
     HB.sp.splice(+i, 1);
