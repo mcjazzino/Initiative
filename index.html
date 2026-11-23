@@ -12548,6 +12548,7 @@ function hfMore(B, D, F, add, res) {
         { d14: 'Until the end of your next turn: you and allies within 30 ft have advantage on saves against being Frightened or Charmed.' }
       );
     if (k >= (o ? 20 : 18)) pas('bard.superior', 'Superior Inspiration');
+    if (k >= 20 && !o) pas('bard.words', 'Words of Creation', 'Power Word Heal and Power Word Kill are always prepared; when you cast either, you can target a second creature within 10 ft of the first.');
   }
 
   if ((k = lv('Cleric'))) {
@@ -12984,6 +12985,36 @@ function hfSubs(B, D, F, add, res) {
   /* ---------- Bard ---------- */
   if ((k = lv('Bard')) >= 3) {
     const die = k >= 15 ? 'd12' : k >= 10 ? 'd10' : k >= 5 ? 'd8' : 'd6';
+    if (is('Bard', /Lore/i) && k >= 14) add('sub.lore14', 'Peerless Skill', 'F', o ? 'When you make an ability check: spend a Bardic Inspiration and add the die.' : "When you fail an ability check or attack roll: spend a Bardic Inspiration and add the die. If it still fails, the use isn't spent.", { res: 'insp' });
+    if (is('Bard', /Valor/i)) {
+      if (k >= 6 && !o) pas('sub.valor6', 'Extra Attack', 'You can cast one of your cantrips that takes an Action in place of one of the attacks.');
+      if (k >= 14) add('sub.valor14', 'Battle Magic', 'B', o ? 'When you use your Action to cast a bard spell: one weapon attack.' : 'After you cast a spell that takes an Action: one weapon attack.');
+    }
+    if (is('Bard', /Swords/i)) {
+      pas('sub.swords3', 'Blade Training', 'Proficiency with medium armour and the scimitar; your weapon can be your spellcasting focus. A fighting style (Dueling or Two-Weapon Fighting): pick it under Feats & fighting styles.');
+      add('sub.swords3f', 'Blade Flourish', 'F', `When you take the Attack action: +10 ft speed this turn. Once per turn, when you hit with a weapon: ${k >= 14 ? 'roll a d6 (Master’s Flourish) or ' : ''}spend a Bardic Inspiration and roll the ${die} for a flourish. Defensive: +the roll damage, and +the roll to your AC until your next turn. Slashing: +the roll damage to the target and to another creature within 5 ft of you. Mobile: +the roll damage, push it 5 ft + the roll, and move next to it as a Reaction.`, { res: 'insp', once: 'flourish' });
+    }
+    if (is('Bard', /Eloquence/i)) {
+      pas('sub.elo3', 'Silver Tongue', 'A Persuasion or Deception check of 9 or lower on the d20 counts as a 10.');
+      add('sub.elo3u', 'Unsettling Words', 'B', `Spend a Bardic Inspiration and roll the ${die}: a creature within 60 ft subtracts it from the next save it makes before the start of your next turn.`, { res: 'insp' });
+      if (k >= 6) pas('sub.elo6', 'Unfailing Inspiration', 'A creature that adds your Bardic Inspiration die and still fails keeps the die. Your speech is understood by any creature that knows a language (Universal Speech).');
+      if (k >= 14) {
+        res('infect', 'Infectious Inspiration', mx(m.CHA), 'long');
+        add('sub.elo14', 'Infectious Inspiration', 'R', 'When a creature within 60 ft succeeds thanks to your Bardic Inspiration die: give another creature within 60 ft a Bardic Inspiration, without spending a use.', { res: 'infect' });
+      }
+    }
+    if (is('Bard', /Whispers/i)) {
+      add('sub.whis3', 'Psychic Blades', 'F', `Once per turn, when you hit with a weapon attack: spend a Bardic Inspiration for +${k >= 15 ? 8 : k >= 10 ? 5 : k >= 5 ? 3 : 2}d6 psychic damage.`, { res: 'insp', once: 'blades' });
+      pas('sub.whis3w', 'Words of Terror', `After talking with a humanoid alone for 1 minute: WIS save DC ${dc('CHA')} or it's Frightened of you or a creature you choose for 1 hour.`);
+      if (k >= 6) {
+        res('mantle', 'Mantle of Whispers', 1, 'short');
+        add('sub.whis6', 'Mantle of Whispers', 'R', "When a humanoid dies within 30 ft: capture its shadow and, as an Action later, take on its appearance for 1 hour.", { res: 'mantle' });
+      }
+      if (k >= 14) {
+        res('shadowlore', 'Shadow Lore', 1, 'long');
+        add('sub.whis14', 'Shadow Lore', 'A', `A creature within 30 ft that understands a language: WIS save DC ${dc('CHA')} or it's Charmed by you for 8 hours, believing you know its darkest secret.`, { res: 'shadowlore' });
+      }
+    }
     if (is('Bard', /Dance/i)) {
       pas('sub.dance3', 'Dazzling Footwork', `Unarmoured: AC 10+DEX+CHA. Unarmed strikes use DEX and deal ${die}+DEX bludgeoning. Whenever you use Bardic Inspiration, make an unarmed strike as part of it.`);
       if (k >= 6) {
@@ -12997,7 +13028,9 @@ function hfSubs(B, D, F, add, res) {
         'sub.glam3',
         'Mantle of Inspiration',
         'B',
-        `Spend a Bardic Inspiration: up to ${mx(m.CHA)} creatures within 60 ft each gain ${2 * (k >= 15 ? 6 : k >= 10 ? 5 : k >= 5 ? 4 : 3)} temporary HP and can use their reaction to move up to their speed without provoking.`,
+        o
+          ? `Spend a Bardic Inspiration: up to ${mx(m.CHA)} creatures within 60 ft each gain ${k >= 15 ? 14 : k >= 10 ? 11 : k >= 5 ? 8 : 5} temporary HP and can use their reaction to move up to their speed without provoking.`
+          : `Spend a Bardic Inspiration and roll the ${die}: up to ${mx(m.CHA)} other creatures within 60 ft each gain twice the roll in temporary HP and can use their reaction to move up to their speed without provoking.`,
         { res: 'insp' }
       );
       if (k >= 6) {
@@ -13889,6 +13922,7 @@ function hbAC(B) {
     if (isMA) opts.push([{ n: 'Mage Armor (spell, 8 hours)', v: 13, base: true, ma: true }, { n: 'Dexterity', v: m.DEX }]);
     if (D.lv('Barbarian')) opts.push([{ n: 'Unarmored Defense (Barbarian)', v: 10, base: true }, { n: 'Dexterity', v: m.DEX }, { n: 'Constitution', v: m.CON }]);
     if (D.lv('Monk') && !B.shield) opts.push([{ n: 'Unarmored Defense (Monk)', v: 10, base: true }, { n: 'Dexterity', v: m.DEX }, { n: 'Wisdom', v: m.WIS }]);
+    if (D.lv('Bard') >= 3 && /Dance/i.test(D.sub('Bard')) && !B.shield) opts.push([{ n: 'Dazzling Footwork (College of Dance)', v: 10, base: true }, { n: 'Dexterity', v: m.DEX }, { n: 'Charisma', v: m.CHA }]);
     if (B.cls.some(c => c.n === 'Sorcerer' && /dragon|draconic/i.test(c.sub || '')))
       opts.push(
         B.ed === '2014'
@@ -14305,12 +14339,14 @@ function wpnProf(B, n) {
     if (any(/Rogue|Bard/) && /^(Hand Crossbow|Longsword|Rapier|Shortsword)$/.test(n)) return true;
     if (any(/Monk/) && n === 'Shortsword') return true;
     if (any(/Druid/) && n === 'Scimitar') return true;
-    if (sub(/War Domain|Tempest|Twilight|Hexblade|Valor|Swords/)) return true;
+    if (sub(/War Domain|Tempest|Twilight|Hexblade|Valor/)) return true;
+    if (sub(/Swords/) && n === 'Scimitar') return true;
     return false;
   }
   if (any(/Rogue/) && /\b[FL]\b/.test(props)) return true;
   if (any(/Monk/) && /\bL\b/.test(props)) return true;
-  if (sub(/Valor|Swords/)) return true;
+  if (sub(/Valor/)) return true;
+  if (sub(/Swords/) && n === 'Scimitar') return true; // College of Swords: medium armour and the scimitar
   return false;
 }
 let HCFO = false; // keep the add-a-feature form open while someone is adding several
@@ -16061,6 +16097,12 @@ function rollCard(m) {
     const m = (f.d || '').match(/(\d*d\d+(?:\s*\+\s*\d+)?)\s+(necrotic or radiant|[a-z]+)?/i);
     if (m) auto(`${f.n}: +${m[1].replace(/\s/g, '')}${m[2] ? ' ' + m[2].replace('necrotic or radiant', 'radiant') : ''}`, m[1].replace(/\s/g, ''), { once: key });
   });
+  // on-hit choices that spend a use (Psychic Blades, Blade Flourish): offered while unused this turn
+  feats().forEach(f => {
+    if (!/^(blades|flourish)$/.test(f.once || '') || c.flags[f.once] || !f.res || !resOK(f.res)) return;
+    const m = f.once === 'blades' ? (f.d || '').match(/\+(\d+d6) psychic/) : (f.d || '').match(/roll the (d\d+)/);
+    if (m) RC.notes.push({ html: '', ex: { label: f.once === 'blades' ? `Psychic Blades: +${m[1]} psychic (a Bardic Inspiration)` : `Blade Flourish: +1${m[1]} (a Bardic Inspiration; pick the flourish)`, expr: f.once === 'blades' ? m[1] : '1' + m[1], once: f.once, res: f.res } });
+  });
   // a crit's extra weapon dice (not doubled)
   {
     const die = (RC.dice.match(/d(\d+)/) || [])[1];
@@ -16185,7 +16227,21 @@ function rollExtra(i) {
   if (RC.extras[i]) {
     delete RC.extras[i];
     if (e.auto) RC.off[i] = true;
+    // un-ticking a choice that spent a use gives the use back
+    if (e.res && e.spent) {
+      const r = CH().res[e.res];
+      if (r) r.cur = Math.min(r.max, r.cur + 1);
+      e.spent = false;
+      if (e.once) delete C().flags[e.once];
+      save();
+    }
   } else {
+    if (e.res && !e.spent) {
+      if (!resOK(e.res)) return toast('No uses left');
+      spendRes(e.res);
+      e.spent = true;
+      save();
+    }
     delete RC.off[i];
     RC.extras[i] = rollExpr(e.expr, e.critOnly ? false : RC.crit);
     if (e.once) C().flags[e.once] = true;
