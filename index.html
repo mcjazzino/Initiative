@@ -264,6 +264,9 @@ body.sheet-open #toast.on{transform:translate(-50%,0)}
 .hbabc,.hbrow3 .card{text-align:center;padding:10px 6px;margin:0}
 .hbnum{width:100%;background:none;border:0;outline:none;text-align:center;font-size:22px;font-weight:800;color:inherit;padding:2px 0;font-family:inherit}
 .hbnum:focus{color:var(--acc)}
+/* the browser's own up/down arrows (desktop): we have − and + buttons instead */
+.hbnum{-moz-appearance:textfield;appearance:textfield}
+.hbnum::-webkit-inner-spin-button,.hbnum::-webkit-outer-spin-button{-webkit-appearance:none;appearance:none;margin:0}
 .hbabc{position:relative;padding:10px 4px}
 .hbstep{display:flex;align-items:center;justify-content:center;gap:2px;margin:4px 0 2px}
 .hbstep .hbnum{flex:1;min-width:0;padding:2px 0}
