@@ -79,6 +79,9 @@ h2{font-family:Cinzel,serif;font-size:24px;margin:0 0 6px}
 .fx small{font-size:11.5px;color:var(--mut);font-weight:700}
 .act small em{color:var(--acc);font-style:normal;font-weight:800}
 
+.fx span.rage{background:rgba(229,83,47,.16);color:#ff8a65}
+.act.on{border-color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc)}
+
 </style>
 </head>
 <body>
@@ -380,7 +383,13 @@ function kit(ch) {
       rebuke: sp('hellish rebuke'),
       uncanny: (ch.feats || []).some(f => /^Uncanny Dodge/.test(f.n || '')) || (ch.cls === 'rogue' && !ch.multi && (ch.level || 0) >= 5)
     };
-  return { m, sc, spells, pots, second, R };
+  // the barbarian's toolkit
+  const bc = (ch.classes || []).find(c => /Barbarian/i.test(c.n || '')),
+    bl = bc ? +bc.lvl || 0 : ch.cls === 'barbarian' ? ch.level || 0 : 0,
+    rf = (ch.feats || []).find(f => /^Rage$/i.test(f.n || '')),
+    rr = rf && rf.res && ch.res ? ch.res[rf.res] : null,
+    B = bl && rf ? { lvl: bl, sub: (bc && bc.sub) || '', uses: rr ? rr.max : Infinity, bonus: bl >= 16 ? 4 : bl >= 9 ? 3 : 2, ed14: ch.edition === '2014' } : null;
+  return { m, sc, spells, pots, second, R, B };
 }
 
 /* ---------- the fight ---------- */
@@ -397,9 +406,9 @@ function startFight(ch, mon) {
     ch,
     K,
     mon,
-    me: { hp: ch.hp ? ch.hp.max : 10, max: ch.hp ? ch.hp.max : 10, slots: JSON.parse(JSON.stringify(ch.slots || {})), pots: K.pots.reduce((t, p) => t + (+p.q || +p.qty || 1), 0), second: K.second ? 1 : 0, prone: false, dodge: false, react: true, acb: 0, absorbRes: '', absorbHit: null, conc: '', cq: [] },
+    me: { hp: ch.hp ? ch.hp.max : 10, max: ch.hp ? ch.hp.max : 10, slots: JSON.parse(JSON.stringify(ch.slots || {})), pots: K.pots.reduce((t, p) => t + (+p.q || +p.qty || 1), 0), second: K.second ? 1 : 0, prone: false, dodge: false, react: true, acb: 0, absorbRes: '', absorbHit: null, conc: '', cq: [], rage: false, rageUses: K.B ? K.B.uses : 0, rageAct: false, reckless: false, frenzy: false, relentDC: 10 },
     fx: {}, // lasting spells in play
-    them: { hp: mon.hp, max: mon.hp, breath: !!mon.breath },
+    them: { hp: mon.hp, max: mon.hp, breath: !!mon.breath, sunder: 0, stagger: false },
     close: false, // start about 30 ft apart
     round: 1,
     order: pI >= mI ? ['me', 'them'] : ['them', 'me'],
@@ -427,6 +436,16 @@ function beginTurn() {
     if (F.me.acb) log('Your Shield fades.', 'sys');
     F.me.acb = 0;
     F.me.absorbRes = '';
+    F.me.reckless = false;
+    // rage ends if you haven't attacked or taken damage since your last turn (Persistent Rage at 15 keeps it)
+    if (F.me.rage) {
+      if (!F.me.rageAct && F.K.B.lvl < 15) {
+        F.me.rage = false;
+        log(`Your rage ends: you didn't attack or take damage since your last turn.${F.me.frenzy ? ' Frenzy leaves you with a level of exhaustion.' : ''}`, 'sys');
+        F.me.frenzy = false;
+      }
+      F.me.rageAct = false;
+    }
     if (F.me.prone) {
       F.me.prone = false;
       F.t.move = false;
@@ -459,34 +478,89 @@ function hurt(target, amt, type) {
   if ((F.ch.immune || []).includes(type)) return { amt: 0, note: ' (you’re immune)' };
   let a = amt,
     note = '';
+  const rageRes = F.me.rage && (['bludgeoning', 'piercing', 'slashing'].includes(type) || (F.ch.rageResist || []).includes(type));
   if (F.me.absorbRes && F.me.absorbRes === type) (a = Math.floor(a / 2)), (note = ' (Absorb Elements: halved)');
+  else if (rageRes) (a = Math.floor(a / 2)), (note = ' (Rage: halved)');
   else if ((F.ch.resist || []).some(r => new RegExp(type, 'i').test(r))) (a = Math.floor(a / 2)), (note = ' (you resist: halved)');
+  if (F.me.rage && a) F.me.rageAct = true;
   F.me.hp = Math.max(0, F.me.hp - a);
+  // Relentless Rage (11): a CON save to stay up, DC 10 and +5 each time
+  if (!F.me.hp && F.me.rage && F.K.B.lvl >= 11) {
+    const sv = mySave(2),
+      ok = sv.tot >= F.me.relentDC,
+      dcWas = F.me.relentDC;
+    F.me.relentDC += 5;
+    if (ok) {
+      F.me.hp = F.K.B.ed14 ? 1 : 2 * F.K.B.lvl;
+      note += ` · <b>Relentless Rage</b>: CON save ${sv.txt} = ${sv.tot} vs DC ${dcWas}, you stay up at ${F.me.hp} HP`;
+    } else note += ` · Relentless Rage: CON save ${sv.txt} = ${sv.tot} vs DC ${dcWas}, you fall`;
+  }
   if (!F.me.hp) F.over = 'lose';
   if (a && F.me.conc) F.me.cq.push(a);
   return { amt: a, note };
 }
 
 /* your attacks and spells */
-function weaponAttack(i) {
+function weaponAttack(i, free) {
   const w = F.ch.weapons[i],
     ranged = !!w.ranged;
   if (!ranged && !F.close) return toastA('Too far for a melee attack: move in first.');
-  if (F.t.attacksLeft <= 0) {
-    if (!F.t.action) return;
-    F.t.action = false;
-    F.t.attacksLeft = F.ch.attacks || 1;
+  if (free === 'frenzy') {
+    if (!F.t.bonus) return;
+    F.t.bonus = false;
+  } else if (!free) {
+    if (F.t.attacksLeft <= 0) {
+      if (!F.t.action) return;
+      F.t.action = false;
+      F.t.attacksLeft = F.ch.attacks || 1;
+    }
+    F.t.attacksLeft--;
   }
-  F.t.attacksLeft--;
-  const dis = ranged && F.close,
-    A = myAttack(w.hit, dis, 'shooting in melee'),
+  F.t.attacked = true;
+  const B = F.K.B,
+    strA = w.str !== false && !ranged,
+    brutal = F.t.brutal && strA && F.me.reckless,
+    dis = ranged && F.close,
+    A = myAttack(w.hit + (F.them.sunder || 0), dis, 'shooting in melee', F.me.reckless && strA && !brutal && who() === 'me' ? 'Reckless' : ''),
     crit = A.crit,
     hit = A.hit;
-  let line = `<b>${esc(w.n)}</b>: ${A.txt} = <b>${A.tot}</b> vs AC ${F.mon.ac}: `;
+  if (F.them.sunder) F.them.sunder = 0;
+  if (brutal) F.t.brutal = false;
+  if (F.me.rage) F.me.rageAct = true;
+  let line = `<b>${esc(w.n)}</b>${free === 'frenzy' ? ' (Frenzy)' : free === 'ret' ? ' (Retaliation)' : ''}: ${A.txt}${brutal ? ' (Brutal Strike: no advantage)' : ''} = <b>${A.tot}</b> vs AC ${F.mon.ac}: `;
   if (hit) {
-    const dm = roll(w.dmg, crit),
-      h = hurt('them', dm.total, (w.type || '').split(',')[0].trim());
-    line += `${crit ? '<b>critical hit!</b> ' : 'hit! '}${dm.txt.join(' ')} = <b>${h.amt}</b> ${esc(w.type || '')}${h.note}`;
+    const tp = (w.type || '').split(',')[0].trim();
+    // Brutal Critical (2014): extra weapon dice on a melee crit
+    let dexp = w.dmg;
+    if (crit && strA && B && B.ed14 && B.lvl >= 9) {
+      const die = (w.dmg.match(/d(\d+)/) || [])[1];
+      if (die) dexp += `+${B.lvl >= 17 ? 3 : B.lvl >= 13 ? 2 : 1}d${die}`;
+    }
+    const dm = roll(dexp, crit),
+      rb = F.me.rage && strA ? B.bonus : 0,
+      h = hurt('them', dm.total + rb, tp);
+    line += `${crit ? '<b>critical hit!</b> ' : 'hit! '}${dm.txt.join(' ')}${rb ? ` + Rage ${rb}` : ''} = <b>${h.amt}</b> ${esc(w.type || '')}${h.note}`;
+    if (B && F.me.rage && strA && !F.t.firstHit && !F.over) {
+      F.t.firstHit = true;
+      // Berserker Frenzy (2024): +Xd6 on the first Strength hit while reckless
+      if (/Berserker/i.test(B.sub) && !B.ed14 && F.me.reckless) {
+        const x = roll(`${B.bonus}d6`, crit),
+          h2 = hurt('them', x.total, tp);
+        line += ` + Frenzy ${x.txt.join(' ')} = <b>${h2.amt}</b> ${esc(tp)}${h2.note}`;
+      }
+      // Zealot Divine Fury: first hit each turn
+      if (/Zealot/i.test(B.sub) && !F.over) {
+        const x = roll(`1d6+${Math.floor(B.lvl / 2)}`, crit),
+          h2 = hurt('them', x.total, 'radiant');
+        line += ` + Divine Fury ${x.txt.join(' ')} = <b>${h2.amt}</b> radiant${h2.note}`;
+      }
+    }
+    if (brutal && !F.over) {
+      const x = roll(`${B.lvl >= 17 ? 2 : 1}d10`, crit),
+        h2 = hurt('them', x.total, tp);
+      line += ` + Brutal Strike ${x.txt.join(' ')} = <b>${h2.amt}</b> ${esc(tp)}${h2.note}`;
+      if (!F.over) F.q.push(() => brutalRider());
+    }
     if (!ranged && F.me.absorbHit && !F.over) {
       const X = F.me.absorbHit,
         ex = roll(X.dice, crit),
@@ -496,13 +570,60 @@ function weaponAttack(i) {
     }
     line += riders('weapon', crit, (w.type || '').split(',')[0].trim());
     line += '.';
-  } else line += r.nat === 1 ? 'natural 1, miss.' : 'miss.';
+  } else line += A.nat === 1 ? 'natural 1, miss.' : 'miss.';
   log(line, 'me');
+  if (F.q.length) return run();
   show();
 }
+/* ---------- barbarian ---------- */
+function rage(frenzy) {
+  const B = F.K.B;
+  if (!B || F.me.rage || !F.t.bonus || F.me.rageUses <= 0) return;
+  F.t.bonus = false;
+  F.me.rageUses--;
+  F.me.rage = true;
+  F.me.rageAct = true;
+  F.me.frenzy = !!frenzy;
+  if (F.me.conc) dropConc('Raging breaks your concentration:');
+  log(`<b>Rage</b>${frenzy ? ' (Frenzy)' : ''}: +${B.bonus} damage on Strength attacks, resistance to bludgeoning, piercing and slashing${(F.ch.rageResist || []).length ? ' (and more: Bear spirit)' : ''}, advantage on Strength saves.${isFinite(F.me.rageUses) ? ` ${F.me.rageUses} left.` : ''}`, 'me');
+  show();
+}
+function reckless() {
+  if (!F.K.B || F.K.B.lvl < 2 || F.t.attacked || F.me.reckless) return;
+  F.me.reckless = true;
+  log('<b>Reckless Attack</b>: advantage on your Strength attacks this turn, but the monster has advantage against you until your next turn.', 'me');
+  show();
+}
+function brutalToggle() {
+  if (!F.me.reckless || F.K.B.ed14 || F.K.B.lvl < 9) return;
+  F.t.brutal = !F.t.brutal;
+  show();
+}
+// Brutal Strike: pick the extra effect after the hit
+function brutalRider() {
+  const lv = F.K.B.lvl,
+    o = [
+      { b: 'Forceful Blow', s: 'push it 15 ft away (you can follow without provoking)', fn: () => { F.close = false; log('Forceful Blow: it’s knocked 15 ft back.', 'me'); } },
+      { b: 'Hamstring Blow', s: 'its speed drops by 15 ft until your next turn', fn: () => log('Hamstring Blow: its speed drops by 15 ft.', 'me') }
+    ];
+  if (lv >= 13)
+    o.push(
+      { b: 'Staggering Blow', s: 'disadvantage on its next save, no opportunity attacks', fn: () => { F.them.stagger = true; log('Staggering Blow: it has disadvantage on its next save.', 'me'); } },
+      { b: 'Sundering Blow', s: '+5 to your next attack against it', fn: () => { F.them.sunder = 5; log('Sundering Blow: +5 to the next attack against it.', 'me'); } }
+    );
+  ask('Brutal Strike: choose its effect.', o, () => {}, 'No effect', 'Brutal Strike');
+}
+// Berserker Retaliation: hit back when something next to you hurts you
+function retaliateCheck(took) {
+  const B = F.K.B;
+  if (!took || !B || F.over || !F.close || !F.me.react || !/Berserker/i.test(B.sub) || B.lvl < (B.ed14 ? 14 : 10)) return;
+  const wi = (F.ch.weapons || []).findIndex(w => !w.ranged);
+  if (wi < 0) return;
+  ask(`The ${esc(F.mon.n)} hurt you.`, [{ b: 'Retaliation', s: `one attack with your ${esc(F.ch.weapons[wi].n)}`, fn: () => { F.me.react = false; weaponAttack(wi, 'ret'); } }], () => {});
+}
 // your attack roll: Faerie Fire gives advantage, Bless adds 1d4
-function myAttack(bonus, dis, why) {
-  const adv = !!F.fx.ff,
+function myAttack(bonus, dis, why, advWhy) {
+  const adv = !!F.fx.ff || !!advWhy,
     r = d20(modeOf(adv, dis)),
     b = F.fx.bless ? d(4) : 0,
     tot = r.nat + bonus + b,
@@ -511,15 +632,19 @@ function myAttack(bonus, dis, why) {
     tot,
     crit,
     hit: crit || (r.nat !== 1 && tot >= F.mon.ac),
-    txt: `d20 ${r.dice.join(' & ')}${adv && !dis ? ' (advantage: Faerie Fire)' : ''}${dis && !adv ? ` (disadvantage: ${why})` : ''} ${sgn(bonus)}${b ? ` + Bless ${b}` : ''}`
+    nat: r.nat,
+    txt: `d20 ${r.dice.join(' & ')}${adv && !dis ? ` (advantage: ${advWhy || 'Faerie Fire'})` : ''}${dis && !adv ? ` (disadvantage: ${why})` : ''} ${sgn(bonus)}${b ? ` + Bless ${b}` : ''}`
   };
 }
 // your saving throw: Bless adds 1d4
 function mySave(ab, adv) {
+  const B = F.K.B,
+    why = adv ? '' : ab === 0 && F.me.rage ? 'Rage' : ab === 1 && B && B.lvl >= 2 ? 'Danger Sense' : '';
+  if (why) adv = true;
   const r = d20(adv ? 'adv' : ''),
     sv = F.ch.saves ? F.ch.saves[ab] : F.K.m[ab],
     b = F.fx.bless ? d(4) : 0;
-  return { tot: r.nat + sv + b, txt: `d20 ${r.dice.join(' & ')} ${sgn(sv)}${b ? ` + Bless ${b}` : ''}` };
+  return { tot: r.nat + sv + b, txt: `d20 ${r.dice.join(' & ')}${why ? ` (advantage: ${why})` : ''} ${sgn(sv)}${b ? ` + Bless ${b}` : ''}` };
 }
 // extra damage your lasting spells add to a hit
 function riders(kind, crit, wtype) {
@@ -568,6 +693,7 @@ function castSpell(i, key) {
     lvl = s.lvl || 0,
     isB = s.t === 'B';
   if (isB ? !F.t.bonus : !F.t.action) return;
+  if (F.me.rage) return toastA("You can't cast spells while raging.");
   if (S.melee && !F.close) return toastA('Too far: move in first.');
   if (S.kind === 'last' && F.fx[S.L.id]) return toastA(`${s.n} is already going.`);
   let at = lvl;
@@ -627,7 +753,7 @@ function castSpell(i, key) {
     log(`<b>${esc(s.n)}</b>${tag}: ${L.join(' + ')} = <b>${h.amt}</b> ${esc(S.type)}${h.note}, no roll needed.`, 'me');
   } else if (S.kind === 'save') {
     const sv = monSave(S.ab),
-      r = d20(),
+      r = { nat: monSaveRoll() },
       tot = r.nat + sv,
       ok = tot >= S.dc,
       dice = S.hurt && F.them.hp < F.them.max ? S.hurt : X.dmg,
@@ -679,7 +805,7 @@ function startLasting(S, at, X, tag) {
   const say = `<b>${esc(s.n)}</b>${tag}${conc ? ' (concentration)' : ''}: `;
   if (L.id === 'ff') {
     const sv = monSave(1),
-      r = d20(),
+      r = { nat: monSaveRoll() },
       tot = r.nat + sv,
       ok = tot >= S.dc;
     log(say + `${F.mon.n} DEX save d20 ${r.nat} ${sgn(sv)} = ${tot} vs DC ${S.dc}: ${ok ? 'it dodges the light.' : 'it’s outlined. Your attacks have advantage.'}`, 'me');
@@ -723,7 +849,7 @@ function auraHit(id) {
   if (!E || F.over || E.last === k || (id === 'sg' && !F.close)) return;
   E.last = k;
   const sv = monSave(L.ab),
-    r = d20(),
+    r = { nat: monSaveRoll() },
     tot = r.nat + sv,
     ok = tot >= E.dc,
     dm = roll(E.dmg),
@@ -743,6 +869,11 @@ function spendSlot(lvl) {
   if (!k) return 0;
   F.me.slots[k].used = (F.me.slots[k].used || 0) + 1;
   return slotLv(k);
+}
+function monSaveRoll(i) {
+  const st = F.them.stagger;
+  F.them.stagger = false;
+  return st ? Math.min(d(20), d(20)) : d(20);
 }
 function monSave(i) {
   const sv = F.mon.sv || {};
@@ -868,7 +999,7 @@ function rebukeCheck(took) {
         fn: () => {
           const lv = useReaction(sp),
             sv = monSave(1),
-            r = d20(),
+            r = { nat: monSaveRoll() },
             tot = r.nat + sv,
             ok = tot >= DC,
             dm = roll(`${lv + 1}d10`),
@@ -885,14 +1016,14 @@ function rebukeCheck(took) {
 /* the monster's turn */
 function monsterAttack(a) {
   if (F.over) return;
-  const adv = F.me.prone && a.melee,
+  const adv = (F.me.prone && a.melee) || F.me.reckless,
     dis = F.me.dodge || (a.ranged && F.close) || (F.me.prone && a.ranged),
     r = d20(modeOf(adv, dis)),
     tot = r.nat + a.hit,
     crit = r.nat === 20,
     ac = myAC(),
     hit = crit || (r.nat !== 1 && tot >= ac),
-    head = `<b>${esc(a.n)}</b>: d20 ${r.dice.join(' & ')}${adv && !dis ? ' (advantage: you’re prone)' : ''}${dis && !adv ? ' (disadvantage)' : ''} ${sgn(a.hit)} = <b>${tot}</b> vs your AC ${ac}${F.me.acb ? ' (Shield)' : ''}: `;
+    head = `<b>${esc(a.n)}</b>: d20 ${r.dice.join(' & ')}${adv && !dis ? (F.me.reckless ? ' (advantage: you attacked recklessly)' : ' (advantage: you’re prone)') : ''}${dis && !adv ? ' (disadvantage)' : ''} ${sgn(a.hit)} = <b>${tot}</b> vs your AC ${ac}${F.me.acb ? ' (Shield)' : ''}: `;
   if (!hit) return log(head + (r.nat === 1 ? 'natural 1, misses.' : 'misses.'), 'them');
   const sp = F.K.R.shield;
   // Shield: only when +5 would actually turn this hit into a miss
@@ -943,6 +1074,7 @@ function attackLands(a, head, crit) {
     log(line + '.', 'them');
     concCheck();
     rebukeCheck(took);
+    if (!F.ask) retaliateCheck(took);
   };
   const opts = damageReacts(parts, true, { apply });
   if (!opts.length) return apply('');
@@ -1067,10 +1199,34 @@ function monScreen() {
 function bar(cur, max, cls) {
   return `<div class="bar ${cls}"><i style="width:${Math.max(0, (100 * cur) / max)}%"></i></div>`;
 }
+// the barbarian's buttons: Rage, Reckless Attack, Brutal Strike, Frenzy attacks
+function barbBtns() {
+  const B = F.K.B,
+    t = F.t;
+  if (!B) return '';
+  const left = isFinite(F.me.rageUses) ? `${F.me.rageUses} left` : 'unlimited',
+    bers14 = B.ed14 && /Berserker/i.test(B.sub),
+    mw = (F.ch.weapons || []).findIndex(w => !w.ranged);
+  let h = '';
+  if (!F.me.rage) {
+    h += `<button class="act" ${!t.bonus || F.me.rageUses <= 0 ? 'disabled' : ''} onclick="rage()"><b>Rage</b><small>Bonus · +${B.bonus} damage, resist physical · ${left}</small></button>`;
+    if (bers14) h += `<button class="act" ${!t.bonus || F.me.rageUses <= 0 ? 'disabled' : ''} onclick="rage(1)"><b>Rage in a Frenzy</b><small>Bonus · plus a weapon attack as a Bonus Action each turn; exhaustion after</small></button>`;
+  }
+  if (B.lvl >= 2)
+    h += `<button class="act ${F.me.reckless ? 'on' : ''}" ${t.attacked && !F.me.reckless ? 'disabled' : ''} onclick="reckless()"><b>Reckless Attack</b><small>${F.me.reckless ? 'On: advantage on Strength attacks; it has advantage on you' : 'Before your first attack: advantage, but it gets advantage on you'}</small></button>`;
+  if (!B.ed14 && B.lvl >= 9 && F.me.reckless)
+    h += `<button class="act ${t.brutal ? 'on' : ''}" onclick="brutalToggle()"><b>Brutal Strike</b><small>${t.brutal ? 'On: your next Strength attack' : 'Give up advantage on one attack'}: +${B.lvl >= 17 ? 2 : 1}d10 and an effect</small></button>`;
+  if (bers14 && F.me.frenzy && mw >= 0)
+    h += `<button class="act" ${!t.bonus || !F.close ? 'disabled' : ''} onclick="weaponAttack(${mw},'frenzy')"><b>Frenzy attack</b><small>Bonus · ${esc(F.ch.weapons[mw].n)}</small></button>`;
+  return h;
+}
 // lasting spells in play
 function fxRow() {
   const L = Object.entries(F.fx).map(([id, E]) => `<span class="${E.conc ? 'conc' : ''}">${esc(E.n)}${E.conc ? ' ◆' : ''}</span>`);
+  if (F.me.rage) L.unshift(`<span class="rage">Raging${F.me.frenzy ? ' · Frenzy' : ''}</span>`);
+  if (F.me.reckless) L.push('<span class="rage">Reckless</span>');
   if (F.me.absorbRes) L.push(`<span>Resisting ${esc(F.me.absorbRes)}</span>`);
+  if (F.them.sunder) L.push(`<span>Sundered +${F.them.sunder}</span>`);
   return L.length ? `<div class="fx">${L.join('')}${F.me.conc ? `<small>◆ concentrating</small>` : ''}</div>` : '';
 }
 function fightScreen() {
@@ -1139,6 +1295,7 @@ function fightScreen() {
           <button class="act" ${!t.action ? 'disabled' : ''} onclick="dodge()"><b>Dodge</b><small>Action: attacks against you have disadvantage</small></button>
           ${F.me.pots ? `<button class="act" ${!(e14 ? t.action : t.bonus) ? 'disabled' : ''} onclick="drinkPotion()"><b>Healing potion ×${F.me.pots}</b><small>${e14 ? 'Action' : 'Bonus Action'}</small></button>` : ''}
           ${F.me.second ? `<button class="act" ${!t.bonus ? 'disabled' : ''} onclick="secondWind()"><b>Second Wind</b><small>Bonus: heal 1d10+${c.level}</small></button>` : ''}
+          ${barbBtns()}
         </div>
         ${rList.length ? `<p class="fine rx">Reactions: ${rList.join(', ')}. The fight stops and asks you when one applies.</p>` : ''}
         <button class="btn pri endt" onclick="endTurn()">End turn</button></div>`
