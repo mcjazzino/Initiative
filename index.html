@@ -362,6 +362,14 @@ body.hasroll #rollbg{opacity:1;pointer-events:auto}
 .spcls{padding:8px 0;border-bottom:1px solid var(--line2,#2a2633);gap:10px}
 .spcls>span{font-weight:700;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .clstag{font:inherit;font-size:12.5px;font-weight:800;padding:6px 11px;border-radius:999px;border:1px solid var(--cc);color:var(--cc);background:color-mix(in srgb,var(--cc) 14%,transparent);white-space:nowrap}
+
+.mcreq{background:var(--card);border:1px solid var(--line2,#2a2633);border-radius:14px;padding:10px 12px;margin:0 0 10px}
+.mcreq .mcl{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:5px}
+.mcreq .mcl span{font-size:12.5px;color:var(--mut);font-weight:700;margin-right:2px}
+.mcreq b{font-size:12.5px;font-weight:800;padding:3px 9px;border-radius:999px}
+.mcreq b.ok{color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
+.mcreq b.no{color:#f2c14e;background:rgba(242,193,78,.14)}
+.mcreq .mcx{font-size:12.5px;line-height:1.45;color:var(--mut)}
 </style>
 </head>
 <body>
@@ -13150,6 +13158,19 @@ function hbSet(path, v, re) {
   if (re) render();
 }
 // drag a score box up/down to change it; a tap without movement still opens typing
+// multiclassing needs 13 in each class's main score(s) (MC_REQ, shared with the import check); a reminder, never a block
+function hbMcReq(ab) {
+  const B = HB;
+  if (!B || B.cls.length < 2) return '';
+  const need = [];
+  B.cls.forEach(c => (MC_REQ[c.n] || []).forEach(g => need.some(x => x.join() === g.join()) || need.push(g)));
+  if (!need.length) return '';
+  const ok = g => g.some(a => (+ab[a] || 0) >= 13),
+    all = need.every(ok);
+  return `<div class="mcreq ${all ? 'met' : ''}"><div class="mcl"><span>Multiclassing needs</span>${need
+    .map(g => `<b class="${ok(g) ? 'ok' : 'no'}">${g.join(' or ')} 13 ${ok(g) ? '✓' : '✗'}</b>`)
+    .join('')}</div><div class="mcx">${all ? 'Every class you have needs 13 in its main score to multiclass, and you meet them all.' : 'Every class you have, old and new, needs 13 in its main score to multiclass. Tables often bend this: check with your DM.'}</div></div>`;
+}
 function hbDrag(e, a) {
   const box = e.currentTarget,
     inp = box.querySelector('input'),
@@ -13170,6 +13191,8 @@ function hbDrag(e, a) {
       v = Math.max(1, Math.min(30, v0 + d));
       inp.value = v;
       mod.textContent = sgn(Math.floor((v - 10) / 2));
+      const mc = $('#hbmc');
+      if (mc) mc.innerHTML = hbMcReq({ ...HB.ab, [a]: v });
     },
     up = () => {
       removeEventListener('pointermove', mv);
@@ -13350,6 +13373,7 @@ function hbScores() {
     sug = hbHpSuggest(B),
     skx = B.skills || {};
   return `<div class="xs sec" style="margin-top:6px">Ability scores</div>
+  <div id="hbmc">${hbMcReq(B.ab)}</div>
   <div class="hbab">${ABN.map(
     a => `<div class="card hbabc" onpointerdown="hbDrag(event,'${a}')"><div class="xs mut">${a}</div><i class="hbgrip">▲</i>
     <input class="hbnum" type="number" inputmode="numeric" min="1" max="30" value="${B.ab[a]}" onchange="hbSet('ab.${a}',Math.max(1,Math.min(30,+this.value||10)),1)">
