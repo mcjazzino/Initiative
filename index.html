@@ -6136,7 +6136,7 @@ function hpSheet() {
   return `${petHitChooser()}${S.ws ? `<div class="sm mut" style="text-align:center">In ${esc(S.ws.n)} form: damage hits your temporary HP first.</div>` : ''}<div class="hpbig">${hp.cur}<span class="mut" style="font-size:20px"> / ${hp.max}</span></div>${hp.temp ? `<div class="sm mut" style="text-align:center">+${hp.temp} temporary</div>` : ''}
   <input class="field" id="hpAmt" type="number" inputmode="numeric" placeholder="Amount" style="margin-top:14px;text-align:center;font-size:20px;font-weight:800">
   ${(() => {
-    const rs = [...(S.rage ? ['bludgeoning', 'piercing', 'slashing'] : []), ...(CH().resist || [])],
+    const rs = [...(S.rage ? ['bludgeoning', 'piercing', 'slashing', ...(CH().rageResist || [])] : []), ...(CH().resist || [])],
       im = CH().immune || [];
     const u = [...new Set(rs)].filter(x => !im.includes(x));
     return (im.length ? `<div class="banner" style="margin-top:12px">You're immune to <b>${im.join(', ')}</b> damage: take none of it.</div>` : '') + (u.length
@@ -11220,13 +11220,15 @@ function hfGen(B) {
   let k;
   if ((k = lv('Barbarian'))) {
     const rd = k >= 16 ? 4 : k >= 9 ? 3 : 2;
-    res('rage', 'Rage', k >= 17 ? 6 : k >= 12 ? 5 : k >= 6 ? 4 : k >= 3 ? 3 : 2, 'long');
+    // 2014 Primal Champion: unlimited rages at level 20
+    const unl = o && k >= 20;
+    if (!unl) res('rage', 'Rage', k >= 17 ? 6 : k >= 12 ? 5 : k >= 6 ? 4 : k >= 3 ? 3 : 2, 'long');
     add(
       'barb.rage',
       'Rage',
       'B',
-      `Resistance to bludgeoning, piercing & slashing damage, +${rd} damage on Strength attacks, advantage on Strength checks and saves. No spellcasting or concentration. Not in heavy armour.`,
-      { res: 'rage' }
+      `Resistance to bludgeoning, piercing & slashing damage, +${rd} damage on Strength attacks, advantage on Strength checks and saves. No spellcasting or concentration. Not in heavy armour.${unl ? ' Unlimited uses (Primal Champion).' : ''}`,
+      unl ? {} : { res: 'rage' }
     );
     if (k >= 2)
       add(
@@ -12343,10 +12345,13 @@ function hbBuild(B) {
         ...(kept.some(f => f.id === 'sub.land10') && E !== '2014' && LAND_WARD[B.land] ? [LAND_WARD[B.land]] : []),
         ...(kept.some(f => f.id === 'sub.war17') && E !== '2014' ? ['bludgeoning', 'piercing', 'slashing'] : []),
         ...(kept.some(f => f.id === 'sub.forge6') ? ['fire'] : []),
+        ...(kept.some(f => f.id === 'sub.storm6') ? [{ Desert: 'fire', Sea: 'lightning', Tundra: 'cold' }[B.storm || 'Desert']] : []),
         ...hbSpcResist(B)
       ])
     ].filter(x => !IMM.includes(x)),
     immune: IMM,
+    // resistances only while raging, beyond the usual three (Bear Totem Spirit)
+    rageResist: kept.some(f => f.id === 'sub.tot3') && (B.totem3 || 'Bear') === 'Bear' ? ['acid', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'poison', 'radiant', 'thunder'] : [],
     species: (B.species || '').trim(),
     barbLevel: D.lv('Barbarian'),
     heavy: !!B.heavy,
@@ -12432,7 +12437,9 @@ function hfMore(B, D, F, add, res) {
           ? "Persistent Rage: it only ends early if you fall unconscious or choose to end it."
           : 'Persistent Rage: lasts 10 minutes without needing to attack.'
       );
-    if (k >= 15 && !o) pas('barb.persist', 'Persistent Rage');
+    if (k >= 15 && !o) pas('barb.persist', 'Persistent Rage', 'Your rage lasts 10 minutes without needing to attack. Once per long rest, when you roll initiative, you can regain all your Rage uses.');
+    if (k >= 5) pas('barb.fast', 'Fast Movement', '+10 ft speed while not wearing heavy armour (your sheet\'s speed usually includes it).');
+    if (k >= 20) pas('barb.champ', 'Primal Champion', `Strength and Constitution +4 (up to ${o ? 24 : 25}): enter your raised scores on the Scores step.`);
     if (k >= 18) pas('barb.might', 'Indomitable Might', 'A STR check or save below your STR score uses your score instead.');
   }
 
@@ -12758,6 +12765,58 @@ function hfSubs(B, D, F, add, res) {
 
   /* ---------- Barbarian ---------- */
   if ((k = lv('Barbarian')) >= 3) {
+    if (is('Barbarian', /Berserker/i)) {
+      if (k >= 6) pas('sub.bers6', 'Mindless Rage', "While raging, you can't be Charmed or Frightened; an effect that already did ends when you rage.");
+      const ip = `Frighten creatures: WIS save DC ${o ? 8 + p + m.CHA : dc('STR')}`;
+      if (k >= (o ? 10 : 14)) {
+        if (!o) res('intim', 'Intimidating Presence', 1, 'long');
+        add('sub.bers.ip', 'Intimidating Presence', o ? 'A' : 'B', o ? `${ip}. One creature within 30 ft that can see or hear you is Frightened until the end of your next turn; extend it with your Action each turn.` : `${ip}. Each creature of your choice in a 30-ft emanation is Frightened for 1 minute (it repeats the save at the end of its turns). Once per long rest, or spend a Rage use.`, o ? {} : { res: 'intim' });
+      }
+      if (k >= (o ? 14 : 10)) add('sub.bers.ret', 'Retaliation', 'R', 'When a creature within 5 ft damages you: make one melee attack against it.');
+    }
+    if (is('Barbarian', /Totem/i)) {
+      const t3 = B.totem3 || 'Bear',
+        t14 = B.totem14 || 'Bear',
+        T3 = {
+          Bear: "While raging: resistance to all damage except psychic.",
+          Eagle: "While raging (and not in heavy armour): opportunity attacks against you have disadvantage, and Dash is a Bonus Action.",
+          Elk: '+15 ft walking speed while raging (not in heavy armour).',
+          Tiger: 'While raging: long jumps +10 ft, high jumps +3 ft.',
+          Wolf: 'While raging: your friends have advantage on melee attacks against enemies within 5 ft of you.'
+        },
+        T14 = {
+          Bear: 'While raging: enemies within 5 ft that can see or hear you have disadvantage on attacks against anyone else.',
+          Eagle: 'While raging: fly at your walking speed (you fall if you end your turn in the air).',
+          Elk: `While raging: Bonus Action, move through a Large or smaller creature's space: STR save DC ${8 + p + m.STR} or it's knocked Prone and takes 1d12+${m.STR} bludgeoning.`,
+          Tiger: 'While raging: if you moved 20 ft straight toward a target before a melee attack, make one extra melee attack as a Bonus Action.',
+          Wolf: 'While raging: when you hit a Large or smaller creature with a melee attack, knock it Prone as a Bonus Action.'
+        };
+      pas('sub.tot3', `Totem Spirit: ${t3}`, T3[t3]);
+      if (k >= 6) pas('sub.tot6', 'Aspect of the Beast', 'Your chosen aspect (Bear, Eagle, Elk, Tiger or Wolf) gives you its exploration benefit.');
+      if (k >= 14) add('sub.tot14', `Totemic Attunement: ${t14}`, /Elk|Tiger|Wolf/.test(t14) ? 'B' : 'F', T14[t14], { needRage: true });
+    }
+    if (is('Barbarian', /Ancestral/i)) {
+      add('sub.anc3', 'Ancestral Protectors', 'F', "While raging, the first creature you hit on your turn: until the start of your next turn it has disadvantage on attacks that don't target you, and anyone else it hits has resistance to the damage.", { once: 'ancestors', needRage: true });
+      if (k >= 6) add('sub.anc6', 'Spirit Shield', 'R', `While raging, when a creature you can see within 30 ft takes damage: reduce it by ${k >= 14 ? 4 : k >= 10 ? 3 : 2}d6.${k >= 14 ? ' Vengeful Ancestors: the attacker takes that much force damage.' : ''}`, { needRage: true });
+      if (k >= 10) pas('sub.anc10', 'Consult the Spirits', 'Cast Augury or Clairvoyance without a slot, once per short rest.');
+    }
+    if (is('Barbarian', /Storm Herald/i)) {
+      const env = B.storm || 'Desert',
+        st = k >= 20 ? 6 : k >= 15 ? 5 : k >= 10 ? 4 : k >= 5 ? 3 : 2,
+        sd = k >= 20 ? 4 : k >= 15 ? 3 : k >= 10 ? 2 : 1,
+        dcS = 8 + p + m.CON,
+        A = {
+          Desert: `each other creature within 10 ft takes ${st} fire damage`,
+          Sea: `one creature within 10 ft: DEX save DC ${dcS} or ${sd}d6 lightning (half on a success)`,
+          Tundra: `each creature of your choice within 10 ft gains ${st} temporary HP`
+        },
+        T = { Desert: 'fire', Sea: 'lightning', Tundra: 'cold' };
+      add('sub.storm3', `Storm Aura: ${env}`, 'B', `While raging, when you rage and as a Bonus Action on later turns: ${A[env]}.`, { needRage: true });
+      if (k >= 6) pas('sub.storm6', `Storm Soul: ${env}`, `Resistance to ${T[env]} damage${env === 'Desert' ? "; you don't suffer from extreme heat" : env === 'Sea' ? '; you can breathe underwater and swim 30 ft' : "; you don't suffer from extreme cold"}.`);
+      if (k >= 10) pas('sub.storm10', 'Shielding Storm', `Creatures of your choice in your Storm Aura have resistance to ${T[env]} damage.`);
+      if (k >= 14)
+        add('sub.storm14', 'Raging Storm', 'R', env === 'Desert' ? `While raging, when a creature hits you: DEX save DC ${dcS} or it takes ${Math.floor(k / 2)} fire damage.` : env === 'Sea' ? `While raging, when you hit a creature in your aura: STR save DC ${dcS} or it's knocked Prone.` : `While raging, when a creature in your aura moves: STR save DC ${dcS} or its speed is 0 until the start of your next turn.`, { needRage: true });
+    }
     if (is('Barbarian', /Wild Heart/i)) {
       add(
         'sub.wildheart',
@@ -14313,8 +14372,23 @@ const ORDERS = {
   Druid: ['primal', 'Primal Order', [['Magician', 'extra cantrip'], ['Warden', 'weapons &amp; armour']]],
   Cleric: ['divine', 'Divine Order', [['Thaumaturge', 'extra cantrip'], ['Protector', 'weapons &amp; armour']]]
 };
+// fixed subclass choices that decide numbers: one dropdown each
+const SUBPICK = [
+  { cls: 'Barbarian', sub: /Totem/i, at: 3, key: 'totem3', label: 'Totem spirit', opts: ['Bear', 'Eagle', 'Elk', 'Tiger', 'Wolf'] },
+  { cls: 'Barbarian', sub: /Totem/i, at: 14, key: 'totem14', label: 'Attunement', opts: ['Bear', 'Eagle', 'Elk', 'Tiger', 'Wolf'] },
+  { cls: 'Barbarian', sub: /Storm Herald/i, at: 3, key: 'storm', label: 'Storm aura', opts: ['Desert', 'Sea', 'Tundra'] }
+];
+function hbSubPicks(c) {
+  return SUBPICK.filter(x => x.cls === c.n && x.sub.test(c.sub || '') && c.lvl >= x.at)
+    .map(x => `<div class="row" style="gap:8px;margin-top:8px;align-items:center"><span class="sm mut">${x.label}</span><select class="field" style="flex:1;padding:8px 10px" onchange="HB.${x.key}=this.value;render()">${x.opts.map(v => `<option ${(HB[x.key] || x.opts[0]) === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div>`)
+    .join('');
+}
 function hbPrimalPick(i) {
   const c = HB.cls[i];
+  if (c && SUBPICK.some(x => x.cls === c.n)) {
+    const h = hbSubPicks(c);
+    if (h) return h;
+  }
   // Armorer: the armour model decides the built-in weapon
   if (c && c.n === 'Artificer' && /Armorer/i.test(c.sub || '') && c.lvl >= 3) {
     const cur = HB.armorModel || 'Guardian';
