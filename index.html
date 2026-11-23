@@ -11511,7 +11511,8 @@ function hfGen(B) {
     );
   }
   if ((k = lv('Fighter'))) {
-    res('sw', 'Second Wind', k >= 10 ? 4 : k >= 4 ? 3 : 2, 'short', { max14: 1, rk: 'fighter' });
+    // 2024: one use back on a short rest, all on a long rest; 2014: one use, back on a short rest
+    res('sw', 'Second Wind', k >= 10 ? 4 : k >= 4 ? 3 : 2, o ? 'short' : 'long', o ? { max14: 1, rk: 'fighter' } : { max14: 1, rk: 'fighter', short1: true });
     add('fig.sw', 'Second Wind', 'B', `Regain 1d10+${k} HP.`, { res: 'sw' });
     if (k >= 2) {
       res('as', 'Action Surge', k >= 17 ? 2 : 1, 'short');
@@ -12360,7 +12361,7 @@ function hbBuild(B) {
       .forEach(x => {
         x.d = x.d.replace(/for 1d10 force\..*$/, `for 1d10+${m.CHA} force (Agonizing Blast).`);
       });
-  const sv = [...new Set([...(B.saves || HC[main.n].sv), ...(B.feats || []).filter(f => f.n === 'Resilient' && f.ab).map(f => ABN.indexOf(f.ab))])],
+  const sv = [...new Set([...(B.saves || HC[main.n].sv), ...(B.feats || []).filter(f => f.n === 'Resilient' && f.ab).map(f => ABN.indexOf(f.ab)), ...(D.lv('Fighter') >= 7 && /Samurai/i.test(D.sub('Fighter')) ? [4] : [])])],
     aura = D.lv('Paladin') >= 6 ? mx1(m.CHA) : 0;
   const saves = ABN.map((a, i) => m[a] + (sv.includes(i) ? p : 0) + aura);
   const joat = D.lv('Bard') >= 2,
@@ -13281,6 +13282,76 @@ function hfSubs(B, D, F, add, res) {
 
   /* ---------- Fighter ---------- */
   if ((k = lv('Fighter')) >= 3) {
+    if (is('Fighter', /Champion/i)) {
+      pas('sub.champ3', 'Improved Critical', `Your weapon attacks${o ? '' : ' and Unarmed Strikes'} score a critical hit on a ${k >= 15 ? '18, 19 or 20 (Superior Critical)' : '19 or 20'}: the roll card counts it.`);
+      if (!o) pas('sub.champ3b', 'Remarkable Athlete', 'Advantage on initiative and Athletics checks. When you score a critical hit: move up to half your speed without provoking opportunity attacks.');
+      if (o && k >= 7) pas('sub.champ7', 'Remarkable Athlete', `+${Math.ceil(p / 2)} to Strength, Dexterity and Constitution checks you aren't proficient in; running long jumps go ${Math.max(0, m.STR)} ft further.`);
+      if (k >= (o ? 10 : 7)) pas('sub.champ7f', 'Additional Fighting Style', 'A second fighting style: pick it under Feats & fighting styles.');
+      if (!o && k >= 10) pas('sub.champ10', 'Heroic Warrior', 'At the start of each of your turns in combat, if you have no Heroic Inspiration: you gain it.');
+      if (k >= 18) pas('sub.champ18', 'Survivor', o ? `At the start of each of your turns, if you have no more than half your HP left (but at least 1): regain ${5 + m.CON} HP.` : `Advantage on death saves, and an 18 or higher counts as a 20. At the start of each of your turns, while Bloodied (but above 0 HP): regain ${5 + m.CON} HP.`);
+    }
+    if (is('Fighter', /Battle Master/i)) {
+      if (k >= 7) {
+        if (o) pas('sub.bm7', 'Know Your Enemy', 'Study a creature for 1 minute outside combat: learn how it compares to you in two ways (Strength, AC, HP, level and so on).');
+        else {
+          res('kye', 'Know Your Enemy', 1, 'long');
+          add('sub.bm7', 'Know Your Enemy', 'B', 'A creature within 30 ft that you can see: learn its immunities, resistances and vulnerabilities. Once per long rest, or spend a Superiority Die.', { res: 'kye' });
+        }
+      }
+      if (k >= 15) pas('sub.bm15', 'Relentless', o ? 'When you roll initiative with no Superiority Dice left: regain one.' : 'Once per turn, when you use a maneuver: roll a d8 for it instead of spending a Superiority Die.');
+    }
+    if (is('Fighter', /Samurai/i)) {
+      const th = k >= 15 ? 15 : k >= 10 ? 10 : 5;
+      res('fspirit', 'Fighting Spirit', 3, 'long');
+      add('sub.sam3', 'Fighting Spirit', 'B', `Advantage on your weapon attacks until the end of the turn, and ${th} temporary HP.`, { res: 'fspirit', tempHp: th });
+      if (k >= 7) pas('sub.sam7', 'Elegant Courtier', `Add ${sgn(m.WIS)} to Persuasion checks, and proficiency in Wisdom saves (included).`);
+      if (k >= 10) pas('sub.sam10', 'Tireless Spirit', 'When you roll initiative with no Fighting Spirit left: regain one use.');
+      if (k >= 15) add('sub.sam15', 'Rapid Strike', 'F', 'Once per turn, with advantage on an attack: give up the advantage to make one extra weapon attack against the same creature.', { once: 'rapid' });
+      if (k >= 18) {
+        res('sbd', 'Strength before Death', 1, 'long');
+        add('sub.sam18', 'Strength before Death', 'R', "When you drop to 0 HP (and aren't killed outright): take an extra turn right now. You fall unconscious after it if you're still at 0 HP.", { res: 'sbd' });
+      }
+    }
+    if (is('Fighter', /Echo Knight/i)) {
+      add('sub.echo3', 'Manifest Echo', 'B', `An echo of you appears within 15 ft (AC ${14 + p}, 1 HP, immune to conditions; it moves 30 ft as a Bonus Action). Swap places with it for 15 ft of movement; attack from its space; it can make opportunity attacks.`);
+      res('unleash', 'Unleash Incarnation', mx(m.CON), 'long');
+      add('sub.echo3u', 'Unleash Incarnation', 'F', 'When you take the Attack action: one extra melee attack from the echo’s position.', { res: 'unleash' });
+      if (k >= 7) pas('sub.echo7', 'Echo Avatar', 'As an Action, see and hear through your echo for up to 10 minutes; it can go up to 1,000 ft away.');
+      if (k >= 10) {
+        res('martyr', 'Shadow Martyr', 1, 'short');
+        add('sub.echo10', 'Shadow Martyr', 'R', 'When a creature you can see is attacked: your echo teleports next to it and becomes the target instead.', { res: 'martyr' });
+      }
+      if (k >= 15) {
+        res('reclaim', 'Reclaim Potential', mx(m.CON), 'long');
+        add('sub.echo15', 'Reclaim Potential', 'F', `When your echo is destroyed by damage: gain 2d6+${m.CON} temporary HP.`, { res: 'reclaim' });
+      }
+      if (k >= 18) pas('sub.echo18', 'Legion of One', 'You can have two echoes. When you roll initiative with no Unleash Incarnation left: regain one use.');
+    }
+    if (is('Fighter', /Rune Knight/i)) {
+      const gd = k >= 18 ? '1d10' : k >= 10 ? '1d8' : '1d6',
+        nr = k >= 15 ? 5 : k >= 10 ? 4 : k >= 7 ? 3 : 2,
+        rdc = 8 + p + m.CON;
+      res('giant', 'Giant’s Might', p, 'long');
+      add('sub.rune3g', 'Giant’s Might', 'B', `For 1 minute: become Large${k >= 18 ? ' or Huge, with 5 ft more reach' : ''}, advantage on STR checks and saves, and once per turn +${gd} damage on a weapon hit.`, { res: 'giant', status: 'Giant’s Might' });
+      res('runes', 'Rune uses', nr * (k >= 15 ? 2 : 1), 'short');
+      add('sub.rune3r', 'Invoke a rune', 'F', `You know ${nr} runes; each works ${k >= 15 ? 'twice' : 'once'} per short rest (DC ${rdc}). Fire (on a hit): +2d6 fire, STR save or Restrained and burning 2d6 each turn. Cloud (Reaction): an attack that hits a creature within 30 ft hits another creature of your choice instead. Frost (Bonus): +2 to STR and CON checks and saves for 10 minutes. Stone (Reaction): a creature ending its turn within 30 ft makes a WIS save or is Charmed and Incapacitated. Hill (Bonus): resistance to bludgeoning, piercing and slashing for 1 minute. Storm (Bonus): for 1 minute, your Reaction gives advantage or disadvantage on a d20 roll within 60 ft.`, { res: 'runes' });
+      if (k >= 7) {
+        res('rshield', 'Runic Shield', p, 'long');
+        add('sub.rune7', 'Runic Shield', 'R', 'When a creature you can see within 60 ft is hit by an attack: the attacker rerolls the d20 and must use the new roll.', { res: 'rshield' });
+      }
+    }
+    if (is('Fighter', /Cavalier/i)) {
+      add('sub.cav3', 'Unwavering Mark', 'F', 'When you hit with a melee weapon: the target is marked until the end of your next turn. It has disadvantage on attacks against anyone but you while within 5 ft of you.');
+      res('mark', 'Unwavering Mark: strike back', mx(m.STR), 'long');
+      add('sub.cav3b', 'Unwavering Mark: strike back', 'B', `When your marked target damages someone else: one melee weapon attack against it, with advantage and +${Math.floor(k / 2)} damage.`, { res: 'mark' });
+      if (k >= 7) {
+        res('ward', 'Warding Maneuver', mx(m.CON), 'long');
+        add('sub.cav7', 'Warding Maneuver', 'R', 'When you or a creature within 5 ft is hit: +1d8 to its AC against that attack; if it still hits, the damage is halved.', { res: 'ward' });
+      }
+      if (k >= 10) pas('sub.cav10', 'Hold the Line', 'Moving 5 ft or more within your reach provokes your opportunity attack, and a hit stops the creature for the turn.');
+      if (k >= 15) add('sub.cav15', 'Ferocious Charger', 'F', `Once per turn, after moving 10 ft straight toward a target: a hit forces a STR save DC ${8 + p + m.STR} or it's knocked Prone.`, { once: 'charger' });
+      if (k >= 18) pas('sub.cav18', 'Vigilant Defender', 'In combat you get a special reaction on every other creature’s turn, for one opportunity attack.');
+    }
     if (is('Fighter', /Eldritch Knight/i)) {
       pas('sub.ek3', 'Weapon Bond', "You can't be disarmed of a bonded weapon, and can summon it to your hand as a Bonus Action.");
       if (k >= 7)
@@ -13291,7 +13362,8 @@ function hfSubs(B, D, F, add, res) {
     }
     if (is('Fighter', /Psi Warrior/i)) {
       const pd = k >= 17 ? 'd12' : k >= 11 ? 'd10' : k >= 5 ? 'd8' : 'd6';
-      res('psi', 'Psionic Energy dice', 2 * p, 'long');
+      // 2020: twice your proficiency bonus (regain one as a Bonus Action once per short rest); 2024: its own table, one back on a short rest
+      res('psi', 'Psionic Energy dice', o ? 2 * p : k >= 17 ? 12 : k >= 13 ? 10 : k >= 9 ? 8 : k >= 5 ? 6 : 4, 'long', o ? {} : { short1: true });
       add('sub.psi3a', 'Protective Field', 'R', `When you or a creature within 30 ft takes damage: spend a Psionic Energy die (${pd}) to reduce it by the roll + ${mx(m.INT)}.`, { res: 'psi' });
       add('sub.psi3b', 'Psionic Strike', 'F', `Once per turn, right after you hit a creature within 30 ft with a weapon: spend a Psionic Energy die for +${pd}+${m.INT} force damage.`, { res: 'psi', once: 'psistrike' });
       add('sub.psi3c', 'Telekinetic Movement', 'A', 'Move a Large-or-smaller object or willing creature within 30 ft up to 30 ft (once per short rest, or spend a Psionic Energy die).');
@@ -13405,7 +13477,8 @@ function hfSubs(B, D, F, add, res) {
     }
     if (is('Rogue', /Soulknife/i)) {
       const pd = k >= 17 ? 'd12' : k >= 11 ? 'd10' : k >= 5 ? 'd8' : 'd6';
-      res('psi', 'Psionic Energy dice', 2 * p, 'long');
+      // 2020: twice your proficiency bonus (regain one as a Bonus Action once per short rest); 2024: its own table, one back on a short rest
+      res('psi', 'Psionic Energy dice', o ? 2 * p : k >= 17 ? 12 : k >= 13 ? 10 : k >= 9 ? 8 : k >= 5 ? 6 : 4, 'long', o ? {} : { short1: true });
       add('sub.sk3', 'Psychic Blades', 'A', `Melee or thrown (60 ft) attack: +${p + Math.max(m.STR, m.DEX)} to hit, 1d6+${Math.max(m.STR, m.DEX)} psychic. As a Bonus Action, a second blade: 1d4+${Math.max(m.STR, m.DEX)} psychic. Finesse, counts for Sneak Attack.`);
       add('sub.sk3k', 'Psi-Bolstered Knack', 'F', `Fail an ability check you're proficient in: spend a Psionic Energy die (${pd}) and add it.`, { res: 'psi' });
       if (k >= 9) add('sub.sk9', 'Soul Blades: Homing Strikes', 'F', `Miss with Psychic Blades: spend a die (${pd}) and add it to the roll.`, { res: 'psi' });
@@ -14414,7 +14487,11 @@ function hbFeatsSec(B, G) {
       return L.length ? `<optgroup label="${esc(cat)}">${L.map(x => `<option value="${esc(x.n)}">${esc(x.n)}</option>`).join('')}</optgroup>` : '';
     })
     .join('');
+  const styles = Object.values(FEATS).filter(x => /Fighting Style/.test(x.c)).map(x => x.n),
+    needStyle = B.cls.find(c => (c.n === 'Fighter' && c.lvl >= 1) || (/Paladin|Ranger/.test(c.n) && c.lvl >= 2)),
+    hasStyle = mine.some(f => styles.includes(f.n));
   return `<div class="xs sec">Feats &amp; fighting styles${mine.length ? ` · ${mine.length}` : ''}</div>
+  ${needStyle && !hasStyle ? `<div class="banner" style="margin:4px 0 8px">${esc(needStyle.n)}s choose a Fighting Style${needStyle.n === 'Fighter' ? '' : ' (or, in 2024, Blessed or Druidic Warrior instead)'}: add yours from the list below.</div>` : ''}
   ${list}
   <select class="field" style="margin-top:${mine.length ? 8 : 2}px" onchange="hbFeatAdd(this.value);this.value=''"><option value="">+ Add a feat or fighting style</option>${opts}</select>`;
 }
@@ -16124,7 +16201,7 @@ function rollShow(enter) {
   const R = RC,
     sg = n => (n < 0 ? '−' + -n : '+' + n);
   const hitBox = R.toHit
-    ? `<b class="${R.toHit.nat === 20 ? 'crit' : R.toHit.nat === 1 ? 'fumble' : ''}">${R.toHit.total}</b><span>${R.toHit.nat === 20 ? 'Natural 20!' : R.toHit.nat === 1 ? 'Natural 1' : 'to hit'}</span><small>d20 ${R.toHit.dice.length > 1 ? R.toHit.dice.map((v, i) => (v === R.toHit.nat && i === R.toHit.dice.indexOf(R.toHit.nat) ? `<u>${v}</u>` : v)).join(' & ') : R.toHit.dice[0]} ${sg(R.hit)}</small>`
+    ? `<b class="${R.toHit.nat >= critMin() ? 'crit' : R.toHit.nat === 1 ? 'fumble' : ''}">${R.toHit.total}</b><span>${R.toHit.nat === 20 ? 'Natural 20!' : R.toHit.nat >= critMin() ? `Natural ${R.toHit.nat}: critical!` : R.toHit.nat === 1 ? 'Natural 1' : 'to hit'}</span><small>d20 ${R.toHit.dice.length > 1 ? R.toHit.dice.map((v, i) => (v === R.toHit.nat && i === R.toHit.dice.indexOf(R.toHit.nat) ? `<u>${v}</u>` : v)).join(' & ') : R.toHit.dice[0]} ${sg(R.hit)}</small>`
     : `<b>${sg(R.hit)}</b><span>to hit</span>`;
   const exTotal = Object.values(R.extras).reduce((t, e) => t + e.total, 0);
   const dmgBox = R.dmg
@@ -16195,12 +16272,18 @@ function rollCrit() {
   RC.crit = !RC.crit;
   rollShow();
 }
+// Champion: a 19 (18 at level 15) is a critical hit with weapons
+function critMin() {
+  const fl = clsLvl('Fighter'),
+    fs = ((CH().classes || []).find(c => c.n === 'Fighter') || {}).sub || (CH().cls === 'fighter' ? CH().sub : '') || '';
+  return !S.ws && fl >= 3 && /Champion/i.test(fs) ? (fl >= 15 ? 18 : 19) : 20;
+}
 function rollHit() {
   const a = d(20),
     b = RC.mode === 'normal' ? null : d(20),
     nat = b == null ? a : RC.mode === 'adv' ? Math.max(a, b) : Math.min(a, b);
   RC.toHit = { dice: b == null ? [a] : [a, b], nat, total: nat + RC.hit };
-  if (nat === 20) RC.crit = true;
+  if (nat >= critMin()) RC.crit = true;
   rollShow();
 }
 // the weapon, everything that applies by itself, and the extras you ticked: one total
