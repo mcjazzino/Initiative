@@ -73,6 +73,12 @@ h2{font-family:Cinzel,serif;font-size:24px;margin:0 0 6px}
 .fine.rx{margin:10px 0 0}
 @keyframes pop{from{transform:scale(.97);opacity:.4}}
 
+.fx{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:-6px 0 12px}
+.fx span{font-size:12.5px;font-weight:800;padding:4px 10px;border-radius:999px;background:var(--soft);color:var(--acc);border:1px solid transparent}
+.fx span.conc{border-color:var(--line)}
+.fx small{font-size:11.5px;color:var(--mut);font-weight:700}
+.act small em{color:var(--acc);font-style:normal;font-weight:800}
+
 </style>
 </head>
 <body>
@@ -304,13 +310,45 @@ function savedChars() {
 const CL = k => (window.CLS && CLS[k]) || { n: k, c: '#9B8CFF' };
 const chMods = ch => ch.mods6 || (ch.abil ? AB.map(a => mod(ch.abil[a] || 10)) : [0, 0, 0, 0, 0, 0]);
 
+/* spells that last: handled by name, since their wording differs between builder, ready-mades and D&D Beyond */
+const LAST = {
+  hex: { id: 'hex', what: () => '+1d6 necrotic on each of your hits' },
+  "hunter's mark": { id: 'hm', what: e => (e ? '+1d6 on each of your weapon hits' : '+1d6 force on each of your hits') },
+  bless: { id: 'bless', what: () => '+1d4 to your attack rolls and saves' },
+  'shield of faith': { id: 'sof', what: () => '+2 AC' },
+  'divine favor': { id: 'df', conc: e => e, what: () => '+1d4 radiant on your weapon hits' },
+  'faerie fire': { id: 'ff', what: () => 'DEX save, or your attacks have advantage' },
+  moonbeam: { id: 'mb', dmg: '2d10', type: 'radiant', ab: 2, up: { d: '1d10' }, what: e => `CON save ${e ? 'at the start of its turns' : 'now and at the end of its turns'}` },
+  'spirit guardians': { id: 'sg', dmg: '3d8', type: 'radiant', ab: 4, up: { d: '1d8' }, what: e => `WIS save when it's in reach ${e ? 'at the start of its turn' : 'on its turn'}` },
+  'spiritual weapon': { id: 'sw', conc: e => !e, up: e => (e ? { d: '1d8', every: 2 } : { d: '1d8' }), what: () => 'attack now, then as a Bonus Action each turn' }
+};
+// what casting with a higher slot adds
+const UP = {
+  'magic missile': { n: 1 }, 'scorching ray': { n: 1 },
+  'cure wounds': e => ({ d: e ? '1d8' : '2d8' }), 'healing word': e => ({ d: e ? '1d4' : '2d4' }),
+  'guiding bolt': { d: '1d6' }, 'inflict wounds': { d: '1d10' }, 'burning hands': { d: '1d6' }, thunderwave: { d: '1d8' },
+  'chromatic orb': { d: '1d8' }, shatter: { d: '1d8' }, fireball: { d: '1d6' }, 'lightning bolt': { d: '1d6' },
+  'witch bolt': { d: '1d12' }, 'ray of sickness': { d: '1d8' }, catapult: { d: '1d8' }, 'ice knife': { d: '1d6' }
+};
+const ed14 = () => F.ch.edition === '2014';
+const nm = s => (s.n || '').trim().toLowerCase();
+function addDice(expr, die, k) {
+  const m = die.match(/^(\d*)d(\d+)$/),
+    per = (+m[1] || 1) * k,
+    re = new RegExp('(\\d*)d' + m[2] + '(?!\\d)');
+  if (re.test(expr)) return expr.replace(re, (_, c) => (+c || 1) + per + 'd' + m[2]);
+  return expr + '+' + per + 'd' + m[2];
+}
+
 // what a character can do in the arena, read from Initiative's own data
 function kit(ch) {
   const m = chMods(ch),
     sc = ch.sc || {},
     spells = [];
   (ch.spells || []).forEach(s => {
-    if (s.conc || s.t === 'R') return; // lasting effects (Hex, Moonbeam…) and reactions come later
+    const L = LAST[nm(s)];
+    if (L) return spells.push({ s, kind: 'last', L });
+    if (s.conc || s.t === 'R') return; // other lasting spells aren't in the Arena yet; reactions are asked for
     const t = (s.d || '').replace(/Always prepared ·[^.]*\.\s*/, ''),
       ab = x => m[AB.indexOf(x)] || 0,
       fixAb = x => x.replace(/\s*\+\s*(STR|DEX|CON|INT|WIS|CHA)\b/g, (_, a) => sgn(ab(a)).replace('−', '-'));
@@ -354,7 +392,8 @@ function startFight(ch, mon) {
     ch,
     K,
     mon,
-    me: { hp: ch.hp ? ch.hp.max : 10, max: ch.hp ? ch.hp.max : 10, slots: JSON.parse(JSON.stringify(ch.slots || {})), pots: K.pots.reduce((t, p) => t + (+p.q || +p.qty || 1), 0), second: K.second ? 1 : 0, prone: false, dodge: false, react: true, acb: 0, absorbRes: '', absorbHit: null },
+    me: { hp: ch.hp ? ch.hp.max : 10, max: ch.hp ? ch.hp.max : 10, slots: JSON.parse(JSON.stringify(ch.slots || {})), pots: K.pots.reduce((t, p) => t + (+p.q || +p.qty || 1), 0), second: K.second ? 1 : 0, prone: false, dodge: false, react: true, acb: 0, absorbRes: '', absorbHit: null, conc: '', cq: [] },
+    fx: {}, // lasting spells in play
     them: { hp: mon.hp, max: mon.hp, breath: !!mon.breath },
     close: false, // start about 30 ft apart
     round: 1,
@@ -418,6 +457,7 @@ function hurt(target, amt, type) {
   else if ((F.ch.resist || []).some(r => new RegExp(type, 'i').test(r))) (a = Math.floor(a / 2)), (note = ' (you resist: halved)');
   F.me.hp = Math.max(0, F.me.hp - a);
   if (!F.me.hp) F.over = 'lose';
+  if (a && F.me.conc) F.me.cq.push(a);
   return { amt: a, note };
 }
 
@@ -433,81 +473,257 @@ function weaponAttack(i) {
   }
   F.t.attacksLeft--;
   const dis = ranged && F.close,
-    r = d20(modeOf(false, dis)),
-    tot = r.nat + w.hit,
-    crit = r.nat === 20,
-    hit = crit || (r.nat !== 1 && tot >= F.mon.ac);
-  let line = `<b>${esc(w.n)}</b>: d20 ${r.dice.join(' & ')}${dis ? ' (disadvantage: shooting in melee)' : ''} ${sgn(w.hit)} = <b>${tot}</b> vs AC ${F.mon.ac}: `;
+    A = myAttack(w.hit, dis, 'shooting in melee'),
+    crit = A.crit,
+    hit = A.hit;
+  let line = `<b>${esc(w.n)}</b>: ${A.txt} = <b>${A.tot}</b> vs AC ${F.mon.ac}: `;
   if (hit) {
     const dm = roll(w.dmg, crit),
       h = hurt('them', dm.total, (w.type || '').split(',')[0].trim());
     line += `${crit ? '<b>critical hit!</b> ' : 'hit! '}${dm.txt.join(' ')} = <b>${h.amt}</b> ${esc(w.type || '')}${h.note}`;
     if (!ranged && F.me.absorbHit && !F.over) {
-      const A = F.me.absorbHit,
-        ex = roll(A.dice, crit),
-        h2 = hurt('them', ex.total, A.type);
+      const X = F.me.absorbHit,
+        ex = roll(X.dice, crit),
+        h2 = hurt('them', ex.total, X.type);
       F.me.absorbHit = null;
-      line += ` + Absorb Elements ${ex.txt.join(' ')} = <b>${h2.amt}</b> ${A.type}${h2.note}`;
+      line += ` + Absorb Elements ${ex.txt.join(' ')} = <b>${h2.amt}</b> ${X.type}${h2.note}`;
     }
+    line += riders('weapon', crit, (w.type || '').split(',')[0].trim());
     line += '.';
   } else line += r.nat === 1 ? 'natural 1, miss.' : 'miss.';
   log(line, 'me');
   show();
 }
-function castSpell(i) {
+// your attack roll: Faerie Fire gives advantage, Bless adds 1d4
+function myAttack(bonus, dis, why) {
+  const adv = !!F.fx.ff,
+    r = d20(modeOf(adv, dis)),
+    b = F.fx.bless ? d(4) : 0,
+    tot = r.nat + bonus + b,
+    crit = r.nat === 20;
+  return {
+    tot,
+    crit,
+    hit: crit || (r.nat !== 1 && tot >= F.mon.ac),
+    txt: `d20 ${r.dice.join(' & ')}${adv && !dis ? ' (advantage: Faerie Fire)' : ''}${dis && !adv ? ` (disadvantage: ${why})` : ''} ${sgn(bonus)}${b ? ` + Bless ${b}` : ''}`
+  };
+}
+// your saving throw: Bless adds 1d4
+function mySave(ab, adv) {
+  const r = d20(adv ? 'adv' : ''),
+    sv = F.ch.saves ? F.ch.saves[ab] : F.K.m[ab],
+    b = F.fx.bless ? d(4) : 0;
+  return { tot: r.nat + sv + b, txt: `d20 ${r.dice.join(' & ')} ${sgn(sv)}${b ? ` + Bless ${b}` : ''}` };
+}
+// extra damage your lasting spells add to a hit
+function riders(kind, crit, wtype) {
+  const L = [];
+  if (F.fx.hex) L.push(['Hex', '1d6', 'necrotic']);
+  if (F.fx.hm && (kind === 'weapon' || !ed14())) L.push(["Hunter's Mark", '1d6', ed14() ? wtype || 'piercing' : 'force']);
+  if (F.fx.df && kind === 'weapon') L.push(['Divine Favor', '1d4', 'radiant']);
+  return L.map(([n, dice, type]) => {
+    if (F.over) return '';
+    const r = roll(dice, crit),
+      h = hurt('them', r.total, type);
+    return ` + ${n} ${r.txt.join(' ')} = <b>${h.amt}</b> ${type}${h.note}`;
+  }).join('');
+}
+function upOf(S) {
+  const u = S.kind === 'last' ? S.L.up : UP[nm(S.s)];
+  return typeof u === 'function' ? u(ed14()) : u || null;
+}
+const swMod = () => (F.K.sc.atk || 0) - (F.ch.prof || 2 + Math.floor(((F.ch.level || 1) - 1) / 4));
+function baseDmg(S) {
+  if (S.kind !== 'last') return S.dmg;
+  if (S.L.id === 'sw') return `1d8+${Math.max(0, swMod())}`;
+  return S.L.dmg || '';
+}
+// the spell as cast with a slot of level `at`
+function scaled(S, at) {
+  const lvl = S.s.lvl || 0,
+    up = upOf(S),
+    base = { n: S.n || 1, dmg: baseDmg(S) };
+  if (!up || !lvl || at <= lvl) return base;
+  const k = up.every ? Math.floor((at - lvl) / up.every) : at - lvl;
+  return { n: base.n + (up.n ? up.n * k : 0), dmg: up.d && base.dmg ? addDice(base.dmg, up.d, k) : base.dmg };
+}
+// every slot level you could cast this with (one key per level)
+function slotChoices(lvl) {
+  const seen = new Set();
+  return Object.keys(F.me.slots)
+    .filter(k => slotLv(k) >= lvl && F.me.slots[k].max - (F.me.slots[k].used || 0) > 0)
+    .sort((a, b) => slotLv(a) - slotLv(b))
+    .filter(k => !seen.has(slotLv(k)) && seen.add(slotLv(k)));
+}
+const concOf = S => S.kind === 'last' && (S.L.conc ? S.L.conc(ed14()) : true);
+function castSpell(i, key) {
   const S = F.K.spells[i],
     s = S.s,
     lvl = s.lvl || 0,
     isB = s.t === 'B';
   if (isB ? !F.t.bonus : !F.t.action) return;
   if (S.melee && !F.close) return toastA('Too far: move in first.');
-  if (lvl && !spendSlot(lvl)) return toastA('No spell slot left for that.');
+  if (S.kind === 'last' && F.fx[S.L.id]) return toastA(`${s.n} is already going.`);
+  let at = lvl;
+  if (lvl) {
+    if (key === undefined) {
+      const ks = slotChoices(lvl);
+      if (!ks.length) return toastA('No spell slot left for that.');
+      if (upOf(S) && ks.length > 1) {
+        ask(
+          `Cast <b>${esc(s.n)}</b> with which slot?`,
+          ks.map(k => {
+            const x = scaled(S, slotLv(k)),
+              left = F.me.slots[k].max - (F.me.slots[k].used || 0);
+            return { b: k === 'P' ? `Pact slot (level ${slotLv(k)})` : `Level ${k}`, s: `${x.n > 1 ? x.n + '× ' : ''}${x.dmg || ''} · ${left} left`, fn: () => castSpell(i, k) };
+          }),
+          () => {},
+          'Cancel',
+          'Cast at a higher level'
+        );
+        return show();
+      }
+      key = ks[0];
+    }
+    F.me.slots[key].used = (F.me.slots[key].used || 0) + 1;
+    at = slotLv(key);
+  }
   isB ? (F.t.bonus = false) : (F.t.action = false);
-  const sc = F.K.sc;
-  if (S.kind === 'atk') {
+  const sc = F.K.sc,
+    X = scaled(S, at),
+    tag = at > lvl && lvl ? ` (level ${at})` : '';
+  if (S.kind === 'last') {
+    startLasting(S, at, X, tag);
+  } else if (S.kind === 'atk') {
     const lines = [];
-    for (let n = 0; n < S.n; n++) {
+    for (let n = 0; n < X.n; n++) {
+      if (F.over) break;
       const dis = !S.melee && F.close,
-        r = d20(modeOf(false, dis)),
-        tot = r.nat + (sc.atk || 0),
-        crit = r.nat === 20,
-        hit = crit || (r.nat !== 1 && tot >= F.mon.ac);
-      let l = `d20 ${r.dice.join(' & ')}${dis ? ' (disadvantage in melee)' : ''} ${sgn(sc.atk || 0)} = <b>${tot}</b>: `;
-      if (hit) {
-        const dm = roll(S.dmg, crit),
+        A = myAttack(sc.atk || 0, dis, 'in melee');
+      let l = `${A.txt} = <b>${A.tot}</b>: `;
+      if (A.hit) {
+        const dm = roll(X.dmg, A.crit),
           h = hurt('them', dm.total, S.type);
-        l += `${crit ? '<b>critical!</b> ' : 'hit, '}${dm.txt.join(' ')} = <b>${h.amt}</b> ${esc(S.type)}${h.note}`;
+        l += `${A.crit ? '<b>critical!</b> ' : 'hit, '}${dm.txt.join(' ')} = <b>${h.amt}</b> ${esc(S.type)}${h.note}${riders('spell', A.crit)}`;
       } else l += 'miss';
       lines.push(l);
     }
-    log(`<b>${esc(s.n)}</b>${S.n > 1 ? ` (${S.n}×)` : ''}: ${lines.join(' · ')}.`, 'me');
+    log(`<b>${esc(s.n)}</b>${tag}${X.n > 1 ? ` (${X.n}×)` : ''}: ${lines.join(' · ')}.`, 'me');
   } else if (S.kind === 'auto') {
     let t = 0;
     const L = [];
-    for (let n = 0; n < S.n; n++) {
-      const dm = roll(S.dmg);
+    for (let n = 0; n < X.n; n++) {
+      const dm = roll(X.dmg);
       t += dm.total;
       L.push(dm.total);
     }
     const h = hurt('them', t, S.type);
-    log(`<b>${esc(s.n)}</b>: ${L.join(' + ')} = <b>${h.amt}</b> ${esc(S.type)}${h.note}, no roll needed.`, 'me');
+    log(`<b>${esc(s.n)}</b>${tag}: ${L.join(' + ')} = <b>${h.amt}</b> ${esc(S.type)}${h.note}, no roll needed.`, 'me');
   } else if (S.kind === 'save') {
     const sv = monSave(S.ab),
       r = d20(),
       tot = r.nat + sv,
       ok = tot >= (sc.dc || 10),
-      dice = S.hurt && F.them.hp < F.them.max ? S.hurt : S.dmg,
+      dice = S.hurt && F.them.hp < F.them.max ? S.hurt : X.dmg,
       dm = roll(dice),
       amt = ok ? (S.half ? Math.floor(dm.total / 2) : 0) : dm.total,
       h = amt ? hurt('them', amt, S.type) : { amt: 0, note: '' };
-    log(`<b>${esc(s.n)}</b>: ${F.mon.n} rolls ${AB[S.ab]} save d20 ${r.nat} ${sgn(sv)} = ${tot} vs DC ${sc.dc}: ${ok ? (S.half ? 'saves, half damage' : 'saves, no damage') : 'fails'}${amt ? ` · ${dm.txt.join(' ')}${ok ? ' ÷ 2' : ''} = <b>${h.amt}</b> ${esc(S.type)}${h.note}` : ''}.`, 'me');
+    log(`<b>${esc(s.n)}</b>${tag}: ${F.mon.n} rolls ${AB[S.ab]} save d20 ${r.nat} ${sgn(sv)} = ${tot} vs DC ${sc.dc}: ${ok ? (S.half ? 'saves, half damage' : 'saves, no damage') : 'fails'}${amt ? ` · ${dm.txt.join(' ')}${ok ? ' ÷ 2' : ''} = <b>${h.amt}</b> ${esc(S.type)}${h.note}` : ''}.`, 'me');
   } else if (S.kind === 'heal') {
-    const dm = roll(S.dmg),
+    const dm = roll(X.dmg),
       was = F.me.hp;
     F.me.hp = Math.min(F.me.max, F.me.hp + dm.total);
-    log(`<b>${esc(s.n)}</b>: ${dm.txt.join(' ')} = heal <b>${F.me.hp - was}</b>.`, 'me');
+    log(`<b>${esc(s.n)}</b>${tag}: ${dm.txt.join(' ')} = heal <b>${F.me.hp - was}</b>.`, 'me');
   }
   show();
+}
+
+/* ---------- lasting spells ---------- */
+function dropConc(why) {
+  if (!F.me.conc) return;
+  log(`${why} <b>${esc(F.me.conc)}</b> ends.`, 'sys');
+  Object.keys(F.fx).forEach(k => F.fx[k].conc && delete F.fx[k]);
+  F.me.conc = '';
+  F.me.cq = [];
+}
+// after you take damage: a CON save for each hit, DC 10 or half the damage
+function concCheck() {
+  const q = F.me.cq;
+  F.me.cq = [];
+  if (F.over) return;
+  for (const dmg of q) {
+    if (!F.me.conc) return;
+    const dc = Math.max(10, Math.floor(dmg / 2)),
+      wc = (F.ch.feats || []).some(f => /^War Caster/i.test(f.n || '')),
+      r = mySave(2, wc),
+      ok = r.tot >= dc;
+    if (ok) log(`Concentration (${esc(F.me.conc)}): CON save ${r.txt}${wc ? ' (advantage: War Caster)' : ''} = ${r.tot} vs DC ${dc}: you hold on.`, 'sys');
+    else dropConc(`Concentration: CON save ${r.txt}${wc ? ' (advantage: War Caster)' : ''} = ${r.tot} vs DC ${dc}: you lose it.`);
+  }
+}
+function startLasting(S, at, X, tag) {
+  const L = S.L,
+    s = S.s,
+    conc = concOf(S);
+  if (conc) {
+    if (F.me.conc) dropConc(`You stop concentrating:`);
+    F.me.conc = s.n;
+  }
+  F.fx[L.id] = { conc, n: s.n, dmg: X.dmg, last: '' };
+  const say = `<b>${esc(s.n)}</b>${tag}${conc ? ' (concentration)' : ''}: `;
+  if (L.id === 'ff') {
+    const sv = monSave(1),
+      r = d20(),
+      tot = r.nat + sv,
+      ok = tot >= (F.K.sc.dc || 10);
+    log(say + `${F.mon.n} DEX save d20 ${r.nat} ${sgn(sv)} = ${tot} vs DC ${F.K.sc.dc}: ${ok ? 'it dodges the light.' : 'it’s outlined. Your attacks have advantage.'}`, 'me');
+    if (ok) {
+      delete F.fx.ff;
+      F.me.conc = '';
+    }
+  } else if (L.id === 'sw') {
+    log(say + `a floating weapon appears.`, 'me');
+    swAttack(true);
+  } else if (L.id === 'mb') {
+    log(say + `a beam of moonlight shines down on the ${F.mon.n} (${X.dmg} radiant, CON save for half).`, 'me');
+    if (!ed14()) auraHit('mb');
+  } else if (L.id === 'sg') {
+    log(say + `spirits circle you (${X.dmg} radiant, WIS save for half, when it’s in reach).`, 'me');
+    if (!ed14() && F.close) auraHit('sg');
+  } else log(say + L.what(ed14()) + '.', 'me');
+}
+function swAttack(free) {
+  const W = F.fx.sw;
+  if (!W || F.over) return;
+  if (!free) {
+    if (!F.t.bonus) return;
+    F.t.bonus = false;
+  }
+  const A = myAttack(F.K.sc.atk || 0, false);
+  let l = `<b>Spiritual Weapon</b>: ${A.txt} = <b>${A.tot}</b> vs AC ${F.mon.ac}: `;
+  if (A.hit) {
+    const dm = roll(W.dmg, A.crit),
+      h = hurt('them', dm.total, 'force');
+    l += `${A.crit ? '<b>critical!</b> ' : 'hit, '}${dm.txt.join(' ')} = <b>${h.amt}</b> force${h.note}${riders('spell', A.crit)}.`;
+  } else l += 'miss.';
+  log(l, 'me');
+  show();
+}
+// Moonbeam / Spirit Guardians: at most once per turn
+function auraHit(id) {
+  const E = F.fx[id],
+    L = Object.values(LAST).find(x => x.id === id),
+    k = F.round + '-' + F.turn;
+  if (!E || F.over || E.last === k || (id === 'sg' && !F.close)) return;
+  E.last = k;
+  const sv = monSave(L.ab),
+    r = d20(),
+    tot = r.nat + sv,
+    ok = tot >= (F.K.sc.dc || 10),
+    dm = roll(E.dmg),
+    amt = ok ? Math.floor(dm.total / 2) : dm.total,
+    h = hurt('them', amt, L.type);
+  log(`<b>${esc(E.n)}</b>: ${F.mon.n} ${AB[L.ab]} save d20 ${r.nat} ${sgn(sv)} = ${tot} vs DC ${F.K.sc.dc}: ${ok ? 'half damage' : 'fails'} · ${dm.txt.join(' ')}${ok ? ' ÷ 2' : ''} = <b>${h.amt}</b> ${L.type}${h.note}.`, 'me');
 }
 // the lowest slot that can cast a spell of this level
 const slotLv = k => (k === 'P' ? F.me.slots.P.lvl || 1 : +k);
@@ -576,6 +792,7 @@ function move(toClose, disengage) {
     return run();
   }
   done();
+  if (toClose && F.fx.sg && !ed14()) auraHit('sg');
   show();
 }
 
@@ -591,8 +808,8 @@ function run() {
   }
 }
 // pause and offer reactions; `no` runs when you let it happen
-function ask(text, opts, no, noLabel) {
-  F.ask = { text, opts, no, noLabel: noLabel || 'No reaction' };
+function ask(text, opts, no, noLabel, head) {
+  F.ask = { text, opts, no, noLabel: noLabel || 'No reaction', head };
 }
 function answer(i) {
   const A = F.ask;
@@ -602,7 +819,7 @@ function answer(i) {
   run();
 }
 const ELEM = ['acid', 'cold', 'fire', 'lightning', 'thunder'];
-const myAC = () => (F.ch.ac || 10) + (F.me.acb || 0);
+const myAC = () => (F.ch.ac || 10) + (F.me.acb || 0) + (F.fx.sof ? 2 : 0);
 const canCast = sp => sp && F.me.react && slotFor(sp.lvl || 1);
 function useReaction(sp) {
   F.me.react = false;
@@ -710,14 +927,14 @@ function attackLands(a, head, crit) {
     });
     let line = head + `${crit ? '<b>critical hit!</b> ' : 'hits, '}${bits.join(' + ')}${how === 'uncanny' ? ' (Uncanny Dodge)' : ''}`;
     if (a.prone && !F.over && !F.me.prone) {
-      const sr = d20(),
-        st = sr.nat + (F.ch.saves ? F.ch.saves[0] : F.K.m[0]);
+      const st = mySave(0).tot;
       if (st < a.prone.dc) {
         F.me.prone = true;
         line += `. STR save ${st} vs DC ${a.prone.dc}: <b>you're knocked prone</b>`;
       } else line += `. STR save ${st} vs DC ${a.prone.dc}: you keep your feet`;
     }
     log(line + '.', 'them');
+    concCheck();
     rebukeCheck(took);
   };
   const opts = damageReacts(parts, true, { apply });
@@ -727,15 +944,15 @@ function attackLands(a, head, crit) {
 }
 function breathStep() {
   const B = F.mon.breath,
-    sr = d20(),
-    sv = F.ch.saves ? F.ch.saves[B.ab] : F.K.m[B.ab],
-    st = sr.nat + sv,
+    sr = mySave(B.ab),
+    st = sr.tot,
     ok = st >= B.dc,
     dm = roll(B.dmg),
     amt = ok ? (B.half ? Math.floor(dm.total / 2) : 0) : dm.total;
   const apply = () => {
     const h = hurt('me', amt, B.type);
-    log(`<b>${B.n}</b>! ${AB[B.ab]} save: d20 ${sr.nat} ${sgn(sv)} = ${st} vs DC ${B.dc}: ${ok ? 'half damage' : 'full damage'} · ${dm.txt.join(' ')}${ok ? ' ÷ 2' : ''} = <b>${h.amt}</b> ${B.type}${h.note}.`, 'them');
+    log(`<b>${B.n}</b>! ${AB[B.ab]} save: ${sr.txt} = ${st} vs DC ${B.dc}: ${ok ? 'half damage' : 'full damage'} · ${dm.txt.join(' ')}${ok ? ' ÷ 2' : ''} = <b>${h.amt}</b> ${B.type}${h.note}.`, 'them');
+    concCheck();
     rebukeCheck(h.amt);
   };
   const opts = amt ? damageReacts([{ amt, type: B.type }], false, { apply }) : [];
@@ -749,6 +966,11 @@ function monsterTurn() {
     ranged = M.atk.find(a => a.ranged),
     Q = (F.q = []);
   F.qDone = finishMonster;
+  // 2014: Moonbeam and Spirit Guardians hit at the start of its turn; 2024: when it enters or ends its turn there
+  if (ed14()) {
+    if (F.fx.mb) Q.push(() => auraHit('mb'));
+    if (F.fx.sg && F.close) Q.push(() => auraHit('sg'));
+  }
   // breath weapon: recharges on 5–6 at the start of its turn
   if (M.breath && !F.them.breath) {
     const r = d(6);
@@ -771,9 +993,14 @@ function monsterTurn() {
     if (!F.close && melee.length) {
       log(M.style === 'aggressive' ? `The ${M.n} charges in (Aggressive).` : `The ${M.n} closes in.`, 'them');
       F.close = true;
+      if (F.fx.sg) Q.push(() => auraHit('sg'));
     }
     if (F.close && melee.length) (M.multi ? melee : [melee[0]]).forEach(a => Q.push(() => monsterAttack(a)));
     else if (ranged) Q.push(() => monsterAttack(ranged));
+  }
+  if (!ed14()) {
+    if (F.fx.mb) Q.push(() => auraHit('mb'));
+    if (F.fx.sg) Q.push(() => auraHit('sg'));
   }
   run();
 }
@@ -833,6 +1060,12 @@ function monScreen() {
 function bar(cur, max, cls) {
   return `<div class="bar ${cls}"><i style="width:${Math.max(0, (100 * cur) / max)}%"></i></div>`;
 }
+// lasting spells in play
+function fxRow() {
+  const L = Object.entries(F.fx).map(([id, E]) => `<span class="${E.conc ? 'conc' : ''}">${esc(E.n)}${E.conc ? ' ◆' : ''}</span>`);
+  if (F.me.absorbRes) L.push(`<span>Resisting ${esc(F.me.absorbRes)}</span>`);
+  return L.length ? `<div class="fx">${L.join('')}${F.me.conc ? `<small>◆ concentrating</small>` : ''}</div>` : '';
+}
 function fightScreen() {
   const c = F.ch,
     M = F.mon,
@@ -848,24 +1081,31 @@ function fightScreen() {
       const off = !(t.action || t.attacksLeft > 0) || (!w.ranged && !F.close);
       return `<button class="act" ${off ? 'disabled' : ''} onclick="weaponAttack(${i})"><b>${esc(w.n)}</b><small>${sgn(w.hit)} · ${esc(w.dmg)} ${esc(w.type || '')}${!w.ranged && !F.close ? ' · move in first' : ''}</small></button>`;
     })
-    .join('');
+    .join('') +
+    (F.fx.sw
+      ? `<button class="act ba" ${!t.bonus ? 'disabled' : ''} onclick="swAttack()"><b>Spiritual Weapon</b><small>Bonus · ${sgn(K.sc.atk || 0)} · ${esc(F.fx.sw.dmg)} force</small></button>`
+      : '');
   const spBtns = K.spells
     .map((S, i) => {
       const s = S.s,
         isB = s.t === 'B',
         lvl = s.lvl || 0,
         hasSlot = !lvl || Object.entries(F.me.slots).some(([k, x]) => (k === 'P' ? x.lvl >= lvl : +k >= lvl) && x.max - (x.used || 0) > 0),
-        off = (isB ? !t.bonus : !t.action) || !hasSlot || (S.melee && !F.close),
-        what = S.kind === 'heal' ? `heal ${S.dmg}` : S.kind === 'save' ? `${AB[S.ab]} save DC ${K.sc.dc}, ${S.dmg} ${S.type}` : S.kind === 'auto' ? `${S.n}× ${S.dmg} ${S.type}, always hits` : `${S.n > 1 ? S.n + '× ' : ''}${sgn(K.sc.atk || 0)} · ${S.dmg} ${S.type}`;
-      return `<button class="act ${isB ? 'ba' : ''}" ${off ? 'disabled' : ''} onclick="castSpell(${i})"><b>${esc(s.n)}</b><small>${lvl ? 'Level ' + lvl + ' · ' : 'Cantrip · '}${isB ? 'Bonus · ' : ''}${esc(what)}${!hasSlot ? ' · no slot' : ''}</small></button>`;
+        on = S.kind === 'last' && F.fx[S.L.id],
+        off = (isB ? !t.bonus : !t.action) || !hasSlot || (S.melee && !F.close) || on,
+        X = S.kind === 'last' ? null : scaled(S, lvl),
+        what = S.kind === 'last'
+          ? `${concOf(S) ? 'Concentration · ' : ''}${S.L.what(ed14())}${baseDmg(S) && S.L.id !== 'sw' ? ` · ${baseDmg(S)} ${S.L.type}` : ''}${on ? ' · <em>active</em>' : concOf(S) && F.me.conc ? ` · ends ${esc(F.me.conc)}` : ''}`
+          : S.kind === 'heal' ? `heal ${S.dmg}` : S.kind === 'save' ? `${AB[S.ab]} save DC ${K.sc.dc}, ${S.dmg} ${S.type}` : S.kind === 'auto' ? `${S.n}× ${S.dmg} ${S.type}, always hits` : `${S.n > 1 ? S.n + '× ' : ''}${sgn(K.sc.atk || 0)} · ${S.dmg} ${S.type}`;
+      return `<button class="act ${isB ? 'ba' : ''}" ${off ? 'disabled' : ''} onclick="castSpell(${i})"><b>${esc(s.n)}</b><small>${lvl ? 'Level ' + lvl + ' · ' : 'Cantrip · '}${isB ? 'Bonus · ' : ''}${S.kind === 'last' ? what : esc(what)}${upOf(S) && lvl ? ' · can upcast' : ''}${!hasSlot ? ' · no slot' : ''}</small></button>`;
     })
     .join('');
-  const ed14 = c.edition === '2014',
+  const e14 = c.edition === '2014',
     R = K.R,
     rList = [R.shield && 'Shield', R.absorb && 'Absorb Elements', R.rebuke && 'Hellish Rebuke', R.uncanny && 'Uncanny Dodge'].filter(Boolean),
     A = F.ask,
     askCard = A
-      ? `<div class="turn ask"><div class="sec">Your reaction${who() === 'me' ? '' : ` · the ${esc(M.n)}’s turn`}</div><p>${A.text}</p>
+      ? `<div class="turn ask"><div class="sec">${A.head || `Your reaction${who() === 'me' ? '' : ` · the ${esc(M.n)}’s turn`}`}</div><p>${A.text}</p>
         ${A.opts.map((o, i) => `<button class="act react" onclick="answer(${i})"><b>${esc(o.b)}</b><small>${esc(o.s)}</small></button>`).join('')}
         <button class="btn" onclick="answer(-1)">${esc(A.noLabel)}</button></div>`
       : '';
@@ -874,7 +1114,7 @@ function fightScreen() {
     <div class="side me ${who() === 'me' ? 'now' : ''}"><b>${esc(c.name)}</b><small>AC ${myAC()}${F.me.acb ? ' (Shield)' : ''}${F.me.prone ? ' · <em>prone</em>' : ''}${F.me.dodge ? ' · dodging' : ''}</small>${bar(F.me.hp, F.me.max, 'mine')}<span class="hp">${F.me.hp}/${F.me.max}</span></div>
     <div class="dist">${F.close ? 'In reach' : '~30 ft apart'}</div>
     <div class="side them ${who() === 'them' ? 'now' : ''}"><b>${esc(M.n)}</b><small>AC ${M.ac}</small>${bar(F.them.hp, F.them.max, 'theirs')}<span class="hp">${F.them.hp}/${F.them.max}</span></div>
-  </div>
+  </div>${fxRow()}
   ${
     F.over
       ? `<div class="end ${F.over}"><h2>${F.over === 'win' ? 'Victory!' : 'You drop to 0 HP'}</h2><p>${F.over === 'win' ? `The ${M.n} falls in round ${F.round}.` : `The ${M.n} wins this one, in round ${F.round}. At a real table you'd now roll death saves.`}</p>
@@ -890,7 +1130,7 @@ function fightScreen() {
           <button class="act" ${!t.move ? 'disabled' : ''} onclick="move(${!F.close})"><b>${F.close ? 'Step back' : 'Move in'}</b><small>${F.close ? 'provokes an opportunity attack' : 'uses your move'}</small></button>
           ${F.close ? `<button class="act" ${!t.action || !t.move ? 'disabled' : ''} onclick="move(false,true)"><b>Disengage</b><small>Action: back off safely</small></button>` : ''}
           <button class="act" ${!t.action ? 'disabled' : ''} onclick="dodge()"><b>Dodge</b><small>Action: attacks against you have disadvantage</small></button>
-          ${F.me.pots ? `<button class="act" ${!(ed14 ? t.action : t.bonus) ? 'disabled' : ''} onclick="drinkPotion()"><b>Healing potion ×${F.me.pots}</b><small>${ed14 ? 'Action' : 'Bonus Action'}</small></button>` : ''}
+          ${F.me.pots ? `<button class="act" ${!(e14 ? t.action : t.bonus) ? 'disabled' : ''} onclick="drinkPotion()"><b>Healing potion ×${F.me.pots}</b><small>${e14 ? 'Action' : 'Bonus Action'}</small></button>` : ''}
           ${F.me.second ? `<button class="act" ${!t.bonus ? 'disabled' : ''} onclick="secondWind()"><b>Second Wind</b><small>Bonus: heal 1d10+${c.level}</small></button>` : ''}
         </div>
         ${rList.length ? `<p class="fine rx">Reactions: ${rList.join(', ')}. The fight stops and asks you when one applies.</p>` : ''}
