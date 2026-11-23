@@ -6164,7 +6164,7 @@ function restSheet() {
   return `<p class="sm mut" style="line-height:1.5;margin:2px 0 12px">At least 1 hour of rest. Spend Hit Dice on your sheet${dice ? `: ${dice}, each ${con >= 0 ? '+' : '−'} ${Math.abs(con)} CON` : ''}. Then tap your HP to add what you healed.</p>
   ${song ? `<div class="item" style="border-color:var(--line)"><div class="t">Song of Rest · 1${song}</div><div class="d">Your performance during this rest: you and every friendly creature that hears it and spends at least one Hit Die regains an extra 1${song} HP at the end of the rest (once per creature, not per die). Tell your party!</div></div>` : ''}
   ${arcRecSection()}${natRecSection()}
-  <div class="xs sec">Comes back</div><div class="sm" style="line-height:1.6">${back.length || pact ? [...back.map(r => `${esc(r.n)} (${r.cur}→${/^Channel Divinity$/i.test(r.n) && !is14('cd') ? Math.min(r.max, r.cur + 1) : r.max})`), pact ? 'Pact Magic slots' : ''].filter(Boolean).join(' · ') : '<span class="mut">Nothing to restore right now.</span>'}</div>
+  <div class="xs sec">Comes back</div><div class="sm" style="line-height:1.6">${back.length || pact ? [...back.map(r => `${esc(r.n)} (${r.cur}→${(/^Channel Divinity$/i.test(r.n) && !is14('cd')) || (/^Wild Shape$/i.test(r.n) && !is14('ws')) ? Math.min(r.max, r.cur + 1) : r.max})`), pact ? 'Pact Magic slots' : ''].filter(Boolean).join(' · ') : '<span class="mut">Nothing to restore right now.</span>'}</div>
   <button class="btn pri" style="margin-top:14px" data-act="rest" data-arg="short">Finish Short Rest</button>`;
 }
 function inspSheet() {
@@ -9941,6 +9941,11 @@ const ACT = {
     const rk = (rageFeat() || {}).res;
     Object.values(ch.res).forEach(r => {
       if (type === 'short' && r.k === rk && !is14('rage')) {
+        r.cur = Math.min(r.max, r.cur + 1);
+        return;
+      }
+      // 2024 Wild Shape: one use back on a short rest, all on a long rest
+      if (type === 'short' && /^Wild Shape$/i.test(r.n) && !is14('ws')) {
         r.cur = Math.min(r.max, r.cur + 1);
         return;
       }
