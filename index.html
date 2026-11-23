@@ -6298,7 +6298,7 @@ function menuSheet() {
   <p class="sm mut" style="margin-top:16px;text-align:center">Initiative · beta ${APP_VERSION} · ${APP_BUILT}<br>Your character is kept on this device.</p>`;
 }
 const APP_VERSION = '0.9',
-  APP_BUILT = '23 Nov 2026';
+  APP_BUILT = '24 Nov 2026';
 const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 // feedback leaves through the phone's own share menu (text, mail, group chat): nothing about anyone is stored in the app
 let FB = '';
@@ -8298,6 +8298,14 @@ function doEffect(o) {
     c.attacksLeft++;
     c.atkMax = (c.atkMax || 0) + 1;
   }
+  // a feature that restores another pool (Uncanny Metabolism: all Focus back)
+  if (o.refill) {
+    const r = CH().res[o.refill];
+    if (r) {
+      r.cur = r.max;
+      toast(`<b>${esc(o.n)}</b>: ${esc(resName(o.refill))} back to ${r.max}${o.heal ? ` · roll ${esc(o.heal)} and heal that much (tap your HP)` : ''}`);
+    }
+  }
   if (o.once) c.flags[o.once] = true;
 }
 function findAny(id) {
@@ -9616,7 +9624,7 @@ const ACT = {
     doEffect(o);
     if (o.curse && bh() && bh().patron === 'hexblade' && isProfane())
       addStatus(`Hexblade: +${CH().prof || 3} on your next hit vs the cursed target`);
-    if (!o.effect)
+    if (!o.effect && !o.refill)
       toast(
         o.atk
           ? `<b>${esc(o.n)}</b>: +${o.atk.hit} to hit · ${esc(o.atk.dmg)} ${esc(o.atk.type)}`
@@ -11219,7 +11227,7 @@ function hbWeapon(B, w) {
     vers = (P.find(x => /^V/.test(x)) || '').slice(1);
   const ma = hbMartialDie(B),
     monkW =
-      ma && !ranged && !has('H') && !has('2') && (cat === 'S' || (D.o14 ? n === 'Shortsword' : has('L')));
+      ma && !ranged && n !== 'Dart' && !has('H') && (D.lv('Monk') >= 3 && /Kensei/i.test(D.sub('Monk')) ? true : !has('2') && (cat === 'S' || (D.o14 ? n === 'Shortsword' : has('L'))));
   let ab = ranged ? 'DEX' : (has('F') || monkW) && m.DEX > m.STR ? 'DEX' : 'STR';
   const alt =
     D.lv('Artificer') >= 3 && /Battle Smith/i.test(D.sub('Artificer')) && +w.mg
@@ -11634,9 +11642,12 @@ function hfGen(B) {
     );
     if (k >= 2) {
       res('focus', 'Focus Points', k, 'short', { n14: 'Ki Points', rk: 'monk' });
-      const rider = oh
-        ? ` Open Hand: on a hit, you can push it 15 ft, knock it Prone (DEX save DC ${mdc}) or stop its Reactions.`
-        : '';
+      if (!o) {
+        res('metab', 'Uncanny Metabolism', 1, 'long');
+        add('monk.metab', 'Uncanny Metabolism', 'F', `When you roll Initiative: regain all your Focus Points and heal 1d${ma24}+${k} HP.`, { res: 'metab', refill: 'focus', heal: `1d${ma24}+${k}` });
+      }
+      const rider = oh ? ` Open Hand: on a hit, Addle it (no Opportunity Attacks), Push it 15 ft (STR save DC ${mdc}) or Topple it (DEX save DC ${mdc}).` : '',
+        rider14 = oh ? ` Open Hand: on a hit, knock it Prone (DEX save DC ${mdc}), push it 15 ft (STR save DC ${mdc}) or stop its reactions.` : '';
       add(
         'monk.flurry',
         'Flurry of Blows',
@@ -11645,7 +11656,7 @@ function hfGen(B) {
         {
           res: 'focus',
           rk: 'monk',
-          d14: `Right after taking the Attack action: two unarmed strikes, each ${sgn(hit)} to hit, ${us(ma14)} bludgeoning.${rider}`
+          d14: `Right after taking the Attack action: two unarmed strikes, each ${sgn(hit)} to hit, ${us(ma14)} bludgeoning.${rider14}`
         }
       );
       add('monk.pd', 'Patient Defense', 'B', 'Take the Disengage action.', {
@@ -11703,7 +11714,7 @@ function hfGen(B) {
         'monk.deflect14',
         'Deflect Missiles',
         'R',
-        `When hit by a ranged weapon attack: reduce the damage by 1d10+${m.DEX + k}. If it drops to 0 and you catch it, spend 1 ki to throw it back (${sgn(hit)} to hit, ${us(ma14)}).`,
+        `When hit by a ranged weapon attack: reduce the damage by 1d10+${m.DEX + k}. If it drops to 0 and you catch it, spend 1 ki to throw it back (range 20/60 ft, ${sgn(hit)} to hit, ${us(ma14)}).`,
         { rk: 'monk', only: '2014' }
       );
     }
@@ -11713,8 +11724,8 @@ function hfGen(B) {
         'monk.stun',
         'Stunning Strike',
         'F',
-        `On a hit with a monk weapon or Unarmed Strike: the target makes a CON save DC ${mdc} or is Stunned until the start of your next turn.`,
-        { res: 'focus', once: 'stun', once14: false, rk: 'monk' }
+        `Once per turn, on a hit with a monk weapon or Unarmed Strike: CON save DC ${mdc} or Stunned until the start of your next turn. On a success, its speed is halved and the next attack against it before then has Advantage.`,
+        { res: 'focus', once: 'stun', once14: false, rk: 'monk', d14: `On a melee weapon hit (unarmed strikes too): CON save DC ${mdc} or Stunned until the end of your next turn. You can try it on every hit.` }
       );
   }
   if ((k = lv('Paladin'))) {
@@ -12268,7 +12279,7 @@ function hbBuild(B) {
     main = classes[0];
   const on = f => (f.opt ? (B.on || []).includes(f.id) : !(B.off || []).includes(f.id));
   const kept = G.F.filter(on),
-    IMM = [...(G.F.filter(on).some(f => f.id === 'sub.land10') && E === '2014' ? ['poison'] : []), ...(G.F.filter(on).some(f => f.id === 'sub.forge17') ? ['fire'] : [])],
+    IMM = [...new Set([...(G.F.filter(on).some(f => f.id === 'sub.land10') && E === '2014' ? ['poison'] : []), ...(G.F.filter(on).some(f => f.id === 'sub.forge17') ? ['fire'] : []), ...(E === '2014' && D.lv('Monk') >= 10 ? ['poison'] : [])])],
     druSub = D.sub('Druid'),
     sk = spcKey(B.species),
     so = spcOpt(B);
@@ -12361,7 +12372,7 @@ function hbBuild(B) {
       .forEach(x => {
         x.d = x.d.replace(/for 1d10 force\..*$/, `for 1d10+${m.CHA} force (Agonizing Blast).`);
       });
-  const sv = [...new Set([...(B.saves || HC[main.n].sv), ...(B.feats || []).filter(f => f.n === 'Resilient' && f.ab).map(f => ABN.indexOf(f.ab)), ...(D.lv('Fighter') >= 7 && /Samurai/i.test(D.sub('Fighter')) ? [4] : [])])],
+  const sv = [...new Set([...(B.saves || HC[main.n].sv), ...(B.feats || []).filter(f => f.n === 'Resilient' && f.ab).map(f => ABN.indexOf(f.ab)), ...(D.lv('Fighter') >= 7 && /Samurai/i.test(D.sub('Fighter')) ? [4] : []), ...(D.lv('Monk') >= 14 ? [0, 1, 2, 3, 4, 5] : [])])],
     aura = D.lv('Paladin') >= 6 ? mx1(m.CHA) : 0;
   const saves = ABN.map((a, i) => m[a] + (sv.includes(i) ? p : 0) + aura);
   const joat = D.lv('Bard') >= 2,
@@ -12698,7 +12709,14 @@ function hfMore(B, D, F, add, res) {
         'At the start of your turn: resistance to all damage except force for 1 minute.',
         { res: 'focus', step: 3, rk: 'monk', only: '2024' }
       );
-    if (o && k >= 20) pas('monk.perfect', 'Perfect Self');
+    if (o && k >= 20) pas('monk.perfect', 'Perfect Self', 'When you roll initiative with no ki points left: regain 4.');
+    if (k >= 7) pas('monk.evasion', 'Evasion', 'A DEX save for half damage: no damage on a success, half on a failure.');
+    if (o && k >= 9) pas('monk.wall', 'Unarmored Movement (walls and water)', 'On your turn you can move along vertical surfaces and across liquids without falling.');
+    if (o && k >= 10) pas('monk.purity', 'Purity of Body', "Immune to disease and poison: no poison damage, and you can't be Poisoned.");
+    if (!o && k >= 10) pas('monk.restore', 'Self-Restoration', 'At the end of each of your turns: end Charmed, Frightened or Poisoned on yourself. Skipping food and drink gives you no Exhaustion.');
+    if (k >= 14) pas(o ? 'monk.diamond' : 'monk.survivor', o ? 'Diamond Soul' : 'Disciplined Survivor', `Proficient in every saving throw (already in your save bonuses). Failed a save? Spend 1 ${o ? 'ki' : 'Focus'} to reroll it.`);
+    if (!o && k >= 15) pas('monk.pfocus', 'Perfect Focus', 'When you roll Initiative without using Uncanny Metabolism and have 3 or fewer Focus Points: regain Focus until you have 4.');
+    if (!o && k >= 20) pas('monk.bodymind', 'Body and Mind', 'Dexterity and Wisdom +4 (up to 25): enter your raised scores on the Scores step.');
   }
 
   if ((k = lv('Paladin'))) {
@@ -13388,22 +13406,57 @@ function hfSubs(B, D, F, add, res) {
     const md = o ? (k >= 17 ? 'd10' : k >= 11 ? 'd8' : k >= 5 ? 'd6' : 'd4') : k >= 17 ? 'd12' : k >= 11 ? 'd10' : k >= 5 ? 'd8' : 'd6',
       fk = { res: 'focus', rk: 'monk' };
     if (is('Monk', /Shadow/i)) {
-      add('sub.shadow3', 'Shadow Arts: Darkness', 'A', 'Spend 1 Focus (2 ki in 5e): cast Darkness. You can see through it, and move it 30 ft at the start of each of your turns.', { ...fk, step: o ? 2 : 1 });
+      add('sub.shadow3', 'Shadow Arts: Darkness', 'A', o ? 'Spend 2 ki: cast Darkness, Darkvision, Pass without Trace or Silence (no components). You also know Minor Illusion.' : 'Spend 1 Focus: cast Darkness. You can see through it, and move it 30 ft at the start of each of your turns.', { ...fk, step: o ? 2 : 1 });
       if (k >= 6) add('sub.shadow6', 'Shadow Step', 'B', 'In dim light or darkness: teleport up to 60 ft to another dim or dark space. Advantage on your next melee attack this turn.');
-      if (k >= 11) pas('sub.shadow11', o ? 'Cloak of Shadows' : 'Improved Shadow Step', o ? 'In dim light or darkness, become Invisible as an action.' : 'Shadow Step costs 1 Focus and works from any space, and you can make an unarmed strike right after it.');
+      if (!o && k >= 11) pas('sub.shadow11', 'Improved Shadow Step', 'Shadow Step costs 1 Focus and works from any space, and you can make an unarmed strike right after it.');
       if (o && k >= 11) add('sub.shadow11c', 'Cloak of Shadows', 'A', 'In dim light or darkness: become Invisible until you attack, cast a spell or are in bright light.', { status: 'Invisible' });
       if (!o && k >= 17) add('sub.shadow17', 'Cloak of Shadows', 'A', 'Spend 3 Focus: for 1 minute you are Invisible in dim light or darkness, can move through creatures and objects, and Flurry of Blows costs no Focus.', { ...fk, step: 3, status: 'Cloak of Shadows' });
       if (o && k >= 17) add('sub.shadow17o', 'Opportunist', 'R', 'When a creature within 5 ft is hit by someone else\'s attack: make a melee attack against it.');
     }
-    if (is('Monk', /Elements|Four Elements/i)) {
+    if (is('Monk', /Elements|Four Elements/i) && o) {
+      const kmax = k >= 17 ? 6 : k >= 13 ? 5 : k >= 9 ? 4 : k >= 5 ? 3 : 2,
+        n = k >= 17 ? 4 : k >= 11 ? 3 : k >= 6 ? 2 : 1,
+        kdc = dc('WIS'),
+        up = (die, per) => ` +1${die} per extra ki${per ? ' ' + per : ''} (at most ${kmax} ki in all).`,
+        el = (lv, id, nm, t, cost, txt, x = {}) => {
+          if (k >= lv) add('el.' + id, `${nm} (${cost} ki)`, t, txt, { ...fk, step: cost, ...x }, true);
+        };
+      pas('sub.elem3o', 'Disciple of the Elements', `You know Elemental Attunement and ${n} other discipline${n > 1 ? 's' : ''}: switch ${n > 1 ? 'them' : 'it'} on under "Elemental disciplines you know". A discipline that casts a spell uses save DC ${kdc}; spend extra ki to cast it at a higher level, up to ${kmax} ki in all.`);
+      el(3, 'fangs', 'Fangs of the Fire Snake', 'F', 1, `When you take the Attack action: your unarmed strikes get +10 ft reach this turn and deal fire damage. When one hits, spend 1 more ki for +1d10 fire.`);
+      el(3, 'thunders', 'Fist of Four Thunders', 'A', 2, `Cast Thunderwave: a 15-ft cube from you, CON save DC ${kdc} or 2d8 thunder and pushed 10 ft (half, no push, on a success).` + up('d8'));
+      el(3, 'air', 'Fist of Unbroken Air', 'A', 2, `A creature within 30 ft: STR save DC ${kdc} or 3d10 bludgeoning, pushed up to 20 ft and knocked Prone (half, no push, on a success).` + up('d10'));
+      el(3, 'gale', 'Rush of the Gale Spirits', 'A', 2, `Cast Gust of Wind: a 60-ft line, 10 ft wide. STR save DC ${kdc} or pushed 15 ft away (Concentration, 1 minute).`);
+      el(3, 'river', 'Shape the Flowing River', 'A', 1, 'Shape water or ice within 120 ft (a 30-ft cube): raise, lower, freeze or thaw it. It can\'t trap or hurt a creature.');
+      el(3, 'cinder', 'Sweeping Cinder Strike', 'A', 2, `Cast Burning Hands: a 15-ft cone, DEX save DC ${kdc} or 3d6 fire (half on a success).` + up('d6'));
+      el(3, 'whip', 'Water Whip', 'A', 2, `A creature within 30 ft: DEX save DC ${kdc} or 3d10 bludgeoning, and you pull it up to 25 ft closer or knock it Prone (half, nothing else, on a success).` + up('d10'));
+      el(6, 'clench', 'Clench of the North Wind', 'A', 3, `Cast Hold Person: a humanoid within 60 ft, WIS save DC ${kdc} or Paralyzed (Concentration, 1 minute; it repeats the save at the end of each of its turns).` + ' +1 target per extra ki.');
+      el(6, 'gong', 'Gong of the Summit', 'A', 3, `Cast Shatter: a 10-ft sphere within 60 ft, CON save DC ${kdc} or 3d8 thunder (half on a success).` + up('d8'));
+      el(11, 'phoenix', 'Flames of the Phoenix', 'A', 4, `Cast Fireball: a 20-ft sphere within 150 ft, DEX save DC ${kdc} or 8d6 fire (half on a success).` + up('d6'));
+      el(11, 'mist', 'Mist Stance', 'A', 4, 'Cast Gaseous Form on yourself (Concentration, 1 hour): fly 10 ft, resistance to nonmagical damage, can\'t attack or cast spells.');
+      el(11, 'wind', 'Ride the Wind', 'A', 4, 'Cast Fly on yourself (Concentration, 10 minutes): flying speed 60 ft.', { status: 'Flying' });
+      el(17, 'winter', 'Breath of Winter', 'A', 6, `Cast Cone of Cold: a 60-ft cone, CON save DC ${kdc} or 8d8 cold (half on a success).`);
+      el(17, 'mountain', 'Eternal Mountain Defense', 'A', 5, 'Cast Stoneskin on yourself (Concentration, 1 hour): resistance to nonmagical bludgeoning, piercing and slashing damage.');
+      el(17, 'hungry', 'River of Hungry Flame', 'A', 5, `Cast Wall of Fire within 120 ft (Concentration, 1 minute): DEX save DC ${kdc} or 5d8 fire when it appears, and 5d8 to anyone who ends a turn on its hot side or within 10 ft of it.`);
+      el(17, 'earth', 'Wave of Rolling Earth', 'A', 6, 'Cast Wall of Stone within 120 ft (Concentration, 10 minutes): ten 10-ft panels, 6 inches thick.');
+    }
+    if (is('Monk', /Kensei/i)) {
+      const kn = o ? 'ki' : 'Focus';
+      add('sub.ken3a', "Kensei's Shot", 'B', 'Until the end of this turn: your ranged attacks with a kensei weapon deal +1d4 damage of the weapon\'s type.', { status: "Kensei's Shot: +1d4 ranged" });
+      add('sub.ken3b', 'Agile Parry', 'F', 'After an unarmed strike as part of the Attack action, holding a melee kensei weapon: +2 AC until the start of your next turn.', { status: 'Agile Parry: +2 AC' });
+      pas('sub.ken3', 'Path of the Kensei', 'Your kensei weapons (one melee, one ranged, no Heavy or Special weapons; more at levels 6, 11 and 17) count as monk weapons, so they can use DEX and your Martial Arts die.');
+      if (k >= 6) add('sub.ken6', 'Deft Strike', 'F', `Once per turn, when you hit with a kensei weapon: spend 1 ${kn} for +1${md} damage. Your kensei weapons count as magical.`, { ...fk, once: 'deft' });
+      if (k >= 11) add('sub.ken11', 'Sharpen the Blade', 'B', `Spend 1 to 3 ${kn}: a kensei weapon you touch gets that much bonus to hit and damage for 1 minute (not a weapon that already has a bonus). Tap your ${kn} pool for the extra points.`, { ...fk, status: 'Sharpened blade' });
+      if (k >= 17) add('sub.ken17', 'Unerring Accuracy', 'F', 'Once per turn, when you miss with a monk weapon: reroll the attack.', { once: 'unerring' });
+    }
+    if (is('Monk', /Elements|Four Elements/i) && !o) {
       add('sub.elem3', 'Elemental Attunement', 'F', `Spend 1 Focus at the start of your turn: for 10 minutes your reach is +10 ft, unarmed strikes can deal acid, cold, fire, lightning or thunder damage, and a hit can push or pull the target 10 ft (STR save DC ${dc('WIS')}).`, { ...fk, step: 1 });
       if (k >= 6) add('sub.elem6', 'Elemental Burst', 'A', `Spend 2 Focus: a 20-ft sphere within 120 ft. DEX save DC ${dc('WIS')} or 3${md} acid, cold, fire, lightning or thunder damage (half on a success).`, { ...fk, step: 2 });
       if (k >= 11) pas('sub.elem11', 'Stride of the Elements', 'While Elemental Attunement is active: fly and swim speed equal to your speed.');
-      if (k >= 17) pas('sub.elem17', 'Elemental Epitome', `While Elemental Attunement is active: resistance to one elemental damage type, Step of the Wind adds +20 ft and damages creatures you pass (${md}), and once per turn a strike deals +${md} of the chosen type.`);
+      if (k >= 17) pas('sub.elem17', 'Elemental Epitome', `While Elemental Attunement is active: resistance to one elemental damage type, Step of the Wind adds +20 ft and damages creatures you pass (1${md}), and once per turn a strike deals +1${md} of the chosen type.`);
     }
     if (is('Monk', /Mercy/i)) {
-      add('sub.mercy3a', 'Hand of Healing', 'A', `Spend 1 Focus: a creature you touch regains ${md}+${m.WIS} HP. You can replace one Flurry of Blows strike with this, without spending Focus.`, { ...fk, step: 1 });
-      add('sub.mercy3b', 'Hand of Harm', 'F', `Once per turn, when an unarmed strike hits: spend 1 Focus for +${md}+${m.WIS} necrotic damage.`, { ...fk, step: 1, once: 'harm' });
+      add('sub.mercy3a', 'Hand of Healing', 'A', `Spend 1 Focus: a creature you touch regains 1${md}+${m.WIS} HP. You can replace one Flurry of Blows strike with this, without spending Focus.`, { ...fk, step: 1 });
+      add('sub.mercy3b', 'Hand of Harm', 'F', `Once per turn, when an unarmed strike hits: spend 1 Focus for +1${md}+${m.WIS} necrotic damage.`, { ...fk, step: 1, once: 'harm' });
       if (k >= 6) pas('sub.mercy6', "Physician's Touch", 'Hand of Healing also ends Blinded, Deafened, Paralyzed, Poisoned or Stunned; Hand of Harm also makes the target Poisoned until the end of your next turn.');
       if (k >= 11) pas('sub.mercy11', 'Flurry of Healing and Harm', 'Replace each Flurry of Blows strike with Hand of Healing (no Focus), and use Hand of Harm with Flurry without spending Focus (once per turn).');
       if (k >= 17) {
@@ -13424,7 +13477,7 @@ function hfSubs(B, D, F, add, res) {
     if (is('Monk', /Open Hand/i) && !o) {
       if (k >= 6) {
         res('wholeness', 'Wholeness of Body', mx(m.WIS), 'long');
-        add('sub.oh6', 'Wholeness of Body', 'B', `Regain ${md}+${m.WIS} HP.`, { res: 'wholeness' });
+        add('sub.oh6', 'Wholeness of Body', 'B', `Regain 1${md}+${m.WIS} HP.`, { res: 'wholeness' });
       }
       if (k >= 11) pas('sub.oh11', 'Fleet Step', 'When you take a Bonus Action other than Step of the Wind, you can also use Step of the Wind.');
       if (k >= 17) add('sub.oh17', 'Quivering Palm', 'F', `Spend 4 Focus when an unarmed strike hits: harmless vibrations. Later, as part of an Attack action: CON save DC ${dc('WIS')} or 10d12 force damage (half on a success).`, { ...fk, step: 4 });
@@ -14291,7 +14344,9 @@ function hbFeatures() {
             : f.opt
               ? f.id.startsWith('bm.')
                 ? 'Maneuvers you know'
-                : f.id.startsWith('mm.')
+                : f.id.startsWith('el.')
+                  ? (k => `Elemental disciplines you know (pick ${k >= 17 ? 4 : k >= 11 ? 3 : k >= 6 ? 2 : 1})`)(+((B.cls.find(c => c.n === 'Monk') || {}).lvl || 0))
+                  : f.id.startsWith('mm.')
                   ? 'Metamagic options you know'
                   : 'Optional, if your table uses it'
               : 'From your class';
@@ -14408,6 +14463,7 @@ function wpnProf(B, n) {
     return false;
   }
   // martial weapons
+  if (sub(/Kensei/) && (!/\bH\b/.test(props) || n === 'Longbow')) return true; // kensei weapons: no Heavy, but the longbow is allowed
   if (o) {
     if (any(/Rogue|Bard/) && /^(Hand Crossbow|Longsword|Rapier|Shortsword)$/.test(n)) return true;
     if (any(/Monk/) && n === 'Shortsword') return true;
@@ -16180,6 +16236,18 @@ function rollCard(m) {
     const m = f.once === 'blades' ? (f.d || '').match(/\+(\d+d6) psychic/) : (f.d || '').match(/roll the (d\d+)/);
     if (m) RC.notes.push({ html: '', ex: { label: f.once === 'blades' ? `Psychic Blades: +${m[1]} psychic (a Bardic Inspiration)` : `Blade Flourish: +1${m[1]} (a Bardic Inspiration; pick the flourish)`, expr: f.once === 'blades' ? m[1] : '1' + m[1], once: f.once, res: f.res } });
   });
+  // monk on-hit options that spend Focus/ki once per turn: Deft Strike (kensei weapons), Hand of Harm (unarmed strikes)
+  {
+    const w = (CH().weapons || []).find(x => x.n === RC.name),
+      unarmed = /unarmed/i.test(RC.name) || (w && w.unarmed);
+    feats().forEach(f => {
+      if (!/^(deft|harm)$/.test(f.once || '') || c.flags[f.once] || !f.res || !resOK(f.res)) return;
+      if (f.once === 'harm' ? !unarmed : unarmed) return;
+      const m = (f.d || '').match(/\+(1d\d+(?:\+\d+)?)/);
+      if (m) RC.notes.push({ html: '', ex: { label: `${f.n}: +${m[1]}${f.once === 'harm' ? ' necrotic' : ''} (1 ${resName(f.res).replace(/s$/, "")})`, expr: m[1], once: f.once, res: f.res } });
+    });
+    if (w && (w.ranged || /^Dart/.test(w.n)) && c.status.some(x => /^Kensei's Shot/.test(x))) auto("Kensei's Shot: +1d4", '1d4');
+  }
   // a crit's extra weapon dice (not doubled)
   {
     const die = (RC.dice.match(/d(\d+)/) || [])[1];
