@@ -15008,9 +15008,10 @@ Object.assign(ACT, {
 /* ---------- the roll card: an attack's numbers, and (if you want) digital dice ----------
    The card stays until you close it, attack again, or end your turn.
    With Digital dice on, it rolls only what you tap: to hit, damage, or an extra. */
-let DICE = false;
+// on unless you've switched it off (your choice is remembered on this phone)
+let DICE = true;
 try {
-  DICE = localStorage.getItem('initiative-dice') === '1';
+  DICE = localStorage.getItem('initiative-dice') !== '0';
 } catch (e) {}
 let RC = null; // the card on screen: what it shows and what has been rolled
 
