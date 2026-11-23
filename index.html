@@ -10969,6 +10969,15 @@ const spcOpt = B => {
 };
 // High Elf: one wizard cantrip (2014), or Prestidigitation they can swap for one after a long rest (2024)
 const ELF_CANT = ['Fire Bolt', 'Ray of Frost', 'Shocking Grasp', 'Chill Touch', 'Toll the Dead', 'Mind Sliver', 'Frostbite', 'Poison Spray', 'Acid Splash', 'Booming Blade', 'Green-Flame Blade', 'Sword Burst', 'Create Bonfire', 'Infestation', 'True Strike', 'Blade Ward', 'Mage Hand', 'Minor Illusion', 'Light', 'Message', 'Mending', 'Friends', 'Prestidigitation'];
+// the ability species spells use: fixed in 2014; in 2024 you pick INT, WIS or CHA with the lineage or legacy
+const SPC_AB_PICK = ['elf', 'tiefling'];
+function spcAb(B, D) {
+  const sk = spcKey(B.species);
+  if (B.ed === '2014') return sk === 'elf' && spcOpt(B) !== 'Drow' ? 'INT' : 'CHA';
+  if (['INT', 'WIS', 'CHA'].includes(B.spcAb)) return B.spcAb;
+  if (['INT', 'WIS', 'CHA'].includes(D.scAb)) return D.scAb;
+  return ['INT', 'WIS', 'CHA'].reduce((a, b) => (D.m[b] > D.m[a] ? b : a), sk === 'elf' && spcOpt(B) === 'High' ? 'INT' : 'CHA');
+}
 const SPC_OPTS = {
   dragonborn: ['Draconic ancestry', Object.keys(DRAGONS)],
   goliath: ['Giant ancestry', ['Stone', 'Fire', 'Frost', 'Hill', 'Storm', 'Cloud']],
@@ -11877,6 +11886,7 @@ function hfGen(B) {
       const rk = 'sp' + n.replace(/\W/g, '');
       res(rk, n + ' (free cast)', 1, 'long');
       add(id, n, t, '');
+      const sa = spcAb(B, D);
       F[F.length - 1].sp = {
         n,
         lvl,
@@ -11885,7 +11895,10 @@ function hfGen(B) {
         res: rk,
         noslot: true,
         slotFallback: !o,
-        d: `Free cast once per long rest${o ? '' : ', or spend a slot'}. ${d}`
+        spc: sa,
+        atk: p + m[sa],
+        dc: 8 + p + m[sa],
+        d: `Free cast once per long rest${o ? '' : ', or spend a slot'}; uses ${sa}. ${d}`
       };
     };
   if (sk === 'aasimar') {
@@ -12153,8 +12166,9 @@ function hbBuild(B) {
   if (sk === 'elf' && so === 'High') {
     const cn = B.elfCant || 'Fire Bolt',
       l = lib.find(x => x.n === cn);
+    const sa = spcAb(B, D);
     if (l && !spells.some(x => x.n === cn))
-      spells.push({ ...JSON.parse(JSON.stringify(l)), elf: true, d: `High Elf cantrip (INT${E === '2014' ? '' : ', swap for another wizard cantrip after a long rest'}). ${l.d}` });
+      spells.push({ ...JSON.parse(JSON.stringify(l)), elf: true, spc: sa, atk: p + m[sa], dc: 8 + p + m[sa], d: `High Elf cantrip, uses ${sa}${E === '2014' ? '' : '; swap it for another wizard cantrip after a long rest'}. ${l.d}` });
   }
   // always-prepared subclass spells (subclass-spells.js); they don't count against prepared spells
   B.cls.forEach(c => {
@@ -12177,8 +12191,10 @@ function hbBuild(B) {
   // the shared spell list was written for one class: "+ CHA" becomes the casting ability of whoever has it
   spells.forEach(x => {
     if (x.custom || !x.d) return;
-    const ab = (x.cls && HC[x.cls] && HC[x.cls].ab) || D.scAb;
+    const ab = x.spc || (x.cls && HC[x.cls] && HC[x.cls].ab) || D.scAb;
     if (ab) x.d = x.d.replace(/\+ ?(CHA|WIS|INT)\b/g, a => a.replace(/CHA|WIS|INT/, ab));
+    // a multiclass caster: a spell from a class with a different casting ability gets that class's numbers
+    if (!x.spc && ab && ab !== D.scAb && x.atk == null) (x.atk = p + m[ab]), (x.dc = 8 + p + m[ab]);
   });
   if (kept.some(f => /^(cle\.(b)?potent|dru\.potent)$/.test(f.id)))
     spells
@@ -13270,6 +13286,7 @@ function hbWho() {
     if (sk === 'elf' && elfLine(B.species)) return hbElfCant(B);
     return `<div class="row between" style="margin-top:8px;gap:8px"><span class="sm mut">${so[0]}</span><select class="field" style="flex:1;padding:9px 12px" onchange="hbSet('spo',this.value,1)">${so[1].map(x => `<option ${(B.spo || so[1][0]) === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div>${sk === 'elf' ? hbElfCant(B) : ''}`;
   })()}
+  ${hbSpcAbPick(B)}
   ${spcKey(B.species) ? `<div class="sm mut" style="margin-top:6px">${esc(B.species.trim())} traits are added under Features.</div>` : ''}
   <div class="xs sec">Rules</div>
   <div class="seg mini">${['2014', '2024'].map(e => `<button class="${B.ed === e ? 'on' : ''}" data-act="hbEd" data-arg="${e}"><span style="font-size:15px;font-weight:800">${ED[e]}</span><small>${e} rules</small></button>`).join('')}</div>
@@ -13598,6 +13615,13 @@ function hbPick(list, val, other, none, js, input) {
   return `<select class="field" style="padding:10px 12px" onchange="${js}">
    <option value="">${esc(none)}</option>${list.map(x => `<option value="${esc(x)}" ${!oth && x.toLowerCase() === val.toLowerCase() ? 'selected' : ''}>${esc(x)}</option>`).join('')}
    <option value="__other" ${oth ? 'selected' : ''}>Other… (type it)</option></select>${oth ? input : ''}`;
+}
+// 2024 elves and tieflings choose the ability their species spells use
+function hbSpcAbPick(B) {
+  if (B.ed === '2014' || !SPC_AB_PICK.includes(spcKey(B.species))) return '';
+  const D = hbDer(B),
+    cur = spcAb(B, D);
+  return `<div class="row between" style="margin-top:8px;gap:8px"><span class="sm mut">Species spells use</span><select class="field" style="flex:1;padding:9px 12px" onchange="hbSet('spcAb',this.value,1)">${['INT', 'WIS', 'CHA'].map(a => `<option value="${a}" ${cur === a ? 'selected' : ''}>${{ INT: 'Intelligence', WIS: 'Wisdom', CHA: 'Charisma' }[a]}</option>`).join('')}</select></div>`;
 }
 // High Elf: pick the wizard cantrip
 function hbElfCant(B) {

@@ -365,6 +365,11 @@ function kit(ch) {
     } else if ((r = t.match(/heal(?: a creature[^]*?for)? (\d*d\d+\s*\+\s*(?:STR|DEX|CON|INT|WIS|CHA))/i)))
       spells.push({ s, kind: 'heal', dmg: fixAb(r[1]) });
   });
+  // each spell's own numbers (species spells, a second class's spells), else the character's
+  spells.forEach(S => {
+    S.atk = S.s.atk != null ? S.s.atk : sc.atk || 0;
+    S.dc = S.s.dc != null ? S.s.dc : sc.dc || 10;
+  });
   const pots = (ch.items || []).filter(i => /potion of (greater |superior |supreme )?healing/i.test(i.n || ''));
   const second = (ch.feats || []).find(f => /^Second Wind/.test(f.n));
   // reactions: the fight stops and asks when one of these applies
@@ -532,10 +537,10 @@ function upOf(S) {
   const u = S.kind === 'last' ? S.L.up : UP[nm(S.s)];
   return typeof u === 'function' ? u(ed14()) : u || null;
 }
-const swMod = () => (F.K.sc.atk || 0) - (F.ch.prof || 2 + Math.floor(((F.ch.level || 1) - 1) / 4));
+const swMod = S => (S.atk != null ? S.atk : F.K.sc.atk || 0) - (F.ch.prof || 2 + Math.floor(((F.ch.level || 1) - 1) / 4));
 function baseDmg(S) {
   if (S.kind !== 'last') return S.dmg;
-  if (S.L.id === 'sw') return `1d8+${Math.max(0, swMod())}`;
+  if (S.L.id === 'sw') return `1d8+${Math.max(0, swMod(S))}`;
   return S.L.dmg || '';
 }
 // the spell as cast with a slot of level `at`
@@ -599,7 +604,7 @@ function castSpell(i, key) {
     for (let n = 0; n < X.n; n++) {
       if (F.over) break;
       const dis = !S.melee && F.close,
-        A = myAttack(sc.atk || 0, dis, 'in melee');
+        A = myAttack(S.atk, dis, 'in melee');
       let l = `${A.txt} = <b>${A.tot}</b>: `;
       if (A.hit) {
         const dm = roll(X.dmg, A.crit),
@@ -623,12 +628,12 @@ function castSpell(i, key) {
     const sv = monSave(S.ab),
       r = d20(),
       tot = r.nat + sv,
-      ok = tot >= (sc.dc || 10),
+      ok = tot >= S.dc,
       dice = S.hurt && F.them.hp < F.them.max ? S.hurt : X.dmg,
       dm = roll(dice),
       amt = ok ? (S.half ? Math.floor(dm.total / 2) : 0) : dm.total,
       h = amt ? hurt('them', amt, S.type) : { amt: 0, note: '' };
-    log(`<b>${esc(s.n)}</b>${tag}: ${F.mon.n} rolls ${AB[S.ab]} save d20 ${r.nat} ${sgn(sv)} = ${tot} vs DC ${sc.dc}: ${ok ? (S.half ? 'saves, half damage' : 'saves, no damage') : 'fails'}${amt ? ` · ${dm.txt.join(' ')}${ok ? ' ÷ 2' : ''} = <b>${h.amt}</b> ${esc(S.type)}${h.note}` : ''}.`, 'me');
+    log(`<b>${esc(s.n)}</b>${tag}: ${F.mon.n} rolls ${AB[S.ab]} save d20 ${r.nat} ${sgn(sv)} = ${tot} vs DC ${S.dc}: ${ok ? (S.half ? 'saves, half damage' : 'saves, no damage') : 'fails'}${amt ? ` · ${dm.txt.join(' ')}${ok ? ' ÷ 2' : ''} = <b>${h.amt}</b> ${esc(S.type)}${h.note}` : ''}.`, 'me');
   } else if (S.kind === 'heal') {
     const dm = roll(X.dmg),
       was = F.me.hp;
@@ -669,14 +674,14 @@ function startLasting(S, at, X, tag) {
     if (F.me.conc) dropConc(`You stop concentrating:`);
     F.me.conc = s.n;
   }
-  F.fx[L.id] = { conc, n: s.n, dmg: X.dmg, last: '' };
+  F.fx[L.id] = { conc, n: s.n, dmg: X.dmg, last: '', atk: S.atk, dc: S.dc };
   const say = `<b>${esc(s.n)}</b>${tag}${conc ? ' (concentration)' : ''}: `;
   if (L.id === 'ff') {
     const sv = monSave(1),
       r = d20(),
       tot = r.nat + sv,
-      ok = tot >= (F.K.sc.dc || 10);
-    log(say + `${F.mon.n} DEX save d20 ${r.nat} ${sgn(sv)} = ${tot} vs DC ${F.K.sc.dc}: ${ok ? 'it dodges the light.' : 'it’s outlined. Your attacks have advantage.'}`, 'me');
+      ok = tot >= S.dc;
+    log(say + `${F.mon.n} DEX save d20 ${r.nat} ${sgn(sv)} = ${tot} vs DC ${S.dc}: ${ok ? 'it dodges the light.' : 'it’s outlined. Your attacks have advantage.'}`, 'me');
     if (ok) {
       delete F.fx.ff;
       F.me.conc = '';
@@ -699,7 +704,7 @@ function swAttack(free) {
     if (!F.t.bonus) return;
     F.t.bonus = false;
   }
-  const A = myAttack(F.K.sc.atk || 0, false);
+  const A = myAttack(W.atk, false);
   let l = `<b>Spiritual Weapon</b>: ${A.txt} = <b>${A.tot}</b> vs AC ${F.mon.ac}: `;
   if (A.hit) {
     const dm = roll(W.dmg, A.crit),
@@ -719,11 +724,11 @@ function auraHit(id) {
   const sv = monSave(L.ab),
     r = d20(),
     tot = r.nat + sv,
-    ok = tot >= (F.K.sc.dc || 10),
+    ok = tot >= E.dc,
     dm = roll(E.dmg),
     amt = ok ? Math.floor(dm.total / 2) : dm.total,
     h = hurt('them', amt, L.type);
-  log(`<b>${esc(E.n)}</b>: ${F.mon.n} ${AB[L.ab]} save d20 ${r.nat} ${sgn(sv)} = ${tot} vs DC ${F.K.sc.dc}: ${ok ? 'half damage' : 'fails'} · ${dm.txt.join(' ')}${ok ? ' ÷ 2' : ''} = <b>${h.amt}</b> ${L.type}${h.note}.`, 'me');
+  log(`<b>${esc(E.n)}</b>: ${F.mon.n} ${AB[L.ab]} save d20 ${r.nat} ${sgn(sv)} = ${tot} vs DC ${E.dc}: ${ok ? 'half damage' : 'fails'} · ${dm.txt.join(' ')}${ok ? ' ÷ 2' : ''} = <b>${h.amt}</b> ${L.type}${h.note}.`, 'me');
 }
 // the lowest slot that can cast a spell of this level
 const slotLv = k => (k === 'P' ? F.me.slots.P.lvl || 1 : +k);
@@ -850,24 +855,25 @@ function damageReacts(parts, isAttack, src) {
 }
 // Hellish Rebuke: after something damages you
 function rebukeCheck(took) {
-  const sp = F.K.R.rebuke;
+  const sp = F.K.R.rebuke,
+    DC = sp && sp.dc != null ? sp.dc : F.K.sc.dc || 10;
   if (!took || F.over || !F.them.hp || !canCast(sp)) return;
   ask(
     `The ${esc(F.mon.n)} just hurt you.`,
     [
       {
         b: 'Hellish Rebuke',
-        s: `it makes a DEX save vs DC ${F.K.sc.dc || 10}, fire damage (half on a success) · ${slotNote(sp)}`,
+        s: `it makes a DEX save vs DC ${DC}, fire damage (half on a success) · ${slotNote(sp)}`,
         fn: () => {
           const lv = useReaction(sp),
             sv = monSave(1),
             r = d20(),
             tot = r.nat + sv,
-            ok = tot >= (F.K.sc.dc || 10),
+            ok = tot >= DC,
             dm = roll(`${lv + 1}d10`),
             amt = ok ? Math.floor(dm.total / 2) : dm.total,
             h = hurt('them', amt, 'fire');
-          log(`<b>Hellish Rebuke</b> (reaction): ${F.mon.n} DEX save d20 ${r.nat} ${sgn(sv)} = ${tot} vs DC ${F.K.sc.dc || 10}: ${ok ? 'saves, half damage' : 'fails'} · ${dm.txt.join(' ')}${ok ? ' ÷ 2' : ''} = <b>${h.amt}</b> fire${h.note}.`, 'me');
+          log(`<b>Hellish Rebuke</b> (reaction): ${F.mon.n} DEX save d20 ${r.nat} ${sgn(sv)} = ${tot} vs DC ${DC}: ${ok ? 'saves, half damage' : 'fails'} · ${dm.txt.join(' ')}${ok ? ' ÷ 2' : ''} = <b>${h.amt}</b> fire${h.note}.`, 'me');
         }
       }
     ],
@@ -1083,7 +1089,7 @@ function fightScreen() {
     })
     .join('') +
     (F.fx.sw
-      ? `<button class="act ba" ${!t.bonus ? 'disabled' : ''} onclick="swAttack()"><b>Spiritual Weapon</b><small>Bonus · ${sgn(K.sc.atk || 0)} · ${esc(F.fx.sw.dmg)} force</small></button>`
+      ? `<button class="act ba" ${!t.bonus ? 'disabled' : ''} onclick="swAttack()"><b>Spiritual Weapon</b><small>Bonus · ${sgn(F.fx.sw.atk)} · ${esc(F.fx.sw.dmg)} force</small></button>`
       : '');
   const spBtns = K.spells
     .map((S, i) => {
@@ -1096,7 +1102,7 @@ function fightScreen() {
         X = S.kind === 'last' ? null : scaled(S, lvl),
         what = S.kind === 'last'
           ? `${concOf(S) ? 'Concentration · ' : ''}${S.L.what(ed14())}${baseDmg(S) && S.L.id !== 'sw' ? ` · ${baseDmg(S)} ${S.L.type}` : ''}${on ? ' · <em>active</em>' : concOf(S) && F.me.conc ? ` · ends ${esc(F.me.conc)}` : ''}`
-          : S.kind === 'heal' ? `heal ${S.dmg}` : S.kind === 'save' ? `${AB[S.ab]} save DC ${K.sc.dc}, ${S.dmg} ${S.type}` : S.kind === 'auto' ? `${S.n}× ${S.dmg} ${S.type}, always hits` : `${S.n > 1 ? S.n + '× ' : ''}${sgn(K.sc.atk || 0)} · ${S.dmg} ${S.type}`;
+          : S.kind === 'heal' ? `heal ${S.dmg}` : S.kind === 'save' ? `${AB[S.ab]} save DC ${S.dc}, ${S.dmg} ${S.type}` : S.kind === 'auto' ? `${S.n}× ${S.dmg} ${S.type}, always hits` : `${S.n > 1 ? S.n + '× ' : ''}${sgn(S.atk)} · ${S.dmg} ${S.type}`;
       return `<button class="act ${isB ? 'ba' : ''}" ${off ? 'disabled' : ''} onclick="castSpell(${i})"><b>${esc(s.n)}</b><small>${lvl ? 'Level ' + lvl + ' · ' : 'Cantrip · '}${isB ? 'Bonus · ' : ''}${S.kind === 'last' ? what : esc(what)}${upOf(S) && lvl ? ' · can upcast' : ''}${!hasSlot ? ' · no slot' : ''}</small></button>`;
     })
     .join('');
