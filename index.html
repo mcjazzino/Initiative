@@ -2747,7 +2747,7 @@ function rf(o, i) {
         `+${u.hit} to hit, ${u.dmg} ${u.type || 'bludgeoning'}.`;
   }
   if (o.d24pre && !old) r.d = o.d24pre + r.d;
-  if (o.atkReplace && !is14('breath')) r.t = 'F';
+  if (o.atkReplace && (o.atkAlways || !is14('breath'))) r.t = 'F';
   if (o.once === 'sneak' && sneakDice()) {
     r.n = `Sneak Attack (${sneakDice()}d6)`;
     r.d = sneakSummary();
@@ -4828,11 +4828,11 @@ function item(o, opts = {}) {
   const r = o.res && CH().res[o.res];
   const tags = [
     ...(o.nums || []).map(x => `<span class="tag" style="color:var(--txt)">${esc(x)}</span>`),
-    o.atkReplace && !is14('breath') ? '<span class="tag a">Replaces one attack</span>' : '',
+    o.atkReplace && (o.atkAlways || !is14('breath')) ? '<span class="tag a">Replaces one attack</span>' : '',
     o.unconfirmed ? '<span class="tag warn">Check me</span>' : '',
     o.custom && !o.t
       ? '<span class="cost O">Cost?</span>'
-      : o.atkReplace && !is14('breath')
+      : o.atkReplace && (o.atkAlways || !is14('breath'))
         ? ''
         : costTag(t),
     o.custom ? '<span class="tag">Custom</span>' : '',
@@ -5835,7 +5835,7 @@ function detailsSheet() {
           .join('')}</div>`
       : `<button class="btn pri" data-act="use" data-arg="${o._id}">${isSpell ? 'Cast ' + esc(o.n) : o.atk ? 'Attack with ' + esc(o.n) : 'Use ' + esc(o.n)}</button>`;
   return `<button class="backlink" data-act="back">‹ Back</button>
-  <div class="row" style="flex-wrap:wrap;gap:5px;margin:4px 0 12px">${o.custom && !o.t ? '<span class="cost O">Cost?</span>' : o.atkReplace && !is14('breath') ? '' : costTag(t)}${isSpell ? `<span class="tag">${o.lvl ? 'Level ' + o.lvl : 'Cantrip'}</span>` : ''}${o.conc ? '<span class="tag warn">Concentration</span>' : ''}${o.custom ? '<span class="tag">Custom</span>' : ''}</div>
+  <div class="row" style="flex-wrap:wrap;gap:5px;margin:4px 0 12px">${o.custom && !o.t ? '<span class="cost O">Cost?</span>' : o.atkReplace && (o.atkAlways || !is14('breath')) ? '' : costTag(t)}${isSpell ? `<span class="tag">${o.lvl ? 'Level ' + o.lvl : 'Cantrip'}</span>` : ''}${o.conc ? '<span class="tag warn">Concentration</span>' : ''}${o.custom ? '<span class="tag">Custom</span>' : ''}</div>
   ${facts.length ? `<div class="facts">${facts.map(([k, v]) => `<div><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div>` : ''}
   <div class="card" style="margin-top:12px"><div class="xs mut" style="margin-bottom:8px">What this will use</div>${
     costLines(o)
@@ -9367,7 +9367,7 @@ const ACT = {
       render();
       return;
     }
-    if (o.atkReplace && !is14('breath')) {
+    if (o.atkReplace && (o.atkAlways || !is14('breath'))) {
       if (o.res && !resOK(o.res)) {
         toast(`No ${resName(o.res)} left`);
         return;
@@ -10296,7 +10296,12 @@ const HC = {
       'Way of the Open Hand',
       'Way of Shadow',
       'Way of the Four Elements',
-      'Way of the Kensei'
+      'Way of the Kensei',
+      'Way of the Drunken Master',
+      'Way of the Sun Soul',
+      'Way of the Long Death',
+      'Way of the Astral Self',
+      'Way of the Ascendant Dragon'
     ]
   },
   Paladin: {
@@ -13463,6 +13468,57 @@ function hfSubs(B, D, F, add, res) {
         res('ultmercy', 'Hand of Ultimate Mercy', 1, 'long');
         add('sub.mercy17', 'Hand of Ultimate Mercy', 'A', `Spend 5 Focus: touch a creature that died in the last 24 hours. It returns with 4d10+${m.WIS} HP.`, { res: 'ultmercy' });
       }
+    }
+    const kn = o ? 'ki' : 'Focus',
+      mdc = dc('WIS');
+    if (is('Monk', /Drunken/i)) {
+      pas('sub.drunk3', 'Drunken Technique', 'When you use Flurry of Blows: you also Disengage, and your speed is +10 ft until the end of the turn.');
+      if (k >= 6) {
+        add('sub.drunk6', `Redirect Attack (1 ${kn})`, 'R', 'When a creature misses you with a melee attack: its attack hits another creature of your choice within 5 ft of you instead.', { ...fk, step: 1 });
+        pas('sub.drunk6b', 'Leap to Your Feet', 'Standing up from Prone costs you only 5 ft of movement.');
+      }
+      if (k >= 11) add('sub.drunk11', `Drunkard's Luck (2 ${kn})`, 'F', 'When you make an ability check, attack roll or saving throw with Disadvantage: cancel the Disadvantage.', { ...fk, step: 2 });
+      if (k >= 17) pas('sub.drunk17', 'Intoxicated Frenzy', 'Flurry of Blows can make up to three extra strikes, each against a different creature.');
+    }
+    if (is('Monk', /Sun Soul/i)) {
+      const sh = p + m.DEX;
+      add('sub.sun3', 'Radiant Sun Bolt', 'A', `Replaces an attack of the Attack action. A ranged attack (range 30 ft): ${sh >= 0 ? '+' : ''}${sh} to hit, 1${md}+${m.DEX} radiant. After using it in the Attack action, you can spend 1 ${kn} to make two more as a Bonus Action.`, { atkReplace: true, atkAlways: true });
+      if (k >= 6) add('sub.sun6', `Searing Arc Strike (2 ${kn})`, 'B', `Right after the Attack action: cast Burning Hands. A 15-ft cone, DEX save DC ${mdc} or 3d6 fire (half on a success). +1d6 per extra ${kn} (at most ${Math.floor(k / 2)} in all).`, { ...fk, step: 2 });
+      if (k >= 11) add('sub.sun11', 'Searing Sunburst', 'A', `A 20-ft sphere within 150 ft: CON save DC ${mdc} or 2d6 radiant (nothing on a success). Spend up to 3 ${kn} for +2d6 each.`);
+      if (k >= 17) {
+        pas('sub.sun17', 'Sun Shield', 'You shed bright light 30 ft (and dim light 30 ft more). Turn it off or on as a Bonus Action.');
+        add('sub.sun17r', 'Sun Shield', 'R', `While your light is on, when a creature hits you with a melee attack: it takes ${5 + m.WIS} radiant damage.`);
+      }
+    }
+    if (is('Monk', /Long Death/i)) {
+      pas('sub.ld3', 'Touch of Death', `When you reduce a creature within 5 ft to 0 HP: gain ${mx(m.WIS + k)} temporary HP.`);
+      if (k >= 6) add('sub.ld6', 'Hour of Reaping', 'A', `Each creature within 30 ft that can see you: WIS save DC ${mdc} or Frightened of you until the end of your next turn.`);
+      if (k >= 11) add('sub.ld11', `Mastery of Death (1 ${kn})`, 'F', 'When you drop to 0 HP: drop to 1 HP instead.', { ...fk, step: 1 });
+      if (k >= 17) add('sub.ld17', 'Touch of the Long Death', 'A', `Touch a creature and spend 1 to 10 ${kn}: CON save DC ${mdc} or 2d10 necrotic per point spent (half on a success). Tap your ${kn} pool for each point beyond the first.`, { ...fk, step: 1 });
+    }
+    if (is('Monk', /Astral Self/i)) {
+      const ah = p + m.WIS;
+      add('sub.as3', `Arms of the Astral Self (1 ${kn})`, 'B', `For 10 minutes: creatures of your choice within 10 ft make a DEX save DC ${mdc} or take 2${md} force. Your unarmed strikes with the arms get +5 ft reach and use WIS: +${ah} to hit, 1${md}+${m.WIS} force. WIS also replaces STR for your checks and saves.`, { ...fk, step: 1, status: 'Astral Arms' });
+      if (k >= 6) add('sub.as6', `Visage of the Astral Self (1 ${kn})`, 'B', 'For 10 minutes: see 120 ft through normal and magical darkness, and Advantage on Insight and Intimidation.', { ...fk, step: 1, status: 'Astral Visage' });
+      if (k >= 11) {
+        add('sub.as11', 'Deflect Energy (Astral)', 'R', `With arms and visage summoned, when you take acid, cold, fire, force, lightning or thunder damage: reduce it by 1d10+${m.WIS}.`);
+        add('sub.as11b', 'Empowered Arms', 'F', `With arms and visage summoned, once per turn when your astral arms hit: +1${md} force.`, { once: 'empArms' });
+      }
+      if (k >= 17) add('sub.as17', `Awakened Astral Self (5 ${kn})`, 'B', 'For 10 minutes: arms, visage and body all at once. +2 AC, and the Attack action makes three attacks with the arms.', { ...fk, step: 5, status: 'Awakened Astral Self: +2 AC' });
+    }
+    if (is('Monk', /Ascendant Dragon/i)) {
+      res('dbreath', 'Breath of the Dragon', p, 'long');
+      pas('sub.ad3', 'Draconic Disciple', 'Your unarmed strikes can deal acid, cold, fire, lightning or poison damage. Failed a Persuasion or Intimidation check? Reroll it with your Reaction (once per long rest).');
+      add('sub.ad3b', 'Breath of the Dragon', 'A', `Replaces an attack of the Attack action. A 20-ft cone or 30-ft line (5 ft wide): DEX save DC ${mdc} or 2${md} acid, cold, fire, lightning or poison (half on a success). Out of uses? Spend 2 ${kn}.${k >= 17 ? ` Augment Breath: spend 1 ${kn} for a 60-ft cone or 90-ft line and 3${md}.` : ''}`, { res: 'dbreath', atkReplace: true, atkAlways: true });
+      if (k >= 6) {
+        res('wings', 'Wings Unfurled', p, 'long');
+        add('sub.ad6', 'Wings Unfurled', 'F', 'When you use Step of the Wind: you have a flying speed equal to your walking speed until the end of the turn.', { res: 'wings', status: 'Flying (wings)' });
+      }
+      if (k >= 11) {
+        res('wyrm', 'Aspect of the Wyrm', 1, 'long');
+        add('sub.ad11', 'Aspect of the Wyrm', 'B', `A 10-ft aura for 1 minute. Choose: Frightful Presence (a creature in it makes a WIS save DC ${mdc} or is Frightened for 1 minute) or Resistance (you and allies in it resist acid, cold, fire, lightning or poison). Again: spend 3 ${kn}.${k >= 17 ? ` Explosive Fury: when you activate it, creatures of your choice in the aura make a DEX save or take 3d10 of your type.` : ''}`, { res: 'wyrm', status: 'Aspect of the Wyrm' });
+      }
+      if (k >= 17) pas('sub.ad17', 'Ascendant Aspect', 'Blindsight 10 ft. Augment Breath and Explosive Fury are on your other cards.');
     }
     if (is('Monk', /Open Hand/i))
       add('sub.oh3', 'Open Hand Technique', 'F', o ? `When a Flurry of Blows strike hits: DEX save DC ${dc('WIS')} or Prone; or STR save or pushed 15 ft; or it can't take reactions until the end of your next turn.` : `When a Flurry of Blows strike hits, choose: Addle (it can't take Opportunity Attacks until its next turn), Push (STR save DC ${dc('WIS')} or pushed 15 ft) or Topple (DEX save or Prone).`);
