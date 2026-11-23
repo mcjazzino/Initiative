@@ -456,6 +456,7 @@ function hurt(target, amt, type) {
     if (!F.them.hp) F.over = 'win';
     return { amt: a, note };
   }
+  if ((F.ch.immune || []).includes(type)) return { amt: 0, note: ' (you’re immune)' };
   let a = amt,
     note = '';
   if (F.me.absorbRes && F.me.absorbRes === type) (a = Math.floor(a / 2)), (note = ' (Absorb Elements: halved)');

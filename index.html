@@ -2315,6 +2315,8 @@ const SUB_SP24 = {
   'Great Old One Patron': ["detect thoughts:2, dissonant whispers, phantasmal force:2, tasha's hideous laughter", 'clairvoyance, hunger of hadar', 'confusion, summon aberration', 'modify memory, telekinesis']
 };
 // Circle of the Land: the land decides the list
+// 2024 Nature's Ward: the resistance follows your current land
+const LAND_WARD = { Arid: 'fire', Polar: 'cold', Temperate: 'lightning', Tropical: 'poison' };
 const LAND_SP = {
   '2014': {
     Arctic: ['hold person, spike growth', 'sleet storm, slow', 'freedom of movement, ice storm', 'commune with nature, cone of cold'],
@@ -6126,11 +6128,12 @@ function hpSheet() {
   return `${petHitChooser()}${S.ws ? `<div class="sm mut" style="text-align:center">In ${esc(S.ws.n)} form: damage hits your temporary HP first.</div>` : ''}<div class="hpbig">${hp.cur}<span class="mut" style="font-size:20px"> / ${hp.max}</span></div>${hp.temp ? `<div class="sm mut" style="text-align:center">+${hp.temp} temporary</div>` : ''}
   <input class="field" id="hpAmt" type="number" inputmode="numeric" placeholder="Amount" style="margin-top:14px;text-align:center;font-size:20px;font-weight:800">
   ${(() => {
-    const rs = [...(S.rage ? ['bludgeoning', 'piercing', 'slashing'] : []), ...(CH().resist || [])];
-    const u = [...new Set(rs)];
-    return u.length
+    const rs = [...(S.rage ? ['bludgeoning', 'piercing', 'slashing'] : []), ...(CH().resist || [])],
+      im = CH().immune || [];
+    const u = [...new Set(rs)].filter(x => !im.includes(x));
+    return (im.length ? `<div class="banner" style="margin-top:12px">You're immune to <b>${im.join(', ')}</b> damage: take none of it.</div>` : '') + (u.length
       ? `<div class="banner" style="margin-top:12px">You have resistance to <b>${u.join(', ')}</b> damage${S.rage ? ' (some from Rage)' : ''} — use “Halved” for those.</div><div class="stepper" style="grid-template-columns:1fr"><button data-act="hpDo" data-arg="half" style="color:var(--bad)">Damage — halved (resisted)</button></div>`
-      : '';
+      : '');
   })()}
   <div class="stepper" style="grid-template-columns:1fr 1fr 1fr"><button data-act="hpDo" data-arg="dmg" style="color:var(--bad)">Damage${S.rage || (CH().resist || []).length ? ' (full)' : ''}</button><button data-act="hpDo" data-arg="heal" style="color:var(--ok)">Heal</button><button data-act="hpDo" data-arg="temp">Temp HP</button></div>
   ${damageHints()}
@@ -12286,9 +12289,11 @@ function hbBuild(B) {
       ...new Set([
         ...(B.resist || []),
         ...(kept.some(f => f.id === 'gor.venom') ? ['poison'] : []),
+        ...(kept.some(f => f.id === 'sub.land10') && E !== '2014' && LAND_WARD[B.land] ? [LAND_WARD[B.land]] : []),
         ...hbSpcResist(B)
       ])
     ],
+    immune: kept.some(f => f.id === 'sub.land10') && E === '2014' ? ['poison'] : [],
     species: (B.species || '').trim(),
     barbLevel: D.lv('Barbarian'),
     heavy: !!B.heavy,
@@ -12793,8 +12798,17 @@ function hfSubs(B, D, F, add, res) {
           add('sub.land14', "Nature's Sanctuary", 'A', 'Spend a Wild Shape use: spectral trees in a 15-ft cube within 120 ft for 1 minute. You and allies there have half cover and your Nature\'s Ward resistance. A Bonus Action moves the cube 60 ft.', { res: 'ws' });
         }
       }
+      // Natural Recovery: slots back on a short rest (the Short Rest screen does the picking); 2024 adds a free circle spell
+      if (o || k >= 6) {
+        res('natrec', 'Natural Recovery', 1, 'long');
+        add('sub.landrec', 'Natural Recovery', 'F', `Once per long rest, during a short rest: get back spent slots worth up to ${Math.ceil(k / 2)} levels in total (none above 5th). See Short Rest.`, { res: 'natrec', natRec: true, restOnly: true });
+        if (!o) {
+          res('natcast', 'Natural Recovery: free cast', 1, 'long');
+          add('sub.landcast', 'Natural Recovery: free cast', 'F', 'Cast one of your level 1+ Circle of the Land spells without a spell slot, once per long rest.', { res: 'natcast' });
+        }
+      }
       if (o && k >= 6) pas('sub.land6', "Land's Stride", 'Nonmagical difficult terrain costs no extra movement; advantage on saves against magical plants.');
-      if (k >= 10) pas('sub.land10', "Nature's Ward", o ? "Immune to poison and disease; elementals and fey can't charm or frighten you." : 'Immune to Poisoned; resistance to the damage type of your chosen land.');
+      if (k >= 10) pas('sub.land10', "Nature's Ward", o ? "Immune to poison and disease; elementals and fey can't charm or frighten you." : `Immune to Poisoned; resistance to ${LAND_WARD[B.land] || 'the damage type of your chosen land'} damage (${B.land || 'your land'}). Change your land in Edit character after a long rest.`);
       if (o && k >= 14) pas('sub.land14p', "Nature's Sanctuary", `Beasts and plants that attack you make a WIS save DC ${dc('WIS')} or must choose another target.`);
     }
     if (is('Druid', /Sea/i)) {
