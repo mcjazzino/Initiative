@@ -10939,11 +10939,15 @@ const SPECIES = [
   'Orc',
   'Tiefling'
 ];
+// elf lineages can be picked by name: "Wood Elf", "High Elf", "Drow"
+const ELF_LINE = { 'high elf': 'High', 'wood elf': 'Wood', drow: 'Drow', 'dark elf': 'Drow' };
+const elfLine = n => ELF_LINE[String(n || '').trim().toLowerCase()] || '';
 const spcKey = n => {
   const k = String(n || '')
     .trim()
     .toLowerCase()
-    .replace(/^half-orc$/, 'orc');
+    .replace(/^half-orc$/, 'orc')
+    .replace(/^(high elf|wood elf|drow|dark elf)$/, 'elf');
   return SPECIES.map(x => x.toLowerCase()).includes(k) ? k : null;
 };
 const DRAGONS = {
@@ -10958,6 +10962,13 @@ const DRAGONS = {
   Silver: ['cold', 'CON'],
   White: ['cold', 'CON']
 };
+// the species option in use: the lineage in the name wins, then the dropdown, then the first choice
+const spcOpt = B => {
+  const sk = spcKey(B.species);
+  return (sk === 'elf' && elfLine(B.species)) || B.spo || (SPC_OPTS[sk] ? SPC_OPTS[sk][1][0] : '');
+};
+// High Elf: one wizard cantrip (2014), or Prestidigitation they can swap for one after a long rest (2024)
+const ELF_CANT = ['Fire Bolt', 'Ray of Frost', 'Shocking Grasp', 'Chill Touch', 'Toll the Dead', 'Mind Sliver', 'Frostbite', 'Poison Spray', 'Acid Splash', 'Booming Blade', 'Green-Flame Blade', 'Sword Burst', 'Create Bonfire', 'Infestation', 'True Strike', 'Blade Ward', 'Mage Hand', 'Minor Illusion', 'Light', 'Message', 'Mending', 'Friends', 'Prestidigitation'];
 const SPC_OPTS = {
   dragonborn: ['Draconic ancestry', Object.keys(DRAGONS)],
   goliath: ['Giant ancestry', ['Stone', 'Fire', 'Frost', 'Hill', 'Storm', 'Cloud']],
@@ -11859,7 +11870,7 @@ function hfGen(B) {
     add('cf.' + i, f.n, f.t || 'A', f.d || '', f.u ? { res: 'cf' + i } : {});
   });
   const sk = spcKey(B.species),
-    opt = B.spo || '' || (SPC_OPTS[sk] ? SPC_OPTS[sk][1][0] : ''),
+    opt = spcOpt(B),
     L = D.L,
     free = (id, n, lvl, t, conc, d, at) => {
       if (L < at) return;
@@ -12101,7 +12112,7 @@ function hbBuild(B) {
   const kept = G.F.filter(on),
     druSub = D.sub('Druid'),
     sk = spcKey(B.species),
-    so = B.spo || '' || (SPC_OPTS[sk] ? SPC_OPTS[sk][1][0] : '');
+    so = spcOpt(B);
   const feats = kept
     .filter(f => !f.sp && !f.wpn && !f.x.passive)
     .map(f => patchFeat({ n: f.n, t: f.t, d: f.d, ...JSON.parse(JSON.stringify(f.x)), hid: f.id }, druSub));
@@ -12138,6 +12149,13 @@ function hbBuild(B) {
       if (l) spells.push(JSON.parse(JSON.stringify(l)));
     } else spells.push({ ...s, custom: true });
   });
+  // the High Elf cantrip: cast with INT, whatever the class
+  if (sk === 'elf' && so === 'High') {
+    const cn = B.elfCant || 'Fire Bolt',
+      l = lib.find(x => x.n === cn);
+    if (l && !spells.some(x => x.n === cn))
+      spells.push({ ...JSON.parse(JSON.stringify(l)), elf: true, d: `High Elf cantrip (INT${E === '2014' ? '' : ', swap for another wizard cantrip after a long rest'}). ${l.d}` });
+  }
   // always-prepared subclass spells (subclass-spells.js); they don't count against prepared spells
   B.cls.forEach(c => {
     subSpellList(c.n, c.sub, c.lvl, E, B.land).forEach(s0 => {
@@ -12216,7 +12234,7 @@ function hbBuild(B) {
     sub: main.sub || '',
     level: D.L,
     ac,
-    speed: B.speed === '' || B.speed == null || isNaN(+B.speed) ? 30 : Math.max(0, Math.min(120, Math.round(+B.speed))),
+    speed: B.speed === '' || B.speed == null || isNaN(+B.speed) ? (spcKey(B.species) === 'elf' && spcOpt(B) === 'Wood' ? 35 : 30) : Math.max(0, Math.min(120, Math.round(+B.speed))),
     attacks: hbAttacks(B),
     edition: E,
     rules: {},
@@ -12272,7 +12290,7 @@ const mx1 = v => Math.max(1, v);
 function hbSpcResist(B) {
   const sk = spcKey(B.species),
     o = B.ed === '2014',
-    so = B.spo || '' || (SPC_OPTS[sk] ? SPC_OPTS[sk][1][0] : '');
+    so = spcOpt(B);
   if (sk === 'aasimar') return ['necrotic', 'radiant'];
   if (sk === 'dragonborn') return [(DRAGONS[so] || DRAGONS.Red)[0]];
   if (sk === 'dwarf') return ['poison'];
@@ -13249,7 +13267,8 @@ function hbWho() {
     const sk = spcKey(B.species),
       so = SPC_OPTS[sk];
     if (!so || (B.ed === '2014' && /goliath|tiefling/.test(sk))) return '';
-    return `<div class="row between" style="margin-top:8px;gap:8px"><span class="sm mut">${so[0]}</span><select class="field" style="flex:1;padding:9px 12px" onchange="hbSet('spo',this.value,1)">${so[1].map(x => `<option ${(B.spo || so[1][0]) === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div>`;
+    if (sk === 'elf' && elfLine(B.species)) return hbElfCant(B);
+    return `<div class="row between" style="margin-top:8px;gap:8px"><span class="sm mut">${so[0]}</span><select class="field" style="flex:1;padding:9px 12px" onchange="hbSet('spo',this.value,1)">${so[1].map(x => `<option ${(B.spo || so[1][0]) === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div>${sk === 'elf' ? hbElfCant(B) : ''}`;
   })()}
   ${spcKey(B.species) ? `<div class="sm mut" style="margin-top:6px">${esc(B.species.trim())} traits are added under Features.</div>` : ''}
   <div class="xs sec">Rules</div>
@@ -13512,6 +13531,11 @@ function wpnProf(B, n) {
     any = re => B.cls.some(c => re.test(c.n)),
     sub = re => B.cls.some(c => re.test(c.sub || ''));
   if (any(/Barbarian|Fighter|Paladin|Ranger|Blood Hunter/)) return true;
+  // 2014 Elf/Drow Weapon Training
+  if (o && spcKey(B.species) === 'elf') {
+    const ln = spcOpt(B);
+    if (ln === 'Drow' ? /^(Rapier|Shortsword|Hand Crossbow)$/.test(n) : /^(Longsword|Shortsword|Shortbow|Longbow)$/.test(n)) return true;
+  }
   if (w[3] === 'S') {
     if (B.cls.some(c => !/Druid|Wizard|Sorcerer/.test(c.n)) || !o) return true;
     if (any(/Druid/) && /^(Club|Dagger|Dart|Javelin|Mace|Quarterstaff|Sickle|Sling|Spear)$/.test(n)) return true;
@@ -13566,7 +13590,7 @@ Object.assign(ACT, {
   }
 });
 // a native dropdown (the phone's own picker) with "Other…" for anything not listed
-const SPC_ALL = [...SPECIES, 'Half-Elf', 'Half-Orc', 'Firbolg', 'Genasi', 'Tabaxi', 'Kenku', 'Tortle', 'Warforged'];
+const SPC_ALL = [...SPECIES.flatMap(x => (x === 'Elf' ? ['High Elf', 'Wood Elf', 'Drow'] : [x])), 'Half-Elf', 'Half-Orc', 'Firbolg', 'Genasi', 'Tabaxi', 'Kenku', 'Tortle', 'Warforged'];
 function hbPick(list, val, other, none, js, input) {
   val = (val || '').trim();
   const known = list.some(x => x.toLowerCase() === val.toLowerCase()),
@@ -13574,6 +13598,18 @@ function hbPick(list, val, other, none, js, input) {
   return `<select class="field" style="padding:10px 12px" onchange="${js}">
    <option value="">${esc(none)}</option>${list.map(x => `<option value="${esc(x)}" ${!oth && x.toLowerCase() === val.toLowerCase() ? 'selected' : ''}>${esc(x)}</option>`).join('')}
    <option value="__other" ${oth ? 'selected' : ''}>Other… (type it)</option></select>${oth ? input : ''}`;
+}
+// High Elf: pick the wizard cantrip
+function hbElfCant(B) {
+  if (spcOpt(B) !== 'High') return '';
+  const cur = B.elfCant || 'Fire Bolt';
+  return `<div class="row between" style="margin-top:8px;gap:8px"><span class="sm mut">Wizard cantrip</span><select class="field" style="flex:1;padding:9px 12px" onchange="hbSet('elfCant',this.value,1)">${ELF_CANT.map(x => `<option ${cur === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div>`;
+}
+// older characters say "Elf" with the lineage beside it: name the lineage instead
+function hbElfName(B) {
+  if (!B || String(B.species || '').trim().toLowerCase() !== 'elf') return;
+  const o = B.spo || 'High';
+  B.species = o === 'Drow' ? 'Drow' : o + ' Elf';
 }
 function hbSpPick(v) {
   HB._spOther = v === '__other';
@@ -13589,7 +13625,13 @@ function hbSubPick(i, v) {
   render();
 }
 function hbSpecies() {
+  const wasWood = HB._wood;
   HB.spo = '';
+  HB._wood = spcKey(HB.species) === 'elf' && spcOpt(HB) === 'Wood';
+  // Wood Elves are fast: 35 ft, unless you've typed something else
+  const sp = +HB.speed || 30;
+  if (HB._wood && !wasWood && sp === 30) HB.speed = 35;
+  if (!HB._wood && wasWood && sp === 35) HB.speed = 30;
   if (isGorgon(HB) && !HB._gfound) {
     HB._gfound = true;
     toast(
@@ -13667,6 +13709,7 @@ Object.assign(ACT, {
   hbStart(fresh) {
     const d = !fresh && hbDraftLoad(false);
     HB = d ? d.hb : hbNew();
+    hbElfName(HB);
     HSTEP = d ? d.step : 0;
     HQ = '';
     HLV = -1;
@@ -13681,6 +13724,8 @@ Object.assign(ACT, {
     }
     const d = !fresh && hbDraftLoad(true);
     HB = d ? d.hb : JSON.parse(JSON.stringify(b));
+    hbElfName(HB);
+    HB._wood = spcKey(HB.species) === 'elf' && spcOpt(HB) === 'Wood';
     HB._edit = true;
     if (!d) HB.ed = CH().edition;
     HSTEP = d ? d.step : 0;
