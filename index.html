@@ -11089,6 +11089,33 @@ const hbMaxSp = B => {
   const s = hbSlots(B);
   return Math.max(0, ...Object.entries(s).map(([k, v]) => (k === 'P' ? v.lvl : +k)));
 };
+// the usual walking speed: species, then class features and feats, each as its own part
+function hbSpeedSuggest(B) {
+  const D = hbDer(B),
+    o = B.ed === '2014',
+    sk = spcKey(B.species),
+    sp = String(B.species || ''),
+    a = (typeof ARMOUR !== 'undefined' && ARMOUR[+B.arm || 0]) || ['', 0, ''],
+    heavy = a[2] === 'H',
+    noArmour = !a[1] && !B.shield,
+    parts = [];
+  let base = 30,
+    why = 'walking speed';
+  if (sk === 'elf' && spcOpt(B) === 'Wood') (base = 35), (why = 'Wood Elf');
+  else if (o && /^(dwarf|halfling|gnome)$/.test(sk || '')) (base = 25), (why = sp);
+  else if (!o && sk === 'goliath') (base = 35), (why = 'Goliath');
+  else if (/centaur/i.test(sp)) (base = 40), (why = 'Centaur');
+  else if (/satyr/i.test(sp)) (base = 35), (why = 'Satyr');
+  parts.push({ n: why, v: base });
+  const m = D.lv('Monk');
+  if (m >= 2 && noArmour) parts.push({ n: 'Unarmored Movement', v: m >= 18 ? 30 : m >= 14 ? 25 : m >= 10 ? 20 : m >= 6 ? 15 : 10 });
+  if (D.lv('Barbarian') >= 5 && !heavy) parts.push({ n: 'Fast Movement', v: 10 });
+  if (!o && D.lv('Ranger') >= 6 && !heavy) parts.push({ n: 'Roving', v: 10 });
+  if (D.lv('Artificer') >= 3 && /Armorer/i.test(D.sub('Artificer')) && B.armorModel === 'Infiltrator') parts.push({ n: 'Powered Steps', v: 5 });
+  if (featOn(B, 'Mobile') || featOn(B, 'Speedy')) parts.push({ n: featOn(B, 'Mobile') ? 'Mobile' : 'Speedy', v: 10 });
+  if (featOn(B, 'Boon of Speed')) parts.push({ n: 'Boon of Speed', v: 30 });
+  return { v: parts.reduce((t, x) => t + x.v, 0), parts };
+}
 function hbHpSuggest(B) {
   const D = hbDer(B);
   let t = spcKey(B.species) === 'dwarf' && B.ed !== '2014' ? D.L : 0;
@@ -12357,7 +12384,7 @@ function hbBuild(B) {
     sub: main.sub || '',
     level: D.L,
     ac,
-    speed: B.speed === '' || B.speed == null || isNaN(+B.speed) ? (spcKey(B.species) === 'elf' && spcOpt(B) === 'Wood' ? 35 : 30) : Math.max(0, Math.min(120, Math.round(+B.speed))),
+    speed: B.speed === '' || B.speed == null || isNaN(+B.speed) ? hbSpeedSuggest(B).v : Math.max(0, Math.min(120, Math.round(+B.speed))),
     attacks: hbAttacks(B),
     edition: E,
     rules: {},
@@ -13704,7 +13731,7 @@ function hbNew() {
     ab: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 },
     hp: '',
     ac: '',
-    speed: 30,
+    speed: '', // blank: the usual speed, worked out (hbSpeedSuggest)
     heavy: false,
     alert: false,
     saves: null,
@@ -13949,9 +13976,15 @@ function hbScores() {
     <i class="hbgrip">▼</i><div class="sm hbmod" style="color:var(--acc);font-weight:800">${sgn(D.m[a])}</div></div>`
   ).join('')}</div>
   <div class="hbrow3">
-   <label class="card"><div class="xs mut">Max HP</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${sug}" value="${esc(B.hp)}" min="1" max="999" oninput="hbCap(this);hbSet('hp',this.value)" onchange="hbClamp('hp',1,999,this)"><div class="xs mut">${B.hp ? '' : 'average: ' + sug}</div></label>
-   <label class="card"><div class="xs mut">AC</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${hbAC(B).ac}" value="${esc(B.ac)}" min="1" max="30" oninput="hbCap(this);hbSet('ac',this.value)" onchange="hbClamp('ac',1,30,this)"><div class="xs mut">${B.ac ? 'from your sheet' : 'set in Gear'}</div></label>
-   <label class="card"><div class="xs mut">Speed</div><input class="hbnum" type="number" inputmode="numeric" value="${esc(B.speed)}" min="0" max="120" step="5" oninput="hbCap(this);hbSet('speed',this.value)" onchange="hbClamp('speed',0,120,this)"><div class="xs mut">feet</div></label>
+   <label class="card"><div class="xs mut">Max HP</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${sug}" value="${esc(B.hp)}" min="1" max="999" onfocus="this.select()" oninput="hbCap(this);hbSet('hp',this.value)" onchange="hbClamp('hp',1,999,this)"><div class="xs mut">${B.hp ? '' : 'average: ' + sug}</div></label>
+   <label class="card"><div class="xs mut">AC</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${hbAC(B).ac}" value="${esc(B.ac)}" min="1" max="30" onfocus="this.select()" oninput="hbCap(this);hbSet('ac',this.value)" onchange="hbClamp('ac',1,30,this)"><div class="xs mut">${B.ac ? 'from your sheet' : 'set in Gear'}</div></label>
+   ${(() => {
+     // blank: the usual speed (with why); typed: yours, with a nudge if it's far from the usual
+     const ss = hbSpeedSuggest(B),
+       typed = B.speed !== '' && B.speed != null,
+       far = typed && Math.abs(+B.speed - ss.v) >= 20;
+     return `<label class="card"><div class="xs mut">Speed</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${ss.v}" value="${esc(B.speed)}" min="0" max="120" step="5" onfocus="this.select()" oninput="hbCap(this);hbSet('speed',this.value)" onchange="hbClamp('speed',0,120,this)"><div class="xs mut" ${far ? 'style="color:var(--warn)"' : ''}>${far ? `usual: ${ss.v} ft` : typed ? 'feet' : ss.parts.length > 1 ? ss.parts.map((x, i) => (i === 0 && x.n === 'walking speed' ? x.v : `${x.n} ${x.v}`)).join(' + ') : 'feet'}</div></label>`;
+   })()}
   </div>
   <div class="xs sec">Saving throw proficiencies</div>
   <div class="filters" style="flex-wrap:wrap">${ABN.map((a, i) => `<button class="${sv.includes(i) ? 'on' : ''}" data-act="hbSave" data-arg="${i}">${a} ${sgn(D.m[a] + (sv.includes(i) ? D.prof : 0))}</button>`).join('')}</div>
@@ -14361,9 +14394,12 @@ function hbSpecies() {
   HB.spo = '';
   HB._wood = spcKey(HB.species) === 'elf' && spcOpt(HB) === 'Wood';
   // Wood Elves are fast: 35 ft, unless you've typed something else
-  const sp = +HB.speed || 30;
-  if (HB._wood && !wasWood && sp === 30) HB.speed = 35;
-  if (!HB._wood && wasWood && sp === 35) HB.speed = 30;
+  // (a blank speed follows the species by itself)
+  if (HB.speed !== '' && HB.speed != null) {
+    const sp = +HB.speed || 30;
+    if (HB._wood && !wasWood && sp === 30) HB.speed = 35;
+    if (!HB._wood && wasWood && sp === 35) HB.speed = 30;
+  }
   if (isGorgon(HB) && !HB._gfound) {
     HB._gfound = true;
     toast(
@@ -16136,6 +16172,17 @@ Object.assign(ACT, {
 // everything is defined: draw the first screen
 acMigrate(S && S.char);
 render();
+
+// with a mouse, scrolling over a focused number box would change its number (CHA 30, speed 120):
+// let go of the box instead, so the wheel scrolls the page as meant
+document.addEventListener(
+  'wheel',
+  e => {
+    const a = document.activeElement;
+    if (a && a.type === 'number' && (e.target === a || a.contains(e.target))) a.blur();
+  },
+  { passive: true }
+);
 
 // on the GitHub site, keep a copy on the phone so it opens without internet (the Claude preview can't do this)
 if ('serviceWorker' in navigator && location.hostname.endsWith('github.io')) navigator.serviceWorker.register('sw.js').catch(() => {});
