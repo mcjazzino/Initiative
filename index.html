@@ -6705,7 +6705,7 @@ function patchFeat(o, sub) {
   if (/^Rage$/i.test(o.n)) Object.assign(o, { kind: 'rage', t: 'B' });
   else if (/^Lay on Hands/i.test(o.n)) Object.assign(o, { rk: 'loh', t: 'B', t14: 'A', kind: 'loh' });
   else if (/^(Channel Divinity: )?Sacred Weapon/i.test(o.n))
-    Object.assign(o, { t: 'F', t14: 'A', d: o.d || '', d24pre: 'Part of the Attack action. ' });
+    Object.assign(o, { t: 'F', t14: 'A', rk: o.rk || 'cd', d: o.d || '', d24pre: 'Part of the Attack action. ' });
   else if (/^Breath Weapon/i.test(o.n)) Object.assign(o, { atkReplace: true, t: 'F', t14: 'A' });
   else if (/^Circle Spell:/i.test(o.n))
     Object.assign(o, {
@@ -11160,6 +11160,7 @@ function hbSpeedSuggest(B) {
   const m = D.lv('Monk');
   if (m >= 2 && noArmour) parts.push({ n: 'Unarmored Movement', v: m >= 18 ? 30 : m >= 14 ? 25 : m >= 10 ? 20 : m >= 6 ? 15 : 10 });
   if (D.lv('Barbarian') >= 5 && !heavy) parts.push({ n: 'Fast Movement', v: 10 });
+  if (D.lv('Paladin') >= 7 && /Glory/i.test(D.sub('Paladin'))) parts.push({ n: 'Aura of Alacrity', v: 10 });
   if (!o && D.lv('Ranger') >= 6 && !heavy) parts.push({ n: 'Roving', v: 10 });
   if (D.lv('Artificer') >= 3 && /Armorer/i.test(D.sub('Artificer')) && B.armorModel === 'Infiltrator') parts.push({ n: 'Powered Steps', v: 5 });
   if (featOn(B, 'Mobile') || featOn(B, 'Speedy')) parts.push({ n: featOn(B, 'Mobile') ? 'Mobile' : 'Speedy', v: 10 });
@@ -11812,7 +11813,7 @@ function hfGen(B) {
           'pal.wrath',
           "Channel Divinity: Nature's Wrath",
           'A',
-          `Spectral vines grab a creature within ${o ? 10 : 15} ft: STR ${o ? 'or DEX ' : ''}save DC ${pdc} or Restrained for 1 minute (it repeats the save each turn).`,
+          o ? `Spectral vines grab a creature within 10 ft: STR or DEX save DC ${pdc} (its choice) or Restrained for 1 minute (it repeats the save each turn).` : `Spectral vines reach for creatures of your choice within 15 ft: STR save DC ${pdc} or Restrained for 1 minute (each repeats the save at the end of its turns).`,
           { res: 'cd' }
         );
       if (/Glory/i.test(s))
@@ -11821,7 +11822,7 @@ function hfGen(B) {
           'Channel Divinity: Inspiring Smite',
           'F',
           `Right after you Divine Smite: share 2d8+${k} temporary HP among creatures within 30 ft.`,
-          { res: 'cd' }
+          { res: 'cd', rk: 'cd', t14: 'B' }
         );
       if (/Conquest/i.test(s))
         add(
@@ -12729,7 +12730,9 @@ function hfMore(B, D, F, add, res) {
       s = sub('Paladin'),
       pdc = dc('CHA');
     if (k >= 6) pas('pal.aura', 'Aura of Protection', `+${cha} to saves for you and allies within ${k >= 18 ? 30 : 10} ft${k >= 18 ? ' (Aura Expansion)' : ''}.`);
-    if (k >= 10) pas('pal.courage', 'Aura of Courage');
+    if (k >= 10) pas('pal.courage', 'Aura of Courage', `You and allies within ${k >= 18 ? 30 : 10} ft can't be Frightened while you're conscious.`);
+    if (k >= 11) pas('pal.radiant', o ? 'Improved Divine Smite' : 'Radiant Strikes', `Your melee weapon hits${o ? '' : ' (and Unarmed Strikes)'} deal +1d8 radiant: the roll card adds it.`);
+    if (!o && k >= 14) pas('pal.restore', 'Restoring Touch', 'Lay on Hands can also end Blinded, Charmed, Deafened, Frightened, Paralyzed or Stunned, for 5 points each.');
     if (!o && k >= 18) pas('pal.expand', 'Aura Expansion');
     if (!o && k >= 5) {
       res('steed', 'Faithful Steed', 1, 'long');
@@ -12755,7 +12758,7 @@ function hfMore(B, D, F, add, res) {
       if (/Conquest/i.test(s))
         add('pal.guided', 'Channel Divinity: Guided Strike', 'F', 'When you make an attack roll: +10 to the roll.', { res: 'cd' });
       if (/Glory/i.test(s))
-        add('pal.athlete', 'Channel Divinity: Peerless Athlete', 'B', 'For 1 hour (10 minutes in 5e): advantage on Athletics and Acrobatics checks, and your jumps go further.', { res: 'cd' });
+        add('pal.athlete', 'Channel Divinity: Peerless Athlete', 'B', o ? 'For 10 minutes: Advantage on Athletics and Acrobatics checks, you can carry, push, drag and lift twice as much, and your jumps go 10 ft further.' : 'For 1 hour: Advantage on Athletics and Acrobatics checks, and your long and high jumps go 10 ft further.', { res: 'cd' });
       if (/Redemption/i.test(s)) {
         add('pal.peace', 'Channel Divinity: Emissary of Peace', 'B', '+5 to Persuasion checks for 10 minutes.', { res: 'cd' });
         add(
@@ -13537,6 +13540,77 @@ function hfSubs(B, D, F, add, res) {
       }
       if (k >= 11) pas('sub.oh11', 'Fleet Step', 'When you take a Bonus Action other than Step of the Wind, you can also use Step of the Wind.');
       if (k >= 17) add('sub.oh17', 'Quivering Palm', 'F', `Spend 4 Focus when an unarmed strike hits: harmless vibrations. Later, as part of an Attack action: CON save DC ${dc('WIS')} or 10d12 force damage (half on a success).`, { ...fk, step: 4 });
+    }
+  }
+
+  /* ---------- Paladin: oath features from level 7 (Channel Divinity options live in builder-features) ---------- */
+  if ((k = lv('Paladin')) >= 7) {
+    const r = k >= 18 ? 30 : 10,
+      cha = mx(m.CHA),
+      pdc = dc('CHA'),
+      cap = o ? 'Once per long rest.' : 'Once per long rest, or spend a level 5 spell slot.',
+      cap20 = (id, n) => res(id, n, 1, 'long');
+    if (is('Paladin', /Devotion/i)) {
+      pas('sub.dev7', 'Aura of Devotion', `You and allies within ${r} ft can't be Charmed while you're conscious.`);
+      if (k >= 15) {
+        if (o) pas('sub.dev15', 'Purity of Spirit', 'You are always under Protection from Evil and Good: aberrations, celestials, elementals, fey, fiends and undead have Disadvantage to hit you, and can\'t Charm, Frighten or possess you.');
+        else pas('sub.dev15', 'Smite of Protection', `When you cast Divine Smite: you and allies within ${r} ft have Half Cover (+2 AC, +2 DEX saves) until the start of your next turn.`);
+      }
+      if (k >= 20) {
+        cap20('nimbus', 'Holy Nimbus');
+        add('sub.dev20', 'Holy Nimbus', o ? 'A' : 'B', o ? 'For 1 minute: bright light 30 ft. An enemy that starts its turn in it takes 10 radiant damage, and you have Advantage on saves against spells from fiends and undead. ' + cap : `For 10 minutes: an enemy that starts its turn within ${r} ft takes ${m.CHA + p} radiant damage, you have Advantage on saves against fiends and undead, and you shed bright light. ` + cap, { res: 'nimbus', status: 'Holy Nimbus' });
+      }
+    }
+    if (is('Paladin', /Ancients/i)) {
+      pas('sub.anc7', 'Aura of Warding', o ? `You and allies within ${r} ft resist damage from spells.` : `You and allies within ${r} ft resist necrotic, psychic and radiant damage.`);
+      if (k >= 15) {
+        res('sentinel', 'Undying Sentinel', 1, 'long');
+        add('sub.anc15', 'Undying Sentinel', 'F', o ? 'When you drop to 0 HP and aren\'t killed outright: drop to 1 HP instead. Once per long rest.' : `When you drop to 0 HP and aren't killed outright: drop to 1 HP instead, then regain ${3 * k} HP. Once per long rest.`, { res: 'sentinel' });
+      }
+      if (k >= 20) {
+        cap20('elder', 'Elder Champion');
+        add('sub.anc20', 'Elder Champion', o ? 'A' : 'B', `For 1 minute: regain 10 HP at the start of each of your turns, cast your ${o ? 'paladin ' : ''}Action spells as a Bonus Action, and enemies within ${o ? 10 : r} ft have Disadvantage on saves against your spells and Channel Divinity. ` + cap, { res: 'elder', status: 'Elder Champion' });
+      }
+    }
+    if (is('Paladin', /Vengeance/i)) {
+      add('sub.ven7', 'Relentless Avenger', 'F', o ? 'When you hit with an Opportunity Attack: move up to half your speed right away, as part of the same reaction, without provoking.' : 'When you hit with an Opportunity Attack: the target\'s speed drops to 0 for the turn, and you can move up to half your speed as part of the same reaction, without provoking.');
+      if (k >= 15) add('sub.ven15', 'Soul of Vengeance', 'R', o ? 'When the target of your Vow of Enmity makes an attack: make a melee weapon attack against it, if it\'s in reach.' : 'Right after the target of your Vow of Enmity hits or misses with an attack: make a melee attack against it, if it\'s in reach.');
+      if (k >= 20) {
+        cap20('angel', 'Avenging Angel');
+        add('sub.ven20', 'Avenging Angel', o ? 'A' : 'B', `For ${o ? '1 hour' : '10 minutes'}: you fly at 60 ft${o ? '' : ' and can hover'}. An enemy that starts its turn ${o ? 'within 30 ft' : `within ${r} ft`} for the first time: WIS save DC ${pdc} or Frightened for 1 minute (until it takes damage); attacks against it have Advantage. ` + cap, { res: 'angel', status: 'Avenging Angel: flying 60 ft' });
+      }
+    }
+    if (is('Paladin', /Glory/i)) {
+      pas('sub.glo7', 'Aura of Alacrity', o ? `Your speed is +10 ft (already in your speed). An ally who starts their turn within ${k >= 18 ? 10 : 5} ft of you gets +10 ft speed until the end of that turn.` : `Your speed is +10 ft (already in your speed). An ally who enters or starts their turn within ${r} ft gets +10 ft speed until the end of their next turn.`);
+      if (k >= 15) {
+        res('gdef', 'Glorious Defense', cha, 'long');
+        add('sub.glo15', 'Glorious Defense', 'R', `When you or a creature within 10 ft is hit by an attack: +${cha} AC against it. If it then misses, you can make one weapon attack against the attacker, if it's in range.`, { res: 'gdef' });
+      }
+      if (k >= 20) {
+        cap20('legend', 'Living Legend');
+        add('sub.glo20', 'Living Legend', 'B', `For ${o ? '1 minute' : '10 minutes'}: Advantage on CHA checks; once per turn, a weapon attack that misses hits instead; and when you fail a save you can use your Reaction to reroll it. ` + 'Once per long rest, or spend a level 5 spell slot.', { res: 'legend', status: 'Living Legend' });
+      }
+    }
+    if (is('Paladin', /Conquest/i)) {
+      pas('sub.con7', 'Aura of Conquest', `A creature Frightened of you that starts its turn within ${r} ft: its speed is 0 and it takes ${Math.floor(k / 2)} psychic damage.`);
+      if (k >= 15) pas('sub.con15', 'Scornful Rebuke', `When a creature hits you with an attack: it takes ${cha} psychic damage (unless you're Incapacitated).`);
+      if (k >= 20) {
+        cap20('conqueror', 'Invincible Conqueror');
+        add('sub.con20', 'Invincible Conqueror', 'A', 'For 1 minute: resistance to all damage, one extra attack when you take the Attack action, and your melee weapon attacks score a critical hit on a 19 or 20. Once per long rest.', { res: 'conqueror', status: 'Invincible Conqueror: crit on 19-20' });
+      }
+    }
+    if (is('Paladin', /Redemption/i)) {
+      add('sub.red7', 'Aura of the Guardian', 'R', `When a creature within ${r} ft takes damage: you take that damage instead (it can't be reduced or prevented).`);
+      if (k >= 15) pas('sub.red15', 'Protective Spirit', `At the end of each of your turns, if you're below half your HP and not Incapacitated: regain 1d6+${Math.floor(k / 2)} HP.`);
+      if (k >= 20) pas('sub.red20', 'Emissary of Redemption', 'Resistance to all damage from other creatures, and a creature that hits you takes radiant damage equal to half what you take. You lose this against a creature you attack, damage or force to save, until a long rest.');
+    }
+    if (is('Paladin', /Watchers/i)) {
+      pas('sub.wat7', 'Aura of the Sentinel', `You and creatures of your choice within ${r} ft add +${p} to initiative.`);
+      if (k >= 15) add('sub.wat15', 'Vigilant Rebuke', 'R', `When you or a creature you can see within 30 ft succeeds on an INT, WIS or CHA save: the creature that forced it takes 2d8+${m.CHA} force damage.`);
+      if (k >= 20) {
+        cap20('bulwark', 'Mortal Bulwark');
+        add('sub.wat20', 'Mortal Bulwark', 'B', `For 1 minute: truesight 120 ft, Advantage on attacks against aberrations, celestials, elementals, fey and fiends, and when you hit one it makes a CHA save DC ${pdc} or is sent back to its home plane. Once per long rest, or spend a level 5 spell slot.`, { res: 'bulwark', status: 'Mortal Bulwark' });
+      }
     }
   }
 
