@@ -264,9 +264,13 @@ body.sheet-open #toast.on{transform:translate(-50%,0)}
 .hbabc,.hbrow3 .card{text-align:center;padding:10px 6px;margin:0}
 .hbnum{width:100%;background:none;border:0;outline:none;text-align:center;font-size:22px;font-weight:800;color:inherit;padding:2px 0;font-family:inherit}
 .hbnum:focus{color:var(--acc)}
-.hbabc{touch-action:none;user-select:none;-webkit-user-select:none;cursor:ns-resize;position:relative}
-.hbabc.drag{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}.hbabc.drag .hbnum{color:var(--acc)}
-.hbgrip{display:block;font-style:normal;font-size:8px;line-height:1;color:var(--mut);opacity:.55}
+.hbabc{position:relative;padding:10px 4px}
+.hbstep{display:flex;align-items:center;justify-content:center;gap:2px;margin:4px 0 2px}
+.hbstep .hbnum{flex:1;min-width:0;padding:2px 0}
+.hbpm{flex:none;width:30px;height:30px;border-radius:50%;border:1px solid var(--line2,#2e2939);background:transparent;color:var(--txt);font:inherit;font-size:18px;font-weight:700;line-height:1;display:grid;place-items:center;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;padding:0}
+.hbpm:not(:disabled):active{background:color-mix(in srgb,var(--acc) 22%,transparent);border-color:var(--acc)}
+.hbpm:disabled{opacity:.3;cursor:default}
+@media (hover:hover){.hbpm:not(:disabled):hover{border-color:var(--acc);color:var(--acc)}}
 .tag.auto{padding:7px 10px;border:1px solid var(--acc);color:var(--txt);background:color-mix(in srgb,var(--acc) 14%,transparent)}
 .hbrow3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
 .hbsmall{width:52px;padding:7px 6px;border-radius:9px;background:var(--card2);border:1px solid #2c2836;color:inherit;text-align:center;outline:none}
@@ -13766,39 +13770,40 @@ function hbMcReq(ab) {
     .map(g => `<b class="${ok(g) ? 'ok' : 'no'}">${g.join(' or ')} 13 ${ok(g) ? '✓' : '✗'}</b>`)
     .join('')}</div><div class="mcx">${all ? 'Every class you have needs 13 in its main score to multiclass, and you meet them all.' : 'Every class you have, old and new, needs 13 in its main score to multiclass. Tables often bend this: check with your DM.'}</div></div>`;
 }
-function hbDrag(e, a) {
-  const box = e.currentTarget,
-    inp = box.querySelector('input'),
-    mod = box.querySelector('.hbmod'),
-    y0 = e.clientY,
-    v0 = +HB.ab[a] || 10;
-  let moved = false,
-    v = v0;
-  const mv = ev => {
-      const d = Math.round((y0 - ev.clientY) / 14);
-      if (!moved && Math.abs(y0 - ev.clientY) < 6) return;
-      if (!moved) {
-        moved = true;
-        inp.blur();
-        box.classList.add('drag');
-      }
-      ev.preventDefault();
-      v = Math.max(1, Math.min(30, v0 + d));
-      inp.value = v;
-      mod.textContent = sgn(Math.floor((v - 10) / 2));
-      const mc = $('#hbmc');
-      if (mc) mc.innerHTML = hbMcReq({ ...HB.ab, [a]: v });
-    },
-    up = () => {
-      removeEventListener('pointermove', mv);
-      removeEventListener('pointerup', up);
-      removeEventListener('pointercancel', up);
-      box.classList.remove('drag');
-      if (moved) hbSet('ab.' + a, v, 1);
-    };
-  addEventListener('pointermove', mv, { passive: false });
-  addEventListener('pointerup', up);
-  addEventListener('pointercancel', up);
+// − and + beside each score: a tap changes it by 1; holding keeps counting
+function hbStepAb(a, d, box) {
+  const v = Math.max(1, Math.min(30, (+HB.ab[a] || 10) + d));
+  HB.ab[a] = v;
+  if (box) {
+    box.querySelector('input').value = v;
+    box.querySelector('.hbmod').textContent = sgn(Math.floor((v - 10) / 2));
+    const [lo, hi] = box.querySelectorAll('.hbpm');
+    lo.disabled = v <= 1;
+    hi.disabled = v >= 30;
+    const mc = $('#hbmc');
+    if (mc) mc.innerHTML = hbMcReq(HB.ab);
+  }
+  return v;
+}
+function hbHold(e, a, d) {
+  if (e.button > 0) return;
+  e.preventDefault(); // keep the focus (and the phone keyboard) where it is
+  const box = e.currentTarget.closest('.hbabc');
+  let t = null;
+  hbStepAb(a, d, box);
+  const stop = () => {
+    clearTimeout(t);
+    removeEventListener('pointerup', stop);
+    removeEventListener('pointercancel', stop);
+    hbSet('ab.' + a, HB.ab[a], 1); // save and redraw once, when you let go
+  };
+  const rep = () => {
+    hbStepAb(a, d, box);
+    t = setTimeout(rep, 90);
+  };
+  t = setTimeout(rep, 420);
+  addEventListener('pointerup', stop);
+  addEventListener('pointercancel', stop);
 }
 // armour table: name, base AC, type (L light, M medium, H heavy)
 const ARMOUR = [
@@ -13971,9 +13976,11 @@ function hbScores() {
   return `<div class="xs sec" style="margin-top:6px">Ability scores</div>
   <div id="hbmc">${hbMcReq(B.ab)}</div>
   <div class="hbab">${ABN.map(
-    a => `<div class="card hbabc" onpointerdown="hbDrag(event,'${a}')"><div class="xs mut">${a}</div><i class="hbgrip">▲</i>
-    <input class="hbnum" type="number" inputmode="numeric" min="1" max="30" value="${B.ab[a]}" onchange="hbSet('ab.${a}',Math.max(1,Math.min(30,+this.value||10)),1)">
-    <i class="hbgrip">▼</i><div class="sm hbmod" style="color:var(--acc);font-weight:800">${sgn(D.m[a])}</div></div>`
+    a => `<div class="card hbabc"><div class="xs mut">${a}</div>
+    <div class="hbstep"><button class="hbpm" aria-label="Lower ${a}" ${+B.ab[a] <= 1 ? 'disabled' : ''} onpointerdown="hbHold(event,'${a}',-1)" onclick="if(!event.detail){hbStepAb('${a}',-1);hbSet('ab.${a}',HB.ab.${a},1)}">−</button>
+    <input class="hbnum" type="number" inputmode="numeric" min="1" max="30" value="${B.ab[a]}" aria-label="${a} score" onfocus="this.select()" onchange="hbSet('ab.${a}',Math.max(1,Math.min(30,+this.value||10)),1)">
+    <button class="hbpm" aria-label="Raise ${a}" ${+B.ab[a] >= 30 ? 'disabled' : ''} onpointerdown="hbHold(event,'${a}',1)" onclick="if(!event.detail){hbStepAb('${a}',1);hbSet('ab.${a}',HB.ab.${a},1)}">+</button></div>
+    <div class="sm hbmod" style="color:var(--acc);font-weight:800">${sgn(D.m[a])}</div></div>`
   ).join('')}</div>
   <div class="hbrow3">
    <label class="card"><div class="xs mut">Max HP</div><input class="hbnum" type="number" inputmode="numeric" placeholder="${sug}" value="${esc(B.hp)}" min="1" max="999" onfocus="this.select()" oninput="hbCap(this);hbSet('hp',this.value)" onchange="hbClamp('hp',1,999,this)"><div class="xs mut">${B.hp ? '' : 'average: ' + sug}</div></label>
