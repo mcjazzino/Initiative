@@ -370,6 +370,12 @@ body.hasroll #rollbg{opacity:1;pointer-events:auto}
 .mcreq b.ok{color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
 .mcreq b.no{color:#f2c14e;background:rgba(242,193,78,.14)}
 .mcreq .mcx{font-size:12.5px;line-height:1.45;color:var(--mut)}
+
+#roll .rex.auto{border-color:var(--line);background:color-mix(in srgb,var(--acc) 10%,transparent)}
+#roll .rex.auto small{opacity:.7}
+#roll .rtotal{flex-wrap:wrap;row-gap:2px}
+#roll .rtotal small{display:block;flex-basis:100%;font-size:12.5px;color:var(--mut);font-weight:600;margin-top:3px;line-height:1.4;text-align:left}
+#roll .rtotal.sum b{font-size:18px}
 </style>
 </head>
 <body>
@@ -15620,12 +15626,48 @@ function rollCard(m) {
     crit: false,
     toHit: null,
     dmg: null,
-    extras: {}
+    extras: {},
+    off: {} // extras that apply by themselves but you unticked
   };
+  // "+3 (Rage)" reads better as "Rage: +3"
+  RC.notes.forEach(n => {
+    const m = n.ex && n.ex.label.match(/^\+(\S+(?: [a-z]+)?) \(([^)]+)\)$/);
+    if (m) n.ex.label = `${m[2]}: +${m[1]}`;
+  });
+  // which lines from the attack always apply on a hit (rolled by "Roll all damage")
+  RC.notes.forEach(n => {
+    if (n.ex && /\(Rage\)|Radiant Strikes|Improved Divine Smite/.test(plain(n.html)) && !/not when thrown|when you attack in melee/i.test(plain(n.html))) n.ex.auto = true;
+  });
   // a few extras that only matter when you hit, so they can be rolled from here too
   const add = (label, expr) => RC.notes.push({ html: `<span class="mut">${esc(label)}</span>`, ex: { label, expr } });
-  if (S.conc === 'Hex') add('Hex: +1d6 necrotic', '1d6');
-  if (S.conc === "Hunter's Mark") add(`Hunter's Mark: +1d6${is14('demo') ? '' : ' force'}`, '1d6');
+  const auto = (label, expr, x) => RC.notes.push({ html: '', ex: { label, expr, auto: true, ...(x || {}) } });
+  if (S.conc === 'Hex') auto('Hex: +1d6 necrotic', '1d6');
+  if (S.conc === "Hunter's Mark") auto(`Hunter's Mark: +1d6${is14('demo') ? '' : ' force'}`, '1d6');
+  // first-hit-each-turn damage from your features, while it's still unused this turn
+  const c = C(),
+    rk = c.status.some(x => /^Reckless/.test(x));
+  feats().forEach(f => {
+    const key = f.once || (/^Frenzy$/.test(f.n) ? 'frenzy' : '');
+    if (!key || c.flags[key]) return;
+    const ok =
+      (key === 'fury' && S.rage) ||
+      (key === 'frenzy' && S.rage && rk && !is14('rage')) ||
+      (key === 'lunar' && S.ws) ||
+      (key === 'launcher' && /Lightning Launcher/i.test(RC.name));
+    if (!ok) return;
+    const m = (f.d || '').match(/(\d*d\d+(?:\s*\+\s*\d+)?)\s+(necrotic or radiant|[a-z]+)?/i);
+    if (m) auto(`${f.n}: +${m[1].replace(/\s/g, '')}${m[2] ? ' ' + m[2].replace('necrotic or radiant', 'radiant') : ''}`, m[1].replace(/\s/g, ''), { once: key });
+  });
+  // a crit's extra weapon dice (not doubled)
+  {
+    const die = (RC.dice.match(/d(\d+)/) || [])[1];
+    if (die && hasP('Brutal Critical') && !/bow|crossbow|sling|dart|launcher/i.test(RC.name)) {
+      const b = clsLvl('Barbarian'),
+        n = b >= 17 ? 3 : b >= 13 ? 2 : 1;
+      auto(`Brutal Critical: +${n}d${die} on a crit`, `${n}d${die}`, { critOnly: true });
+    }
+    if (die && hasP('Savage Attacks') && !/bow|crossbow|sling|dart/i.test(RC.name)) auto(`Savage Attacks: +1d${die} on a crit`, `1d${die}`, { critOnly: true });
+  }
   if (palLvl() >= 2 && !/^(Unarmed|Natural)/i.test(RC.name) && Object.values(CH().slots || {}).some(s => (s.max || 0) > (s.used || 0)))
     RC.notes.push({ html: '', ex: { label: 'Divine Smite: 2d8 radiant (+1d8 per slot level above 1st)', expr: '2d8', dice: true } });
   rollShow(true);
@@ -15649,9 +15691,12 @@ function rollShow(enter) {
     .map(i => [R.notes[i], i])
     .map(([n, i]) => {
       if (DICE && n.ex) {
-        const e = R.extras[i];
-        return `<button class="rex ${e ? 'on' : ''}" onclick="event.stopPropagation();rollExtra(${i})">${e ? `✓ ${esc(n.ex.label)} <b>${e.total}</b> <small>${esc(e.bits.join(' '))}</small>` : `+ ${esc(n.ex.label)}`}</button>`;
+        const e = R.extras[i],
+          willAuto = n.ex.auto && !R.off[i] && !R.dmg && (!n.ex.critOnly || R.crit);
+        if (n.ex.critOnly && !R.crit && !e) return `<div class="mut">${esc(n.ex.label)}</div>`;
+        return `<button class="rex ${e ? 'on' : willAuto ? 'auto' : ''}" onclick="event.stopPropagation();rollExtra(${i})">${e ? `✓ ${esc(n.ex.label)} <b>${e.total}</b> <small>${esc(e.bits.join(' '))}</small>` : willAuto ? `✓ ${esc(n.ex.label)} <small>included</small>` : `+ ${esc(n.ex.label)}`}</button>`;
       }
+      if (!DICE && n.ex && n.ex.auto && !n.html) return `<div>${esc(n.ex.label)}</div>`;
       return n.html ? `<div>${n.html}</div>` : '';
     })
     .join('');
@@ -15667,11 +15712,19 @@ function rollShow(enter) {
         ]
           .map(([k, l]) => `<button class="${R.mode === k ? 'on' : ''}" onclick="rollMode('${k}')">${l}</button>`)
           .join('')}<button class="${R.crit ? 'on crit' : ''}" onclick="rollCrit()">Critical</button></div>
-  <div class="rbtns" onclick="event.stopPropagation()"><button class="btn" onclick="rollHit()">${I.dice || ''} ${R.toHit ? 'Roll again' : 'Roll to hit'}</button><button class="btn pri" onclick="rollDmg()">${I.dice || ''} ${R.dmg ? 'Roll again' : 'Roll damage'}</button></div>`
+  <div class="rbtns" onclick="event.stopPropagation()"><button class="btn" onclick="rollHit()">${I.dice || ''} ${R.toHit ? 'Roll again' : 'Roll to hit'}</button><button class="btn pri" onclick="rollDmg()">${I.dice || ''} ${R.dmg ? 'Roll again' : R.notes.some(n => n.ex && n.ex.auto && !n.ex.critOnly) ? 'Roll all damage' : 'Roll damage'}</button></div>`
       : ''
   }
   ${notes ? `<div class="rnotes">${notes}</div>` : ''}
-  ${DICE && (R.dmg || exTotal) ? `<div class="rtotal">Total damage <b>${(R.dmg ? R.dmg.total : 0) + exTotal}</b></div>` : ''}`;
+  ${
+    DICE && (R.dmg || exTotal)
+      ? `<div class="rtotal">Total damage <b>${(R.dmg ? R.dmg.total : 0) + exTotal}</b><small>${[R.dmg ? `${esc(R.name)} ${R.dmg.total}` : '', ...Object.keys(R.extras).map(i => `${esc(R.notes[i].ex.label.split(':')[0])} ${R.extras[i].total}`)].filter(Boolean).join(' · ')}</small></div>`
+      : (() => {
+          // rolling physical dice: everything that applies, as one formula
+          const L = R.notes.filter((n, i) => n.ex && n.ex.auto && !n.ex.critOnly && !R.off[i]);
+          return L.length ? `<div class="rtotal sum">All together <b>${esc(sumExpr([R.dice, ...L.map(n => n.ex.expr)]))}</b><small>${esc(R.dice)} + ${L.map(n => esc(n.ex.label.replace(/:\s*\+?/, ' '))).join(' + ')}${R.crit ? ' · critical: double the dice' : ''}</small></div>` : '';
+        })()
+  }`;
   r.classList.toggle('dice', DICE);
   if (enter) {
     r.classList.remove('on');
@@ -15705,16 +15758,50 @@ function rollHit() {
   if (nat === 20) RC.crit = true;
   rollShow();
 }
+// the weapon, everything that applies by itself, and the extras you ticked: one total
 function rollDmg() {
   RC.dmg = rollExpr(RC.dice, RC.crit);
-  // extras already rolled follow a change to critical
-  Object.keys(RC.extras).forEach(i => (RC.extras[i] = rollExpr(RC.notes[i].ex.expr, RC.crit)));
+  RC.notes.forEach((n, i) => {
+    const e = n.ex;
+    if (!e) return;
+    if (e.critOnly) {
+      if (RC.crit && !RC.off[i]) RC.extras[i] = rollExpr(e.expr, false);
+      else delete RC.extras[i];
+    } else if ((e.auto && !RC.off[i]) || RC.extras[i]) RC.extras[i] = rollExpr(e.expr, RC.crit);
+  });
+  // first-hit features count as used for this turn
+  const c = C();
+  Object.keys(RC.extras).forEach(i => {
+    const e = RC.notes[i].ex;
+    if (e.once) c.flags[e.once] = true;
+  });
   rollShow();
 }
 function rollExtra(i) {
-  if (RC.extras[i]) delete RC.extras[i];
-  else RC.extras[i] = rollExpr(RC.notes[i].ex.expr, RC.crit);
+  const e = RC.notes[i].ex;
+  if (RC.extras[i]) {
+    delete RC.extras[i];
+    if (e.auto) RC.off[i] = true;
+  } else {
+    delete RC.off[i];
+    RC.extras[i] = rollExpr(e.expr, e.critOnly ? false : RC.crit);
+    if (e.once) C().flags[e.once] = true;
+  }
   rollShow();
+}
+// "1d12+4", "3", "1d6+5" → "2d6 + 1d12 + 12"
+function sumExpr(L) {
+  const dice = {};
+  let k = 0;
+  L.join('+').replace(/\s/g, '').replace(/−/g, '-').match(/[+-]?[^+-]+/g)?.forEach(p => {
+    const sg = p[0] === '-' ? -1 : 1,
+      q = p.replace(/^[+-]/, ''),
+      m = q.match(/^(\d*)d(\d+)$/i);
+    if (m) dice[m[2]] = (dice[m[2]] || 0) + sg * (+m[1] || 1);
+    else if (+q) k += sg * +q;
+  });
+  const D = Object.keys(dice).sort((a, b) => b - a).filter(x => dice[x]).map(x => `${dice[x]}d${x}`);
+  return [...D, k ? String(k) : ''].filter(Boolean).join(' + ').replace(/\+ -/g, '− ');
 }
 Object.assign(ACT, {
   diceTog() {
