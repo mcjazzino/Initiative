@@ -786,7 +786,7 @@ function concCheck() {
   for (const dmg of q) {
     if (!F.me.conc) return;
     const dc = Math.max(10, Math.floor(dmg / 2)),
-      wc = (F.ch.feats || []).some(f => /^War Caster/i.test(f.n || '')),
+      wc = (F.ch.feats || []).some(f => /^War Caster/i.test(f.n || '')) || (F.ch.passives || []).some(n => /^War Caster$/i.test(n)),
       r = mySave(2, wc),
       ok = r.tot >= dc;
     if (ok) log(`Concentration (${esc(F.me.conc)}): CON save ${r.txt}${wc ? ' (advantage: War Caster)' : ''} = ${r.tot} vs DC ${dc}: you hold on.`, 'sys');

@@ -376,6 +376,12 @@ body.hasroll #rollbg{opacity:1;pointer-events:auto}
 #roll .rtotal{flex-wrap:wrap;row-gap:2px}
 #roll .rtotal small{display:block;flex-basis:100%;font-size:12.5px;color:var(--mut);font-weight:600;margin-top:3px;line-height:1.4;text-align:left}
 #roll .rtotal.sum b{font-size:18px}
+
+.card.nocast{margin:6px 0 14px;padding:14px 16px;border-color:var(--line)}
+.card.nocast .t{font-size:16px;font-weight:800;margin-bottom:6px}
+.card.nocast p{font-size:14px;line-height:1.5;margin:0 0 8px}
+.card.nocast p.mut{font-size:12.5px}
+.card.nocast .btn{margin-top:4px;width:100%}
 </style>
 </head>
 <body>
@@ -3398,6 +3404,11 @@ function palAdds(w) {
   if (ranged || (old && w.unarmed)) return null;
   return `+1d8 radiant (${old ? 'Improved Divine Smite' : 'Radiant Strikes'})${/^Thrown/.test(w.range || '') ? ' when you attack in melee' : ''}`;
 }
+// 2024 Great Weapon Master: +proficiency damage on a Heavy weapon hit in the Attack action
+function gwmAdds(w) {
+  if (!w || w.beast || is14('demo') || !hasP('Great Weapon Master')) return null;
+  return (w.props || []).includes('Heavy') ? `+${CH().prof || 2} (Great Weapon Master)` : null;
+}
 function rageAdds(w) {
   if (!S.rage || !w || w.beast) return null;
   const ranged = w.ranged || /^Ranged/.test(w.range || ''),
@@ -4190,6 +4201,8 @@ function saveHints() {
 }
 function damageHints() {
   const L = [];
+  if (hasP('Heavy Armor Master'))
+    L.push(`<b>Heavy Armor Master</b>: in heavy armour, reduce bludgeoning, piercing and slashing damage by ${is14('demo') ? '3 (nonmagical weapons only)' : CH().prof || 2}. Enter the reduced amount.`);
   if (hasP('Evasion') && !condFx().inc.length)
     L.push('<b>Evasion</b>: a DEX save for half damage? Success: no damage. Failure: tap Halved.');
   if (hasP('Danger Sense') && !condFx().inc.length)
@@ -9225,9 +9238,10 @@ const ACT = {
     if (!S.ws && /Swashbuckler/i.test(CH().sub || '') && rogueLvl() >= 3 && !isRangedWpn(w))
       toast2 += `<br><span class="mut">Fancy Footwork: ${/^Thrown/.test(w.range || '') ? 'if you attacked in melee, ' : ''}that creature can't make opportunity attacks against you this turn</span>`;
     const rg = rageAdds(S.ws ? null : w),
-      pa = palAdds(S.ws ? null : w);
+      pa = palAdds(S.ws ? null : w),
+      gw = gwmAdds(S.ws ? null : w);
     toast(
-      `<b>${esc(w.n)}</b>: +${w.hit} to hit · ${esc((w.dmg + ' ' + (w.type || '')).trim())}${(w.condDmg || []).map(x => `<br><span class="mut">${esc(x)}</span>`).join('')}${rg ? `<br>${esc(rg)}` : ''}${pa ? `<br>${esc(pa)}` : ''}${left ? `<br>${left} attack${left > 1 ? 's' : ''} left` : ''}${toast2 || ''}${sneak ? `<br><span style="color:var(--warn)">Hit? Sneak Attack (+${sneakDice()}d6) is still available</span>` : ''}`
+      `<b>${esc(w.n)}</b>: +${w.hit} to hit · ${esc((w.dmg + ' ' + (w.type || '')).trim())}${(w.condDmg || []).map(x => `<br><span class="mut">${esc(x)}</span>`).join('')}${rg ? `<br>${esc(rg)}` : ''}${gw ? `<br>${esc(gw)}` : ''}${pa ? `<br>${esc(pa)}` : ''}${left ? `<br>${left} attack${left > 1 ? 's' : ''} left` : ''}${toast2 || ''}${sneak ? `<br><span style="color:var(--warn)">Hit? Sneak Attack (+${sneakDice()}d6) is still available</span>` : ''}`
     );
     render();
   },
@@ -11082,6 +11096,8 @@ function hbHpSuggest(B) {
     const d = HC[c.n].hd;
     for (let l = 1; l <= c.lvl; l++) t += Math.max(1, (i === 0 && l === 1 ? d : d / 2 + 1) + D.m.CON);
   });
+  if (featOn(B, 'Tough')) t += 2 * D.L;
+  if (featOn(B, 'Boon of Fortitude')) t += 40;
   return t;
 }
 const sgn = v => (v >= 0 ? '+' : '') + v;
@@ -11151,8 +11167,11 @@ function hbWeapon(B, w) {
   let dice = dice0;
   if (monkW && /^1d(\d+)$/.test(dice0) && +dice0.slice(2) < ma) dice = '1d' + ma;
   const mg = +w.mg || 0,
-    hit = m[ab] + (w.np ? 0 : p) + mg + xtra(w.hit),
-    db = m[ab] + mg + xtra(w.dm),
+    // fighting styles: Archery (+2 to hit, ranged), Dueling (+2 damage, one-handed melee)
+    arch = ranged && featOn(B, 'Archery') ? 2 : 0,
+    duel = !ranged && !has('2') && featOn(B, 'Dueling') ? 2 : 0,
+    hit = m[ab] + (w.np ? 0 : p) + mg + xtra(w.hit) + arch,
+    db = m[ab] + mg + xtra(w.dm) + duel,
     plus = v => (v ? (v > 0 ? '+' : '') + v : '');
   const props = [
     has('F') && 'Finesse',
@@ -11185,7 +11204,7 @@ function hbWeapon(B, w) {
     magic: mg || undefined,
     str: ab === 'STR',
     ranged: !!ranged,
-    note: vers ? `Versatile: ${vers}${plus(db)} with two hands` : '',
+    note: [vers ? `Versatile: ${vers}${plus(db - duel)} with two hands` : '', duel ? 'Dueling +2 included: one weapon in hand, no other' : '', arch ? 'Archery +2 to hit included' : ''].filter(Boolean).join(' · '),
     full: ''
   };
 }
@@ -11925,6 +11944,7 @@ function hfGen(B) {
   }
   hfMore(B, D, F, add, res); // later class features: builder-features.js
   hfSubs(B, D, F, add, res); // subclass features: builder-subclasses.js
+  hfFeats(B, D, F, add, res); // feats and fighting styles: builder-feats.js
   // features the player added by hand
   (B.cf || []).forEach((f, i) => {
     if (f.t === 'P') {
@@ -12276,7 +12296,7 @@ function hbBuild(B) {
       .forEach(x => {
         x.d = x.d.replace(/for 1d10 force\..*$/, `for 1d10+${m.CHA} force (Agonizing Blast).`);
       });
-  const sv = B.saves || HC[main.n].sv,
+  const sv = [...new Set([...(B.saves || HC[main.n].sv), ...(B.feats || []).filter(f => f.n === 'Resilient' && f.ab).map(f => ABN.indexOf(f.ab))])],
     aura = D.lv('Paladin') >= 6 ? mx1(m.CHA) : 0;
   const saves = ABN.map((a, i) => m[a] + (sv.includes(i) ? p : 0) + aura);
   const joat = D.lv('Bard') >= 2,
@@ -12299,7 +12319,7 @@ function hbBuild(B) {
   );
   const initParts = [{ n: 'Dexterity', v: m.DEX }];
   if (joat) initParts.push({ n: 'Jack of All Trades', v: half, jo: true });
-  if (B.alert) initParts.push(E === '2014' ? { n: 'Alert', v: 5 } : { n: 'Alert', v: p });
+  if (B.alert || featOn(B, 'Alert')) initParts.push(E === '2014' ? { n: 'Alert', v: 5 } : { n: 'Alert', v: p });
   const weapons = (B.wp || []).map(w => hbWeapon(B, w)).filter(Boolean);
   // Armorer (level 3+): the armour's own weapon, with Intelligence if it's higher
   if (D.lv('Artificer') >= 3 && /Armorer/i.test(D.sub('Artificer'))) {
@@ -13433,6 +13453,241 @@ function hfSubs(B, D, F, add, res) {
   }
 }
 
+/* ---------- builder: feats and fighting styles ----------
+   Picked on the Features step (B.feats = [{ n, ab }]). Each feat becomes the cards it gives in a fight,
+   in our own short words, with the character's numbers filled in. Feats that change numbers elsewhere
+   (Alert, Tough, Resilient, Archery, Dueling, Defense, Martial Weapon Training, Great Weapon Master)
+   are read by name where those numbers are worked out.
+   FEATS: name → { e: '14' | '24' | 'b' (both), c: category, x: [[card type, text(c), extra]] }
+   card type: P always on (a trait), A Action, B Bonus Action, R Reaction, F no action. */
+const FEAT_CATS = {
+  '14': ['Feats (Player’s Handbook)', 'More feats (Xanathar’s and Tasha’s)', 'Fighting Styles'],
+  '24': ['Origin feats', 'General feats (level 4+)', 'Fighting Style feats', 'Epic Boons (level 19+)']
+};
+const FEATS = {};
+const feat = (n, e, c, x) => (FEATS[n + '|' + e] = { n, e, c, x });
+// abilities a feat can raise and pick for (Resilient)
+const FEAT_AB = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+
+/* --- 2014: Player's Handbook --- */
+const P14 = FEAT_CATS['14'][0],
+  X14 = FEAT_CATS['14'][1],
+  S14 = FEAT_CATS['14'][2];
+feat('Actor', '14', P14, [['P', () => 'Advantage on Deception and Performance checks to pass as someone else; you can mimic voices.']]);
+feat('Alert', '14', P14, [['P', () => "+5 to initiative (included). You can't be surprised while conscious, and unseen attackers don't get advantage against you."]]);
+feat('Athlete', '14', P14, [['P', () => "Standing up costs only 5 ft, climbing doesn't slow you, and a running jump needs only 5 ft of run-up."]]);
+feat('Charger', '14', P14, [['B', () => 'When you Dash: one melee weapon attack or a shove. If you moved 10+ ft in a straight line first: +5 damage, or push the target 10 ft.']]);
+feat('Crossbow Expert', '14', P14, [
+  ['P', () => 'Ignore the loading property of crossbows, and no disadvantage on ranged attacks within 5 ft of an enemy.'],
+  ['B', () => 'When you attack with a one-handed weapon in the Attack action: one attack with a loaded hand crossbow.']
+]);
+feat('Defensive Duelist', '14', P14, [['R', c => `Holding a finesse weapon you're proficient with: when a melee attack would hit you, add +${c.p} to your AC against it.`]]);
+feat('Dual Wielder', '14', P14, [['P', () => '+1 AC while wielding a melee weapon in each hand. Two-weapon fighting works with one-handed weapons that aren’t light. Draw or stow two weapons at once.']]);
+feat('Dungeon Delver', '14', P14, [['P', () => 'Advantage on checks to find secret doors and on saves against traps; resistance to trap damage.']]);
+feat('Durable', '14', P14, [['P', c => `When you roll a Hit Die to heal, you regain at least ${Math.max(2, 2 * c.m.CON)} HP.`]]);
+feat('Elemental Adept', '14', P14, [['P', () => 'Choose acid, cold, fire, lightning or thunder: your spells ignore resistance to it, and 1s on its damage dice count as 2s.']]);
+feat('Grappler', '14', P14, [['P', () => "Advantage on attacks against a creature you're grappling. You can try to pin it: both of you are Restrained."]]);
+feat('Great Weapon Master', '14', P14, [
+  ['F', () => 'Before an attack with a heavy weapon you’re proficient with: −5 to hit, +10 damage.'],
+  ['B', () => 'After a critical hit, or after dropping a creature to 0 HP with a melee weapon: one melee weapon attack.']
+]);
+feat('Healer', '14', P14, [['A', () => "Use a healer's kit: a dying creature you stabilise also regains 1 HP, or a creature regains 1d6+4 + its number of Hit Dice in HP (once per creature per short rest)."]]);
+feat('Heavily Armored', '14', P14, [['P', () => 'Proficiency with heavy armour.']]);
+feat('Heavy Armor Master', '14', P14, [['P', () => 'In heavy armour: bludgeoning, piercing and slashing damage from nonmagical weapons is reduced by 3.']]);
+feat('Inspiring Leader', '14', P14, [['P', c => `A 10-minute speech: up to six friendly creatures gain ${Math.max(0, c.L + c.m.CHA)} temporary HP (once per creature per short rest).`]]);
+feat('Keen Mind', '14', P14, [['P', () => 'You always know north, the hours until sunrise or sunset, and recall anything from the past month.']]);
+feat('Lightly Armored', '14', P14, [['P', () => 'Proficiency with light armour.']]);
+feat('Linguist', '14', P14, [['P', () => 'Three more languages, and you can write ciphers.']]);
+feat('Lucky', '14', P14, [['F', () => 'Spend a luck point: roll an extra d20 for your attack roll, check or save, or for an attack against you, and choose which d20 counts.', { res: ['luck', 'Luck points', () => 3, 'long'] }]]);
+feat('Mage Slayer', '14', P14, [
+  ['R', () => 'When a creature within 5 ft casts a spell: one melee weapon attack against it.'],
+  ['P', () => 'Creatures you damage have disadvantage on saves to keep concentration. Advantage on saves against spells cast within 5 ft of you.']
+]);
+feat('Magic Initiate', '14', P14, [['P', () => "Two cantrips and one level 1 spell from one class's list; the level 1 spell is free once per long rest. Add them on the Spells step."]]);
+feat('Martial Adept', '14', P14, [['F', c => `Two Battle Master maneuvers, with one d6 superiority die per short rest. Maneuver DC ${8 + c.p + Math.max(c.m.STR, c.m.DEX)}.`, { res: ['madept', 'Superiority die (Martial Adept)', () => 1, 'short'] }]]);
+feat('Medium Armor Master', '14', P14, [['P', () => "Medium armour doesn't hurt your Stealth, and you can add up to +3 Dexterity to your AC in it."]]);
+feat('Mobile', '14', P14, [['P', () => "+10 ft speed. Dashing ignores difficult terrain. A creature you attack in melee can't make opportunity attacks against you that turn."]]);
+feat('Moderately Armored', '14', P14, [['P', () => 'Proficiency with medium armour and shields.']]);
+feat('Mounted Combatant', '14', P14, [['P', () => 'While mounted: advantage on melee attacks against smaller unmounted creatures, and you can take hits meant for your mount.']]);
+feat('Observant', '14', P14, [['P', () => '+5 to passive Perception and Investigation; you can read lips.']]);
+feat('Polearm Master', '14', P14, [
+  ['B', c => `After you take the Attack action with a glaive, halberd, quarterstaff or spear: attack with the other end, 1d4${c.m.STR ? sgn(c.m.STR) : ''} bludgeoning.`],
+  ['R', () => 'When a creature enters your reach: an opportunity attack against it.']
+]);
+feat('Resilient', '14', P14, [['P', (c, f) => `Proficiency in ${f.ab || 'the chosen ability’s'} saving throws (included), and +1 ${f.ab || 'to that ability'}: raise it on the Scores step.`]]);
+feat('Ritual Caster', '14', P14, [['P', () => 'A ritual book: cast its spells as rituals.']]);
+feat('Savage Attacker', '14', P14, [['P', () => "Once per turn: reroll a melee weapon's damage dice and use either total."]]);
+feat('Sentinel', '14', P14, [
+  ['R', () => 'When a creature within 5 ft attacks someone other than you: one melee weapon attack against it.'],
+  ['P', () => 'Your opportunity attack hits stop the creature (speed 0 this turn), and creatures provoke them even when they Disengage.']
+]);
+feat('Sharpshooter', '14', P14, [
+  ['F', () => 'Before an attack with a ranged weapon you’re proficient with: −5 to hit, +10 damage.'],
+  ['P', () => 'Long range gives no disadvantage, and your ranged weapon attacks ignore half and three-quarters cover.']
+]);
+feat('Shield Master', '14', P14, [
+  ['B', () => 'After you take the Attack action: shove a creature within 5 ft with your shield.'],
+  ['P', () => "Add your shield's +2 to DEX saves against effects that target only you. When a DEX save would halve damage and you succeed, you take none."]
+]);
+feat('Skilled', '14', P14, [['P', () => 'Proficiency in three skills or tools.']]);
+feat('Skulker', '14', P14, [['P', () => "Hide when only lightly obscured; a missed ranged attack doesn't reveal you; dim light doesn't hurt your Perception."]]);
+feat('Spell Sniper', '14', P14, [['P', () => 'Your attack spells have double range and ignore half and three-quarters cover. One extra attack cantrip.']]);
+feat('Tavern Brawler', '14', P14, [['B', () => 'After hitting with an unarmed strike or an improvised weapon: try to grapple the target. Your unarmed strikes deal 1d4.']]);
+feat('Tough', '14', P14, [['P', c => `+${2 * c.L} HP maximum (2 per level, added to the suggested HP).`]]);
+feat('War Caster', '14', P14, [['P', () => 'Advantage on CON saves to keep concentration. You can cast a spell as an opportunity attack, and cast with weapons or a shield in hand.']]);
+feat('Weapon Master', '14', P14, [['P', () => 'Proficiency with four weapons of your choice.']]);
+/* Xanathar's and Tasha's: the combat-relevant ones */
+feat('Crusher', '14', X14, [['F', () => 'Once per turn, when you hit with bludgeoning damage: push the target 5 ft. On a critical hit, attacks against it have advantage until your next turn.']]);
+feat('Piercer', '14', X14, [['F', () => 'Once per turn, when you hit with piercing damage: reroll one damage die. On a critical hit, roll one more damage die.']]);
+feat('Slasher', '14', X14, [['F', () => 'Once per turn, when you hit with slashing damage: its speed drops by 10 ft. On a critical hit, it has disadvantage on attacks until your next turn.']]);
+feat('Fey Touched', '14', X14, [['P', () => 'Misty Step and one level 1 divination or enchantment spell, each free once per long rest. Add them on the Spells step.']]);
+feat('Shadow Touched', '14', X14, [['P', () => 'Invisibility and one level 1 illusion or necromancy spell, each free once per long rest. Add them on the Spells step.']]);
+feat('Telekinetic', '14', X14, [['B', c => `Shove a creature within 30 ft: STR save DC ${8 + c.p + Math.max(c.m.INT, c.m.WIS, c.m.CHA)} or it's moved 5 ft toward or away from you.`]]);
+feat('Telepathic', '14', X14, [['P', () => 'Speak telepathically within 60 ft; Detect Thoughts free once per long rest.']]);
+feat('Fighting Initiate', '14', X14, [['P', () => 'One fighting style: pick it below too, so its numbers count.']]);
+feat('Eldritch Adept', '14', X14, [['P', () => 'One Eldritch Invocation.']]);
+feat('Metamagic Adept', '14', X14, [['F', () => 'Two Metamagic options, with 2 sorcery points per long rest for them.', { res: ['mmadept', 'Sorcery points (Metamagic Adept)', () => 2, 'long'] }]]);
+feat('Skill Expert', '14', X14, [['P', () => 'One more skill, and expertise in one.']]);
+feat('Chef', '14', X14, [['P', c => `After a short rest, you and up to ${4 + c.p} others regain an extra 1d8 HP. After a long rest, ${c.p} treats: eat one (Bonus Action) for ${c.p} temporary HP.`]]);
+feat('Poisoner', '14', X14, [['P', c => `Your poison damage ignores resistance. Coat a weapon (Bonus Action): a hit forces a CON save DC 14 or 2d8 poison and Poisoned.`]]);
+/* 2014 fighting styles */
+feat('Archery', '14', S14, [['P', () => '+2 to hit with ranged weapons (included).']]);
+feat('Defense', '14', S14, [['P', () => '+1 AC while wearing armour (included).']]);
+feat('Dueling', '14', S14, [['P', () => '+2 damage with a one-handed melee weapon and no other weapon (included on those weapons).']]);
+feat('Great Weapon Fighting', '14', S14, [['P', () => 'With a two-handed or versatile melee weapon held in two hands: reroll 1s and 2s on its damage dice (keep the new roll).']]);
+feat('Protection', '14', S14, [['R', () => 'With a shield: give an attack against a creature within 5 ft of you disadvantage.']]);
+feat('Two-Weapon Fighting', '14', S14, [['P', () => 'Add your ability modifier to the damage of your off-hand attack.']]);
+feat('Blind Fighting', '14', S14, [['P', () => 'Blindsight 10 ft.']]);
+feat('Interception', '14', S14, [['R', c => `When a creature within 5 ft is hit: reduce the damage by 1d10+${c.p} (needs a shield or weapon).`]]);
+feat('Thrown Weapon Fighting', '14', S14, [['P', () => '+2 damage when you hit with a thrown weapon; draw it as part of the attack.']]);
+feat('Unarmed Fighting', '14', S14, [['P', c => `Unarmed strikes deal 1d6${sgn(c.m.STR)} (1d8 with both hands free). Start of your turn: 1d4 to a creature you grapple.`]]);
+
+/* --- 2024: Player's Handbook --- */
+const O24 = FEAT_CATS['24'][0],
+  G24 = FEAT_CATS['24'][1],
+  S24 = FEAT_CATS['24'][2],
+  B24 = FEAT_CATS['24'][3];
+feat('Alert', '24', O24, [['P', c => `+${c.p} to initiative (included). Right after rolling initiative, you can swap with a willing ally.`]]);
+feat('Crafter', '24', O24, [['P', () => 'Three tool proficiencies; 20% off nonmagical items; craft faster.']]);
+feat('Healer', '24', O24, [['A', c => `Battle Medic: with a healer's kit, a creature within 5 ft spends one Hit Die and regains the roll + ${c.p}. You reroll 1s on healing dice.`]]);
+feat('Lucky', '24', O24, [['F', () => 'Spend a Luck Point: advantage on your d20 test, or disadvantage on an attack roll against you.', { res: ['luck', 'Luck points', c => c.p, 'long'] }]]);
+feat('Magic Initiate', '24', O24, [['P', () => 'Two cantrips and one level 1 spell from the Cleric, Druid or Wizard list; the level 1 spell is free once per long rest. Add them on the Spells step.']]);
+feat('Musician', '24', O24, [['P', c => `After a short or long rest: up to ${c.p} allies who hear you gain Heroic Inspiration.`]]);
+feat('Savage Attacker', '24', O24, [['P', () => 'Once per turn when you hit with a weapon: roll its damage dice twice and use either.']]);
+feat('Skilled', '24', O24, [['P', () => 'Proficiency in three skills or tools.']]);
+feat('Tavern Brawler', '24', O24, [['F', c => `Unarmed strikes deal 1d4${sgn(c.m.STR)}, rerolling 1s. Once per turn, on an unarmed hit: push the target 5 ft.`]]);
+feat('Tough', '24', O24, [['P', c => `+${2 * c.L} HP maximum (2 per level, added to the suggested HP).`]]);
+feat('Ability Score Improvement', '24', G24, [['P', () => '+2 to one ability or +1 to two: change them on the Scores step.']]);
+feat('Actor', '24', G24, [['P', () => 'Advantage on Deception and Performance checks to pass as someone else; you can mimic voices.']]);
+feat('Athlete', '24', G24, [['P', () => "Climb speed equal to your speed; standing up costs only 5 ft; a running jump needs only 5 ft of run-up."]]);
+feat('Charger', '24', G24, [['F', () => 'Dash gives +10 ft. Once per turn, if you moved 10+ ft straight toward a target before hitting it with a melee attack in the Attack action: +1d8 damage, or push it 10 ft.']]);
+feat('Chef', '24', G24, [['B', c => `Eat a treat you made after a rest: ${c.p} temporary HP. After a short rest, you and up to ${4 + c.p} others regain an extra 1d8 HP.`]]);
+feat('Crossbow Expert', '24', G24, [['P', () => 'Ignore loading; no disadvantage on ranged attacks within 5 ft of an enemy; add your ability modifier to the damage of the extra attack when you fight with two light crossbows or a light crossbow and a light weapon.']]);
+feat('Crusher', '24', G24, [['F', () => 'Once per turn, when you hit with bludgeoning damage: push the target 5 ft. On a critical hit, attacks against it have advantage until your next turn.']]);
+feat('Defensive Duelist', '24', G24, [['R', c => `Holding a finesse weapon: when a melee attack hits you, add +${c.p} to your AC until the start of your next turn, possibly turning it into a miss.`]]);
+feat('Dual Wielder', '24', G24, [['P', () => 'When you attack with a light weapon in the Attack action, your Bonus Action attack can use a melee weapon that isn’t Two-Handed. Draw or stow two weapons at once.']]);
+feat('Durable', '24', G24, [['B', () => 'Speedy Recovery: spend one Hit Die and regain HP. You also have advantage on death saves.']]);
+feat('Elemental Adept', '24', G24, [['P', () => 'Choose acid, cold, fire, lightning or thunder: your spells ignore resistance to it, and 1s on its damage dice count as 2s.']]);
+feat('Fey Touched', '24', G24, [['P', () => 'Misty Step and one level 1 divination or enchantment spell, each free once per long rest. Add them on the Spells step.']]);
+feat('Grappler', '24', G24, [['F', () => 'Once per turn, when you hit with an Unarmed Strike in the Attack action: deal damage and grapple. Advantage on attacks against creatures you grapple.']]);
+feat('Great Weapon Master', '24', G24, [
+  ['P', c => `When you hit with a Heavy weapon in the Attack action: +${c.p} damage (on the roll card).`],
+  ['B', () => 'After a critical hit, or after dropping a creature to 0 HP with a melee weapon: one attack with the same weapon.']
+]);
+feat('Heavily Armored', '24', G24, [['P', () => 'Training with heavy armour.']]);
+feat('Heavy Armor Master', '24', G24, [['P', c => `In heavy armour: bludgeoning, piercing and slashing damage you take is reduced by ${c.p}.`]]);
+feat('Inspiring Leader', '24', G24, [['P', c => `After a short or long rest: up to six allies within 30 ft gain ${Math.max(0, c.L + Math.max(c.m.WIS, c.m.CHA))} temporary HP.`]]);
+feat('Keen Mind', '24', G24, [['B', () => 'Study (the Bonus Action version of a lore check). One more lore skill, with expertise.']]);
+feat('Lightly Armored', '24', G24, [['P', () => 'Training with light armour and shields.']]);
+feat('Mage Slayer', '24', G24, [
+  ['P', () => 'Creatures you damage have disadvantage on saves to keep concentration.'],
+  ['F', () => 'Guarded Mind: turn a failed INT, WIS or CHA save into a success.', { res: ['guarded', 'Guarded Mind', () => 1, 'short'] }]
+]);
+feat('Martial Weapon Training', '24', G24, [['P', () => 'Proficiency with martial weapons (included) and training with light and medium armour and shields.']]);
+feat('Medium Armor Master', '24', G24, [['P', () => 'You can add up to +3 Dexterity to your AC in medium armour.']]);
+feat('Moderately Armored', '24', G24, [['P', () => 'Training with medium armour.']]);
+feat('Mounted Combatant', '24', G24, [['P', () => 'While mounted: advantage on attacks against unmounted creatures within 5 ft of your mount, and you can protect your mount.']]);
+feat('Observant', '24', G24, [['B', () => 'Search (the Bonus Action version). One more perception skill, with expertise.']]);
+feat('Piercer', '24', G24, [['F', () => 'Once per turn, when you hit with piercing damage: reroll one damage die. On a critical hit, roll one more damage die.']]);
+feat('Poisoner', '24', G24, [['P', c => `Your poison damage ignores resistance. Coat a weapon (Bonus Action): a hit forces a CON save DC ${8 + c.p + Math.max(c.m.DEX, c.m.INT)} or 2d8 poison and Poisoned.`]]);
+feat('Polearm Master', '24', G24, [
+  ['B', c => `After you take the Attack action with a quarterstaff, spear or heavy reach weapon: attack with the other end, 1d4${c.m.STR ? sgn(c.m.STR) : ''} bludgeoning.`],
+  ['R', () => 'When a creature enters your reach: one melee attack against it.']
+]);
+feat('Resilient', '24', G24, [['P', (c, f) => `Proficiency in ${f.ab || 'the chosen ability’s'} saving throws (included), and +1 ${f.ab || 'to that ability'}: raise it on the Scores step.`]]);
+feat('Ritual Caster', '24', G24, [['P', () => 'Ritual spells you can cast without preparing them.']]);
+feat('Sentinel', '24', G24, [
+  ['R', () => 'When a creature within 5 ft Disengages, or hits someone other than you: an opportunity attack against it.'],
+  ['P', () => 'When your opportunity attack hits, the creature’s speed is 0 for the rest of the turn.']
+]);
+feat('Shadow Touched', '24', G24, [['P', () => 'Invisibility and one level 1 illusion or necromancy spell, each free once per long rest. Add them on the Spells step.']]);
+feat('Sharpshooter', '24', G24, [['P', () => 'Your ranged weapon attacks ignore half and three-quarters cover, and get no disadvantage within 5 ft of an enemy or at long range.']]);
+feat('Shield Master', '24', G24, [
+  ['F', c => `Shield Bash: once per turn, when you hit with a melee weapon in the Attack action: STR save DC ${8 + c.p + c.m.STR} or the target is pushed 5 ft or knocked Prone.`],
+  ['R', () => 'Interpose Shield: when you succeed on a DEX save for half damage, take none.']
+]);
+feat('Skill Expert', '24', G24, [['P', () => 'One more skill, and expertise in one.']]);
+feat('Skulker', '24', G24, [['P', () => 'Blindsight 10 ft; hiding in combat is easier; a missed attack doesn’t reveal you.']]);
+feat('Slasher', '24', G24, [['F', () => 'Once per turn, when you hit with slashing damage: its speed drops by 10 ft. On a critical hit, it has disadvantage on attacks until your next turn.']]);
+feat('Speedy', '24', G24, [['P', () => '+10 ft speed. Dashing ignores difficult terrain. Opportunity attacks against you have disadvantage.']]);
+feat('Spell Sniper', '24', G24, [['P', () => 'Your attack spells get +60 ft range and ignore half and three-quarters cover, with no disadvantage within 5 ft. One extra attack cantrip.']]);
+feat('Telekinetic', '24', G24, [['B', c => `Shove a creature within 30 ft: STR save DC ${8 + c.p + Math.max(c.m.INT, c.m.WIS, c.m.CHA)} or it's moved 5 ft toward or away from you.`]]);
+feat('Telepathic', '24', G24, [['P', () => 'Speak telepathically within 60 ft; Detect Thoughts free once per long rest.']]);
+feat('War Caster', '24', G24, [['P', () => 'Advantage on CON saves to keep concentration. You can cast a spell as an opportunity attack, and cast with weapons or a shield in hand.']]);
+feat('Weapon Master', '24', G24, [['P', () => 'Use the mastery property of one more kind of weapon.']]);
+/* 2024 fighting style feats */
+feat('Archery', '24', S24, [['P', () => '+2 to hit with ranged weapons (included).']]);
+feat('Blind Fighting', '24', S24, [['P', () => 'Blindsight 10 ft.']]);
+feat('Defense', '24', S24, [['P', () => '+1 AC while wearing light, medium or heavy armour (included).']]);
+feat('Dueling', '24', S24, [['P', () => '+2 damage with a melee weapon in one hand and no other weapon (included on one-handed melee weapons).']]);
+feat('Great Weapon Fighting', '24', S24, [['P', () => 'With a Two-Handed or Versatile melee weapon in two hands: 1s and 2s on its damage dice count as 3s.']]);
+feat('Interception', '24', S24, [['R', c => `When a creature within 5 ft is hit: reduce the damage by 1d10+${c.p} (needs a shield or a weapon).`]]);
+feat('Protection', '24', S24, [['R', () => 'With a shield: when a creature within 5 ft is attacked, give that attack and others against it disadvantage until your next turn.']]);
+feat('Thrown Weapon Fighting', '24', S24, [['P', () => '+2 damage when you hit with a thrown weapon; draw it as part of the attack.']]);
+feat('Two-Weapon Fighting', '24', S24, [['P', () => 'Add your ability modifier to the damage of your extra light-weapon attack.']]);
+feat('Unarmed Fighting', '24', S24, [['P', c => `Unarmed strikes deal 1d6${sgn(c.m.STR)} (1d8 with both hands free). Start of your turn: 1d4 to a creature you grapple.`]]);
+/* 2024 epic boons */
+feat('Boon of Combat Prowess', '24', B24, [['F', () => 'Once per turn, when you miss with an attack: hit instead.', { once: 'prowess' }]]);
+feat('Boon of Dimensional Travel', '24', B24, [['F', () => 'After you take the Attack or Magic action: teleport up to 30 ft.']]);
+feat('Boon of Energy Resistance', '24', B24, [['R', c => `Resistance to two damage types of your choice. When you take one of them: a creature within 60 ft makes a DEX save DC ${8 + c.p + Math.max(c.m.CON, c.m.WIS, c.m.CHA)} or takes 2d12+${Math.max(c.m.CON, c.m.WIS, c.m.CHA)} of that type.`]]);
+feat('Boon of Fate', '24', B24, [['F', () => 'When you or a creature within 60 ft succeeds or fails a d20 test: add or subtract 2d4. Back when you roll initiative or after a short rest.', { res: ['fate', 'Boon of Fate', () => 1, 'short'] }]]);
+feat('Boon of Fortitude', '24', B24, [['P', c => `+40 HP maximum (added to the suggested HP). Once per turn when you regain HP: +${Math.max(0, c.m.CON)} more.`]]);
+feat('Boon of Irresistible Offense', '24', B24, [['P', () => 'Your bludgeoning, piercing and slashing damage ignores resistance. On a natural 20: extra damage equal to the ability score you raised with this boon.']]);
+feat('Boon of Recovery', '24', B24, [
+  ['F', () => 'Last Stand: when you would drop to 0 HP, drop to 1 instead.', { res: ['laststand', 'Last Stand', () => 1, 'long'] }],
+  ['B', () => 'Spend any number of d10s from a pool of ten: regain HP equal to the roll.', { res: ['boonheal', 'Boon of Recovery dice', () => 10, 'long'] }]
+]);
+feat('Boon of Skill', '24', B24, [['P', () => 'Proficiency in every skill, and expertise in one.']]);
+feat('Boon of Speed', '24', B24, [['B', () => '+30 ft speed. Disengage, which also ends the Grappled condition on you.']]);
+feat('Boon of Spell Recall', '24', B24, [['F', () => 'Cast a prepared spell of level 1–4 without a slot.', { res: ['recall', 'Spell Recall', () => 1, 'long'] }]]);
+feat('Boon of the Night Spirit', '24', B24, [['P', () => 'In dim light or darkness: you can become Invisible (Bonus Action), and you resist all damage except psychic and radiant.']]);
+feat('Boon of Truesight', '24', B24, [['P', () => 'Truesight 60 ft.']]);
+
+// the feats this character has, as cards
+const featOn = (B, n) => (B.feats || []).some(f => f.n === n);
+function hfFeats(B, D, F, add, res) {
+  const E = D.o14 ? '14' : '24',
+    c = { p: D.prof, m: D.m, L: D.L, o: D.o14 };
+  (B.feats || []).forEach((f, i) => {
+    const X = FEATS[f.n + '|' + E];
+    if (!X) return;
+    X.x.forEach(([t, txt, ex], j) => {
+      const id = `feat.${i}.${j}`,
+        d = txt(c, f),
+        x = { feat: true };
+      if (ex && ex.res) {
+        const [k, rn, mxf, rest] = ex.res;
+        res(k, rn, Math.max(1, mxf(c)), rest);
+        x.res = k;
+      }
+      if (ex && ex.once) x.once = ex.once;
+      if (t === 'P') x.passive = true;
+      const nm = t === 'P' || X.x.filter(y => y[0] !== 'P').length < 2 || j === X.x.findIndex(y => y[0] !== 'P') ? X.n : `${X.n} (${t === 'R' ? 'reaction' : t === 'B' ? 'bonus action' : 'option'})`;
+      add(id, nm, t === 'P' ? 'F' : t, d, x);
+    });
+  });
+}
+
 /* ---------- builder: screens ---------- */
 let HB = null,
   HSTEP = 0,
@@ -13577,6 +13832,7 @@ function hbAC(B) {
     parts = opts.reduce((x, y) => (tot(y) > tot(x) ? y : x));
   }
   if (sp && sp[4]) parts.push({ n: sp[1], v: sp[4] });
+  if (a[1] && a[2] && featOn(B, 'Defense')) parts.push({ n: 'Defense (fighting style)', v: 1 });
   if (B.shield) parts.push({ n: 'Shield', v: 2, shield: true });
   (B.acx || []).forEach(x => x.v && parts.push({ n: x.n || 'Bonus', v: +x.v }));
   if (+B.acb) parts.push({ n: 'Other bonus', v: +B.acb });
@@ -13775,6 +14031,21 @@ function hbSpellList() {
       .join('') || '<div class="empty">Nothing matches. Add it below as your own.</div>'
   );
 }
+// a class without spells: say so plainly, with the one exception that matters (a subclass that casts)
+function hbNoCaster(B) {
+  const names = B.cls.map(c => c.n),
+    one = names.length === 1 ? names[0] : '',
+    why = {
+      Barbarian: "Barbarians don't cast spells, and Rage stops spellcasting altogether.",
+      Fighter: "Fighters don't cast spells, unless they become Eldritch Knights at level 3.",
+      Rogue: "Rogues don't cast spells, unless they become Arcane Tricksters at level 3.",
+      Monk: "Monks don't cast spells; their tricks run on Focus (ki) instead, on the Features step."
+    }[one] || (one ? `A ${one} doesn't cast spells.` : "None of your classes cast spells.");
+  return `<div class="card nocast"><div class="t">${one ? `No spells for ${one === 'Fighter' || one === 'Rogue' ? 'this ' + one.toLowerCase() : one.toLowerCase() + 's'}` : 'No spells'}</div>
+  <p>${why}</p>
+  <p class="mut">Spells from your species are added for you. Got one from a feat or a magic item? Add it below; otherwise go straight on.</p>
+  <button class="btn" data-act="hbGo" data-arg="${HSTEP + 1}">Skip to Features ›</button></div>`;
+}
 function hbSpells() {
   const B = HB,
     D = hbDer(B),
@@ -13788,7 +14059,7 @@ function hbSpells() {
           .join('')}</div>`
       : D.scAb
       ? `<div class="card" style="margin:6px 0 10px"><div class="row between"><span class="sm mut">Spell save DC</span><b>${8 + D.prof + D.m[D.scAb]}</b></div><div class="row between"><span class="sm mut">Spell attack</span><b>${sgn(D.prof + D.m[D.scAb])}</b></div><div class="row between"><span class="sm mut">Ability</span><b>${D.scAb}</b></div></div>`
-      : `<p class="sm mut" style="line-height:1.5;margin:6px 0 12px">Not a spellcaster. If you have spells from your species or a feat, add them here; otherwise skip this step.</p>`
+      : hbNoCaster(B)
   }
   ${hbAutoSp()}
   ${(() => {
@@ -13805,6 +14076,7 @@ function hbSpells() {
         .join('')}`;
     return `<div class="xs sec">Your spells · ${own.length}</div><div class="filters" style="flex-wrap:wrap">${own.map(([n, i]) => `<button class="on" data-act="hbSpDel" data-arg="${i}">${esc(n)} ✕</button>`).join('')}</div>`;
   })()}
+  ${D.scAb ? '' : `<details class="rcat" ${(B.sp || []).length || HQ ? 'open' : ''}><summary>Add a spell from a feat or item</summary>`}
   <div class="xs sec">Add from the list</div>
   <input class="field" placeholder="Search spells" value="${esc(HQ)}" oninput="HQ=this.value;$('#hbList').innerHTML=hbSpellList()">
   <div class="filters" style="flex-wrap:wrap"><button class="${HLV < 0 ? 'on' : ''}" data-act="hbLv" data-arg="-1">Up to level ${Math.max(1, top)}</button>${[0, 1, 2, 3, 4, 5].map(l => `<button class="${HLV === l ? 'on' : ''}" data-act="hbLv" data-arg="${l}">${l ? l : 'Cantrips'}</button>`).join('')}</div>
@@ -13815,13 +14087,13 @@ function hbSpells() {
     <select class="field" id="hcsT"><option value="A">Action</option><option value="B">Bonus Action</option><option value="R">Reaction</option><option value="O">Longer</option></select></div>
    <input class="field" id="hcsD" style="margin-top:8px" placeholder="What it does, in short (optional)">
    <label class="row" style="gap:8px;margin-top:8px"><input type="checkbox" id="hcsC"> Concentration</label>
-   <button class="btn" style="margin-top:8px" data-act="hbCsAdd">Add spell</button></div></details>`;
+   <button class="btn" style="margin-top:8px" data-act="hbCsAdd">Add spell</button></div></details>${D.scAb ? '' : '</details>'}`;
 }
 function hbFeatures() {
   const B = HB,
     G = hfGen(B),
     E = B.ed,
-    shown = G.F.filter(f => (!f.x.only || f.x.only === E) && !f.id.startsWith('cf.')),
+    shown = G.F.filter(f => (!f.x.only || f.x.only === E) && !f.id.startsWith('cf.') && !f.x.feat),
     pools = cfPools(G);
   const isOn = f => (f.opt ? (B.on || []).includes(f.id) : !(B.off || []).includes(f.id));
   const grp = f =>
@@ -13877,8 +14149,7 @@ function hbFeatures() {
         }).join('')}</div>`
       : ''
   }
-  <div class="xs sec">Feats</div>
-  <div class="toggle"><span>Alert feat <span class="sm mut">(initiative bonus)</span></span><button class="sw ${B.alert ? 'on' : ''}" data-act="hbTog" data-arg="alert"></button></div>
+  ${hbFeatsSec(B, G)}
   <div class="xs sec">Your own features</div>
   ${(B.cf || []).map((f, i) => `<div class="item"><div class="row between" style="align-items:flex-start;gap:10px"><div style="flex:1;min-width:0"><div class="t">${esc(f.n)}</div>
     <div class="row" style="gap:5px;margin-top:5px">${costTag(f.t)}${cfUseTag(f, G)}</div>${f.d ? `<div class="d">${esc(f.d)}</div>` : ''}</div>
@@ -13941,7 +14212,7 @@ function wpnProf(B, n) {
     sub = re => B.cls.some(c => re.test(c.sub || ''));
   if (any(/Barbarian|Fighter|Paladin|Ranger|Blood Hunter/)) return true;
   if (B.cls.some(c => c.n === 'Artificer' && c.lvl >= 3 && /Battle Smith/i.test(c.sub || ''))) return true;
-  if (!o && ((B.primal === 'Warden' && any(/Druid/)) || (B.divine === 'Protector' && any(/Cleric/)))) return true;
+  if (!o && ((B.primal === 'Warden' && any(/Druid/)) || (B.divine === 'Protector' && any(/Cleric/)) || featOn(B, 'Martial Weapon Training'))) return true;
   // 2014 Elf/Drow Weapon Training
   if (o && spcKey(B.species) === 'elf') {
     const ln = spcOpt(B);
@@ -14009,6 +14280,49 @@ function hbPick(list, val, other, none, js, input) {
   return `<select class="field" style="padding:10px 12px" onchange="${js}">
    <option value="">${esc(none)}</option>${list.map(x => `<option value="${esc(x)}" ${!oth && x.toLowerCase() === val.toLowerCase() ? 'selected' : ''}>${esc(x)}</option>`).join('')}
    <option value="__other" ${oth ? 'selected' : ''}>Other… (type it)</option></select>${oth ? input : ''}`;
+}
+// feats and fighting styles: the ones you have, with what they do, and a list to add more
+function hbFeatsSec(B, G) {
+  const E = B.ed === '2014' ? '14' : '24',
+    mine = B.feats || [],
+    cards = i => G.F.filter(f => f.id.startsWith(`feat.${i}.`));
+  const list = mine
+    .map((f, i) => {
+      const X = FEATS[f.n + '|' + E];
+      return `<div class="item"><div class="row between" style="align-items:flex-start;gap:10px"><div style="flex:1;min-width:0"><div class="t">${esc(f.n)}</div>
+      ${X ? '' : `<div class="d" style="color:var(--warn)">Not in the ${B.ed === '2014' ? '2014' : '2024'} list: switch the edition back, or remove it.</div>`}
+      ${f.n === 'Resilient' ? `<div class="row" style="gap:8px;margin-top:6px;align-items:center"><span class="sm mut">Ability</span><select class="field" style="flex:1;padding:7px 10px" onchange="hbFeatAb(${i},this.value)"><option value="">Pick one</option>${FEAT_AB.map(a => `<option ${f.ab === a ? 'selected' : ''}>${a}</option>`).join('')}</select></div>` : ''}
+      ${cards(i).map(c => `<div class="row" style="gap:5px;margin-top:6px">${c.x.passive ? '<span class="tag">Always on</span>' : costTag(c.t)}${c.n !== f.n ? `<span class="sm" style="font-weight:700">${esc(c.n.replace(f.n, '').replace(/^\s*\(|\)$/g, ''))}</span>` : ''}</div><div class="d">${eh(c.d)}</div>`).join('')}</div>
+      <button class="iconbtn" style="width:34px;height:34px" data-act="hbFeatDel" data-arg="${i}" aria-label="Remove ${esc(f.n)}">✕</button></div></div>`;
+    })
+    .join('');
+  const opts = FEAT_CATS[E]
+    .map(cat => {
+      const L = Object.values(FEATS).filter(x => x.e === E && x.c === cat && (x.c.includes('Ability Score') || !mine.some(f => f.n === x.n)));
+      return L.length ? `<optgroup label="${esc(cat)}">${L.map(x => `<option value="${esc(x.n)}">${esc(x.n)}</option>`).join('')}</optgroup>` : '';
+    })
+    .join('');
+  return `<div class="xs sec">Feats &amp; fighting styles${mine.length ? ` · ${mine.length}` : ''}</div>
+  ${list}
+  <select class="field" style="margin-top:${mine.length ? 8 : 2}px" onchange="hbFeatAdd(this.value);this.value=''"><option value="">+ Add a feat or fighting style</option>${opts}</select>`;
+}
+// older characters used an "Alert" switch: make it the Alert feat
+function hbFeatMig(B) {
+  if (!B || !B.alert) return;
+  B.feats = B.feats || [];
+  if (!B.feats.some(f => f.n === 'Alert')) B.feats.unshift({ n: 'Alert' });
+  B.alert = false;
+}
+function hbFeatAdd(n) {
+  if (!n) return;
+  HB.feats = HB.feats || [];
+  if (n !== 'Ability Score Improvement' && HB.feats.some(f => f.n === n)) return;
+  HB.feats.push({ n });
+  render();
+}
+function hbFeatAb(i, ab) {
+  HB.feats[i].ab = ab;
+  render();
 }
 // 2024 elves and tieflings choose the ability their species spells use
 function hbSpcAbPick(B) {
@@ -14143,6 +14457,7 @@ Object.assign(ACT, {
     const d = !fresh && hbDraftLoad(true);
     HB = d ? d.hb : JSON.parse(JSON.stringify(b));
     hbElfName(HB);
+    hbFeatMig(HB);
     HB._wood = spcKey(HB.species) === 'elf' && spcOpt(HB) === 'Wood';
     HB._edit = true;
     if (!d) HB.ed = CH().edition;
@@ -14294,6 +14609,10 @@ Object.assign(ACT, {
       j = C.findIndex(c => c.n === spClsOf(HB, n));
     HB.spCls = HB.spCls || {};
     HB.spCls[n] = C[(j + 1) % C.length].n;
+    render();
+  },
+  hbFeatDel(i) {
+    HB.feats.splice(+i, 1);
     render();
   },
   hbSpDel(i) {
@@ -15636,7 +15955,7 @@ function rollCard(m) {
   });
   // which lines from the attack always apply on a hit (rolled by "Roll all damage")
   RC.notes.forEach(n => {
-    if (n.ex && /\(Rage\)|Radiant Strikes|Improved Divine Smite/.test(plain(n.html)) && !/not when thrown|when you attack in melee/i.test(plain(n.html))) n.ex.auto = true;
+    if (n.ex && /\(Rage\)|\(Great Weapon Master\)|Radiant Strikes|Improved Divine Smite/.test(plain(n.html)) && !/not when thrown|when you attack in melee/i.test(plain(n.html))) n.ex.auto = true;
   });
   // a few extras that only matter when you hit, so they can be rolled from here too
   const add = (label, expr) => RC.notes.push({ html: `<span class="mut">${esc(label)}</span>`, ex: { label, expr } });
