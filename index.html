@@ -6157,14 +6157,14 @@ function songDie() {
 function restSheet() {
   const ch = CH(),
     song = songDie(),
-    back = Object.values(ch.res).filter(r => r.rest === 'short' && r.cur < r.max),
+    back = Object.values(ch.res).filter(r => (r.rest === 'short' || r.short1) && r.cur < r.max),
     pact = ch.slots.P && ch.slots.P.used,
     con = ch.conMod || 0;
   const dice = (ch.hd || []).map(h => `d${h.die} (${esc(h.n)})`).join(', ');
   return `<p class="sm mut" style="line-height:1.5;margin:2px 0 12px">At least 1 hour of rest. Spend Hit Dice on your sheet${dice ? `: ${dice}, each ${con >= 0 ? '+' : '−'} ${Math.abs(con)} CON` : ''}. Then tap your HP to add what you healed.</p>
   ${song ? `<div class="item" style="border-color:var(--line)"><div class="t">Song of Rest · 1${song}</div><div class="d">Your performance during this rest: you and every friendly creature that hears it and spends at least one Hit Die regains an extra 1${song} HP at the end of the rest (once per creature, not per die). Tell your party!</div></div>` : ''}
   ${arcRecSection()}${natRecSection()}
-  <div class="xs sec">Comes back</div><div class="sm" style="line-height:1.6">${back.length || pact ? [...back.map(r => `${esc(r.n)} (${r.cur}→${(/^Channel Divinity$/i.test(r.n) && !is14('cd')) || (/^Wild Shape$/i.test(r.n) && !is14('ws')) ? Math.min(r.max, r.cur + 1) : r.max})`), pact ? 'Pact Magic slots' : ''].filter(Boolean).join(' · ') : '<span class="mut">Nothing to restore right now.</span>'}</div>
+  <div class="xs sec">Comes back</div><div class="sm" style="line-height:1.6">${back.length || pact ? [...back.map(r => `${esc(r.n)} (${r.cur}→${(/^Channel Divinity$/i.test(r.n) && !is14('cd')) || (/^Wild Shape$/i.test(r.n) && !is14('ws')) || r.short1 ? Math.min(r.max, r.cur + 1) : r.max})`), pact ? 'Pact Magic slots' : ''].filter(Boolean).join(' · ') : '<span class="mut">Nothing to restore right now.</span>'}</div>
   <button class="btn pri" style="margin-top:14px" data-act="rest" data-arg="short">Finish Short Rest</button>`;
 }
 function inspSheet() {
@@ -9954,8 +9954,8 @@ const ACT = {
         r.cur = Math.min(r.max, r.cur + 1);
         return;
       }
-      // 2024 Wild Shape: one use back on a short rest, all on a long rest
-      if (type === 'short' && /^Wild Shape$/i.test(r.n) && !is14('ws')) {
+      // 2024 Wild Shape (and pools flagged short1): one use back on a short rest, all on a long rest
+      if (type === 'short' && ((/^Wild Shape$/i.test(r.n) && !is14('ws')) || r.short1)) {
         r.cur = Math.min(r.max, r.cur + 1);
         return;
       }
@@ -11890,13 +11890,14 @@ function hfGen(B) {
   }
   if ((k = lv('Artificer'))) {
     if (k >= 7) {
-      res('fog', 'Flash of Genius', mx(m.INT), 'long');
+      // 2024 Advanced Artifice (14): one use back on a short rest; Soul of Artifice (20): all of them, while attuned
+      res('fog', 'Flash of Genius', mx(m.INT), 'long', o ? {} : k >= 20 ? { rest: 'short' } : k >= 14 ? { short1: true } : {});
       add(
         'art.fog',
         'Flash of Genius',
         'R',
-        `When you or an ally within 30 ft makes an ability check or save: add +${m.INT}.`,
-        { res: 'fog' }
+        `When you or a creature within 30 ft that you can see fails an ability check or save: add ${sgn(m.INT)}, possibly turning it into a success.${!o && k >= 14 ? ` Refreshed Genius: one use back on a short rest${k >= 20 ? ' (all of them while you are attuned to a magic item)' : ''}.` : ''}`,
+        { res: 'fog', d14: `When you or a creature within 30 ft that you can see makes an ability check or save: add ${sgn(m.INT)} to the roll.` }
       );
     }
     if (k >= 3 && /Battle Smith/i.test(sub('Artificer'))) {
@@ -11910,7 +11911,7 @@ function hfGen(B) {
         'art.deflect',
         'Defender: Deflect Attack',
         'R',
-        'Your steel defender gives an attack against a creature within 5 ft of it disadvantage.'
+        `Your steel defender gives an attack against a creature within 5 ft of it disadvantage.${k >= 15 ? ` The attacker takes 1d4+${m.INT} force damage.` : ''}`
       );
     }
   }
@@ -12292,6 +12293,25 @@ function hbBuild(B) {
   if (joat) initParts.push({ n: 'Jack of All Trades', v: half, jo: true });
   if (B.alert) initParts.push(E === '2014' ? { n: 'Alert', v: 5 } : { n: 'Alert', v: p });
   const weapons = (B.wp || []).map(w => hbWeapon(B, w)).filter(Boolean);
+  // Armorer (level 3+): the armour's own weapon, with Intelligence if it's higher
+  if (D.lv('Artificer') >= 3 && /Armorer/i.test(D.sub('Artificer'))) {
+    const inf = B.armorModel === 'Infiltrator',
+      ab = Math.max(m.INT, inf ? m.DEX : m.STR);
+    weapons.unshift({
+      n: inf ? 'Lightning Launcher' : 'Thunder Gauntlets',
+      hit: p + ab,
+      dmg: `${inf ? '1d6' : '1d8'}${ab ? (ab > 0 ? '+' : '') + ab : ''}`,
+      type: inf ? 'lightning' : 'thunder',
+      range: inf ? 'Ranged 90/300 ft' : 'Melee 5 ft',
+      light: false,
+      props: [],
+      base: inf ? 'Lightning Launcher' : 'Thunder Gauntlets',
+      custom: true,
+      ranged: inf,
+      armorer: true,
+      note: inf ? 'Once per turn on a hit: +1d6 lightning.' : 'A creature you hit has disadvantage on attacks against anyone but you until your next turn.'
+    });
+  }
   kept.filter(f => f.wpn).forEach(f => weapons.push({ ...f.wpn }));
   weapons.push(hbUnarmed(B));
   const hpMax = +B.hp > 0 ? Math.min(999, Math.round(+B.hp)) : hbHpSuggest(B),
@@ -12703,12 +12723,21 @@ function hfMore(B, D, F, add, res) {
   }
 
   if ((k = lv('Artificer'))) {
+    if (!o && k >= 6) {
+      res('drain', 'Drain Magic Item', 1, 'long');
+      add('art.drain', 'Magic Item Tinker: Drain Magic Item', 'F', 'Dismiss one of your replicated magic items: gain a spell slot. Once per long rest. (Charge Magic Item: spend a slot to restore charges to one.)', { res: 'drain' });
+    }
     if (k >= 11) {
       res('ssi', 'Spell-Storing Item', mx(2 * m.INT), 'long');
-      add('art.ssi', 'Spell-Storing Item', 'A', 'Whoever holds the item casts the level 1–3 spell stored in it.', { res: 'ssi' });
+      add('art.ssi', 'Spell-Storing Item', 'A', `Whoever holds the item casts the artificer spell of level 1–3 stored in it, using your spellcasting (DC ${dc('INT')}, ${sgn(p + m.INT)} to hit).`, {
+        res: 'ssi',
+        d14: `Whoever holds the item casts the level 1–2 artificer spell stored in it, using your spellcasting (DC ${dc('INT')}, ${sgn(p + m.INT)} to hit).`
+      });
     }
-    if (k >= 20)
-      add('art.soul', 'Soul of Artifice', 'F', 'When you drop to 0 HP: end one of your infusions to drop to 1 HP instead.');
+    if (k >= 20) {
+      if (o) pas('art.soul20', 'Soul of Artifice', '+1 to all your saving throws for each magic item you are attuned to.');
+      add('art.soul', 'Soul of Artifice', o ? 'R' : 'F', o ? 'When you drop to 0 HP (and aren\'t killed outright): end one of your infusions to drop to 1 HP instead.' : 'Cheat Death: when you drop to 0 HP, dismiss any number of your Uncommon or Rare replicated items. Your HP becomes 20 × the number dismissed.');
+    }
   }
 }
 
@@ -12834,6 +12863,56 @@ function hfSubs(B, D, F, add, res) {
   }
 
   /* ---------- Druid ---------- */
+  /* ---------- Artificer specialists: the 2020 (Tasha's) versions; the 2025 revisions aren't published in full ---------- */
+  if ((k = lv('Artificer')) >= 3) {
+    const im = mx(m.INT);
+    if (is('Artificer', /Alchemist/i)) {
+      res('elixir', 'Experimental Elixir', k >= 15 ? 3 : k >= 6 ? 2 : 1, 'long');
+      add('sub.alc3', 'Experimental Elixir', 'A', `Drink or give an elixir (roll d6 when made, or choose when you spend a slot to make more): 1 Healing 2d4+${im}${k >= 9 ? ` and 2d6+${im} temporary HP` : ''} · 2 Swiftness +10 ft speed for 1 hour · 3 Resilience +1 AC for 10 minutes · 4 Boldness +1d4 to attack rolls and saves for 1 minute · 5 Flight 10 ft for 10 minutes · 6 Transformation (Alter Self).`, { res: 'elixir' });
+      if (k >= 5) pas('sub.alc5', 'Alchemical Savant', `Once per spell cast through alchemist's supplies: ${sgn(im)} to one roll of healing, or of acid, fire, necrotic or poison damage.`);
+      if (k >= 9) {
+        res('reagent', 'Restorative Reagents', im, 'long');
+        add('sub.alc9', 'Restorative Reagents: Lesser Restoration', 'A', 'Cast Lesser Restoration without a slot or preparing it. Anyone who drinks your elixirs also gains temporary HP (see Experimental Elixir).', { res: 'reagent' });
+      }
+      if (k >= 15) {
+        pas('sub.alc15', 'Chemical Mastery', 'Resistance to acid and poison damage; immune to the Poisoned condition.');
+        res('chemheal', 'Chemical Mastery: Greater Restoration or Heal', 2, 'long');
+        add('sub.alc15c', 'Chemical Mastery: free cast', 'A', 'Cast Greater Restoration or Heal without a slot (each once per long rest).', { res: 'chemheal' });
+      }
+    }
+    if (is('Artificer', /Armorer/i)) {
+      const md = B.armorModel || 'Guardian';
+      pas('sub.arm3', 'Arcane Armor', `Your armour is your spellcasting focus and ignores its Strength requirement; you can don or doff it as an Action. Model: ${md}. Its built-in weapon is in your attacks, using Intelligence if that's higher.`);
+      if (md === 'Guardian') {
+        add('sub.arm3g', 'Thunder Gauntlets', 'F', 'A creature you hit with them has disadvantage on attack rolls against anyone but you until the start of your next turn.');
+        res('dfield', 'Defensive Field', p, 'long');
+        add('sub.arm3d', 'Defensive Field', 'B', `Gain ${k} temporary HP (lost if you take off the armour).`, { res: 'dfield', tempHp: k });
+        if (k >= 15) {
+          res('magpull', 'Perfected Armor', p, 'long');
+          add('sub.arm15', 'Perfected Armor: Magnetic Pull', 'R', `When a Huge or smaller creature you can see ends its turn within 30 ft: STR save DC ${dc('INT')} or it's pulled up to 25 ft toward you. If it ends within 5 ft, make a melee weapon attack against it as part of the reaction.`, { res: 'magpull' });
+        }
+      } else {
+        add('sub.arm3i', 'Lightning Launcher', 'F', 'Once on each of your turns when you hit with it: +1d6 lightning damage.', { once: 'launcher' });
+        pas('sub.arm3p', 'Powered Steps', '+5 ft walking speed, and advantage on Stealth checks (Dampening Field).');
+        if (k >= 15) pas('sub.arm15', 'Perfected Armor', 'A creature that takes lightning damage from your Lightning Launcher glimmers until the start of your next turn: the next attack against it has advantage and deals +1d6 lightning on a hit, and it shows if invisible.');
+      }
+    }
+    if (is('Artificer', /Artillerist/i)) {
+      res('cannon', 'Eldritch Cannon', 1, 'long');
+      add('sub.art3', 'Eldritch Cannon', 'A', `Create a cannon within 5 ft (Tiny or Small) for 1 hour${k >= 15 ? '; you can have two' : ''}. Once per long rest, or spend a spell slot. Activate it with a Bonus Action (see Companions).`, { res: 'cannon', pet: 'f-cannon' });
+      if (k >= 5) pas('sub.art5', 'Arcane Firearm', 'When you cast an artificer spell through your wand, staff or rod: +1d8 to one of its damage rolls.');
+      if (k >= 9) add('sub.art9', 'Explosive Cannon: Detonate', 'A', `Your cannon explodes: creatures within 20 ft of it, DEX save DC ${dc('INT')} or 3d8 force damage (half on a success). The cannon is destroyed.`);
+      if (k >= 15) pas('sub.art15', 'Fortified Position', 'You and your allies have half cover (+2 AC) while within 10 ft of your cannon. You can have two cannons.');
+    }
+    if (is('Artificer', /Battle Smith/i)) {
+      pas('sub.bs3', 'Battle Ready', 'Proficiency with martial weapons. You can use Intelligence instead of Strength or Dexterity for attacks and damage with magic weapons.');
+      if (k >= 9) {
+        res('jolt', 'Arcane Jolt', im, 'long');
+        add('sub.bs9', 'Arcane Jolt', 'F', `Once per turn, when you or your steel defender hit with a magic weapon or Force-Empowered Rend: +${k >= 15 ? 4 : 2}d6 force damage, or a creature within 30 ft of the target regains ${k >= 15 ? 4 : 2}d6 HP.`, { res: 'jolt', once: 'jolt' });
+      }
+      if (k >= 15) pas('sub.bs15', 'Improved Defender', 'Your steel defender gets +2 AC, and its Deflect Attack deals force damage to the attacker. Arcane Jolt deals or heals 4d6.');
+    }
+  }
   /* ---------- Cleric domains (Channel Divinity options live with the class) ---------- */
   if ((k = lv('Cleric')) && k >= (o ? 1 : 3)) {
     const w = mx(m.WIS);
@@ -13757,6 +13836,9 @@ function hbFeatures() {
 function hbSubNote(i) {
   const c = HB.cls[i];
   if (!c || !c.sub || !c.sub.trim()) return '';
+  // 2024 artificers: the revised specialists (Eberron: Forge of the Artificer, 2025) aren't fully public; say what we use
+  if (c.n === 'Artificer' && HB.ed !== '2014' && /Alchemist|Armorer|Artillerist|Battle Smith/i.test(c.sub))
+    return `<div class="sm mut" style="margin-top:8px;line-height:1.45">These ${esc(c.sub)} features follow the 2020 version (Tasha's). The 2025 book revised some details, so check yours against your book.</div>`;
   // subclasses the combat engine handles by name (crit range, Sneak Attack riders, wizard school notes)
   if (/Champion|Assassin|Swashbuckler|Abjur|Blades|Conjur|Divin|Evoc/i.test(c.sub)) return '';
   // compare everything the subclass offers (picked or not) with no subclass at all
@@ -13793,6 +13875,7 @@ function wpnProf(B, n) {
     any = re => B.cls.some(c => re.test(c.n)),
     sub = re => B.cls.some(c => re.test(c.sub || ''));
   if (any(/Barbarian|Fighter|Paladin|Ranger|Blood Hunter/)) return true;
+  if (B.cls.some(c => c.n === 'Artificer' && c.lvl >= 3 && /Battle Smith/i.test(c.sub || ''))) return true;
   if (!o && ((B.primal === 'Warden' && any(/Druid/)) || (B.divine === 'Protector' && any(/Cleric/)))) return true;
   // 2014 Elf/Drow Weapon Training
   if (o && spcKey(B.species) === 'elf') {
@@ -14231,8 +14314,13 @@ const ORDERS = {
   Cleric: ['divine', 'Divine Order', [['Thaumaturge', 'extra cantrip'], ['Protector', 'weapons &amp; armour']]]
 };
 function hbPrimalPick(i) {
-  const c = HB.cls[i],
-    O = c && ORDERS[c.n];
+  const c = HB.cls[i];
+  // Armorer: the armour model decides the built-in weapon
+  if (c && c.n === 'Artificer' && /Armorer/i.test(c.sub || '') && c.lvl >= 3) {
+    const cur = HB.armorModel || 'Guardian';
+    return `<div class="row" style="gap:8px;margin-top:8px;align-items:center"><span class="sm mut">Armor model</span><select class="field" style="flex:1;padding:8px 10px" onchange="HB.armorModel=this.value;render()">${[['Guardian', 'thunder gauntlets'], ['Infiltrator', 'lightning launcher']].map(([v, t]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${v} · ${t}</option>`).join('')}</select></div>`;
+  }
+  const O = c && ORDERS[c.n];
   if (!O || HB.ed === '2014') return '';
   const [key, label, opts] = O,
     cur = HB[key] || '';
@@ -15066,7 +15154,7 @@ function featurePets() {
       n: 'Steel Defender',
       kind: 'turn',
       cmd: 'B',
-      ac: 15,
+      ac: art >= 15 ? 17 : 15,
       max: 2 + mods[3] + 5 * art,
       speed: '40 ft',
       atk: [{ n: 'Force-Empowered Rend', hit: prof + mods[3], dmg: `1d8+${prof}`, type: 'force', range: '5 ft' }],
@@ -15074,6 +15162,25 @@ function featurePets() {
         'Reaction: Deflect Attack — a creature it can see attacks someone within 5 ft of it: impose disadvantage.',
         'Repair (3/day): it or an object regains 2d8+' + prof + ' HP.',
         "If you don't command it, it takes the Dodge action."
+      ]
+    });
+  if (art >= 3 && /Artillerist/i.test(sub('Artificer')))
+    L.push({
+      id: 'f-cannon',
+      n: 'Eldritch Cannon',
+      kind: 'turn',
+      cmd: 'B',
+      away0: true, // made with the Eldritch Cannon feature
+      ac: 18,
+      max: 5 * art,
+      speed: '15 ft (if you make it walk)',
+      atk: [{ n: 'Force Ballista', hit: prof + mods[3], dmg: `${art >= 9 ? 3 : 2}d8`, type: 'force', range: '120 ft' }],
+      notes: [
+        `Force Ballista: a hit also pushes the target up to 5 ft away.`,
+        `Flamethrower: 15-ft cone, DEX save DC ${8 + prof + mods[3]} or ${art >= 9 ? 3 : 2}d8 fire (half on a success).`,
+        `Protector: it and creatures within 10 ft gain 1d8${mods[3] >= 0 ? '+' : ''}${mods[3]} temporary HP.`,
+        'You activate it with a Bonus Action within 60 ft; it can also move 15 ft.',
+        'Lasts 1 hour, until it drops to 0 HP, or until you dismiss it.'
       ]
     });
   const dru = clsLvl('Druid');
