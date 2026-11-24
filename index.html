@@ -10325,7 +10325,7 @@ const HC = {
     hd: 10,
     sv: [0, 1],
     ab: 'WIS',
-    subs: ['Hunter', 'Beast Master', 'Gloom Stalker', 'Fey Wanderer', 'Horizon Walker', 'Swarmkeeper']
+    subs: ['Hunter', 'Beast Master', 'Gloom Stalker', 'Fey Wanderer', 'Horizon Walker', 'Swarmkeeper', 'Monster Slayer', 'Drakewarden']
   },
   Rogue: {
     hd: 8,
@@ -13715,6 +13715,31 @@ function hfSubs(B, D, F, add, res) {
       if (k >= 11) pas('sub.hw11', 'Distant Strike', 'When you take the Attack action: teleport up to 10 ft before each attack. If you attack at least two different creatures, make one more attack against a third.');
       if (k >= 15) add('sub.hw15', 'Spectral Defense', 'R', 'When you take damage from an attack: resistance to that damage.');
     }
+    if (is('Ranger', /Monster Slayer/i)) {
+      res('hsense', "Hunter's Sense", mx(m.WIS), 'long');
+      add('sub.ms3a', "Hunter's Sense", 'A', 'A creature within 60 ft: learn its immunities, resistances and vulnerabilities (or that it has none, or that it is shielded from divination).', { res: 'hsense' });
+      add('sub.ms3', "Slayer's Prey", 'B', `Choose a creature within 60 ft. The first time you hit it with a weapon each turn: +1d6 damage. It lasts until you rest or pick another target.`, { status: "Slayer's Prey" });
+      if (k >= 7) pas('sub.ms7', 'Supernatural Defense', "When your Slayer's Prey target makes you save, or you try to escape its grapple: add 1d6 to the roll.");
+      if (k >= 11) {
+        res('nemesis', "Magic-User's Nemesis", 1, 'short');
+        add('sub.ms11', "Magic-User's Nemesis", 'R', `When a creature within 60 ft casts a spell or teleports: WIS save DC ${sdc} or the spell or teleport fails and is wasted.`, { res: 'nemesis' });
+      }
+      if (k >= 15) add('sub.ms15', "Slayer's Counter", 'R', "When your Slayer's Prey target makes you save: make one weapon attack against it. If it hits, you also succeed on the save.");
+    }
+    if (is('Ranger', /Drakewarden/i)) {
+      res('drake', 'Drake Companion (free summon)', 1, 'long');
+      add('sub.dw3', 'Drake Companion', 'A', `Summon your drake (AC ${14 + p}, ${5 + 5 * k} HP, ${k >= 15 ? 'Large' : k >= 7 ? 'Medium, fly 40 ft' : 'Small'}). Free once per long rest, or spend a spell slot. Command its Bite with a Bonus Action: +${p + m.WIS} to hit, 1d6+${p} piercing${k >= 15 ? ' +2d6' : k >= 7 ? ' +1d6' : ''}${k >= 7 ? ' of its essence type' : ''}. Otherwise it Dodges.`, { res: 'drake', pet: 'f-drake' });
+      add('sub.dw3b', 'Infused Strikes (drake)', 'R', "The drake's reaction: when a creature it can see within 30 ft hits with a weapon attack, that target takes +1d6 of the drake's essence type.");
+      if (k >= 7) pas('sub.dw7', 'Bond of Fang and Scale', "Your drake is Medium, flies at 40 ft and can carry you. You resist its essence damage type.");
+      if (k >= 11) {
+        res('dbreath2', "Drake's Breath", 1, 'long');
+        add('sub.dw11', "Drake's Breath", 'A', `You or your drake exhale a 30-ft cone: DEX save DC ${sdc} or ${k >= 15 ? 10 : 8}d6 acid, cold, fire, lightning or poison (half on a success). Once per long rest, or spend a level 3+ spell slot.`, { res: 'dbreath2' });
+      }
+      if (k >= 15) {
+        res('reflex', 'Reflexive Resistance', p, 'long');
+        add('sub.dw15', 'Reflexive Resistance', 'R', 'When your drake within 30 ft takes damage: it has resistance to that damage.', { res: 'reflex' });
+      }
+    }
     if (is('Ranger', /Swarmkeeper/i)) {
       add('sub.sk3', 'Gathered Swarm', 'F', `Once per turn, after you hit a creature: it takes +1d${k >= 11 ? 8 : 6} piercing; or it makes a STR save DC ${sdc} or is moved up to 15 ft${k >= 11 ? ' (and knocked Prone on a failure)' : ''}; or you move 5 ft without provoking.`, { once: 'swarm' });
       if (k >= 7) {
@@ -16079,6 +16104,23 @@ function featurePets() {
       atk: [{ n: is14('ranger') ? 'Maul' : "Beast's Strike", hit: prof + mods[4], dmg: is14('ranger') ? `1d8+${prof}` : `1d8+${2 + mods[4]}`, type: 'piercing or slashing', range: '5 ft' }],
       notes: [
         'Land, Sea or Sky beast: pick the form on your sheet.',
+        "If you don't command it, it takes the Dodge action."
+      ]
+    });
+  if (rng >= 3 && /Drakewarden/i.test(sub('Ranger')))
+    L.push({
+      id: 'f-drake',
+      n: 'Drake',
+      kind: 'turn',
+      cmd: 'B',
+      away0: true, // summoned with its card
+      ac: 14 + prof,
+      max: 5 + 5 * rng,
+      speed: rng >= 7 ? '40 ft, fly 40 ft' : '40 ft',
+      atk: [{ n: 'Bite', hit: prof + mods[4], dmg: `1d6+${prof}${rng >= 15 ? ' + 2d6' : rng >= 7 ? ' + 1d6' : ''}`, type: 'piercing (extra dice: its essence type)', range: '5 ft' }],
+      notes: [
+        'Draconic Essence: acid, cold, fire, lightning or poison. It is immune to that type.',
+        "Infused Strikes (its Reaction): a creature it can see within 30 ft hits with a weapon attack, the target takes +1d6 of its essence type.",
         "If you don't command it, it takes the Dodge action."
       ]
     });
