@@ -23,7 +23,7 @@
   --page:#050507; --bg:#0F0E14; --card:#18161F; --card2:#201D29; --sheet:#141219; --pop:#221E2B;
   --edge:#29262F; --edge2:#2F2B39; --edge3:#3A3545; --fill:#25222D;
   --txt:#EFEAF4; --mut:#A39CB0; --dim:#5E586A; --body2:#D9D3E2;
-  --gold:#D4B266; --ok:#3fcf8e; --warn:#f2b84b; --bad:#f2545b; --crit:#4fd1a5; --rx:#8fb6ff;
+  --trim:#D9DDE6; --ok:#3fcf8e; --warn:#f2b84b; --bad:#f2545b; --crit:#4fd1a5; --rx:#8fb6ff;
   --wash:rgba(255,255,255,.08); --wash2:rgba(255,255,255,.12); --wash3:rgba(255,255,255,.25);
   --scrim:rgba(0,0,0,.6); --shade:rgba(0,0,0,.6); --glow:1;
   --r:18px;
@@ -33,7 +33,7 @@
   --page:#E6DCC5; --bg:#F3ECDC; --card:#FBF7EC; --card2:#F6EFDD; --sheet:#F8F2E4; --pop:#FFFCF3;
   --edge:#E0D2AF; --edge2:#D9C9A3; --edge3:#C5B286; --fill:#EDE3CB;
   --txt:#2A3328; --mut:#5C6356; --dim:#8C8E80; --body2:#3A4237;
-  --gold:#C79B3B; --ok:#1F8A5B; --warn:#A8650F; --bad:#C2353D; --crit:#1C8A6A; --rx:#3B63B5;
+  --trim:#C79B3B; --ok:#1F8A5B; --warn:#A8650F; --bad:#C2353D; --crit:#1C8A6A; --rx:#3B63B5;
   --wash:rgba(70,50,15,.06); --wash2:rgba(70,50,15,.13); --wash3:rgba(70,50,15,.28);
   --scrim:rgba(45,35,15,.35); --shade:rgba(90,65,20,.22); --glow:0;
 }
@@ -408,20 +408,20 @@ body.hasroll #rollbg{opacity:1;pointer-events:auto}
 /* one type system: the serif names things, the sans tells you their state */
 .cname{font-family:Cinzel,serif;font-weight:700;font-size:20px;letter-spacing:.03em;font-variant:small-caps;line-height:1.1}
 .ctitle{font-family:Cinzel,serif;font-weight:600;font-size:16px;letter-spacing:.02em;line-height:1.15;color:var(--txt)}
-/* the portrait: a round seal with one thin gold ring */
-.badge{border-radius:50%;box-shadow:0 0 0 3px var(--bg),0 0 0 4.5px var(--gold)}
-.hero .badge{border-radius:50%;box-shadow:0 0 0 4px var(--bg),0 0 0 6px var(--gold)}
+/* the portrait: a round seal with one thin ring (silver in dark, gold in light) */
+.badge{border-radius:50%;box-shadow:0 0 0 3px var(--bg),0 0 0 4.5px var(--trim)}
+.hero .badge{border-radius:50%;box-shadow:0 0 0 4px var(--bg),0 0 0 6px var(--trim)}
 /* the vine under your name */
-.vine{display:flex;justify-content:center;margin:8px 0 2px;color:var(--gold)}
+.vine{display:flex;justify-content:center;margin:8px 0 2px;color:var(--trim)}
 .vine svg{width:170px;height:14px}
 /* Action · Bonus · Reaction */
 .chip b{font-family:Cinzel,serif;font-weight:600;font-size:16px;letter-spacing:.02em;display:flex;align-items:center;justify-content:center;gap:2px}
 .chip span{font-size:13px}
-.chip{border-color:color-mix(in srgb,var(--acc) 55%,var(--gold))}
+:root[data-theme="light"] .chip{border-color:color-mix(in srgb,var(--acc) 60%,var(--trim))}
 .chip.used{border-color:var(--edge2)}
 :root[data-theme="light"] .dot{box-shadow:none}
 /* page corners on the cards you open */
-.tile::after,.move::after{content:"";position:absolute;top:5px;right:5px;width:18px;height:18px;background:var(--gold);opacity:.8;pointer-events:none;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22' fill='none' stroke='%23000' stroke-width='1.2' stroke-linecap='round'%3E%3Cg transform='rotate(90 11 11)'%3E%3Cpath d='M2 20V8a6 6 0 0 1 6-6h12'/%3E%3Cpath d='M6 14c0-4 2-7 6-8'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22' fill='none' stroke='%23000' stroke-width='1.2' stroke-linecap='round'%3E%3Cg transform='rotate(90 11 11)'%3E%3Cpath d='M2 20V8a6 6 0 0 1 6-6h12'/%3E%3Cpath d='M6 14c0-4 2-7 6-8'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat}
+.tile::after,.move::after{content:"";position:absolute;top:5px;right:5px;width:18px;height:18px;background:var(--trim);opacity:.8;pointer-events:none;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22' fill='none' stroke='%23000' stroke-width='1.2' stroke-linecap='round'%3E%3Cg transform='rotate(90 11 11)'%3E%3Cpath d='M2 20V8a6 6 0 0 1 6-6h12'/%3E%3Cpath d='M6 14c0-4 2-7 6-8'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22' fill='none' stroke='%23000' stroke-width='1.2' stroke-linecap='round'%3E%3Cg transform='rotate(90 11 11)'%3E%3Cpath d='M2 20V8a6 6 0 0 1 6-6h12'/%3E%3Cpath d='M6 14c0-4 2-7 6-8'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat}
 .move .ic2{margin-right:18px}
 /* the four doors: slimmer, icon beside the words */
 .tile{flex-direction:row;align-items:center;justify-content:flex-start;gap:11px;min-height:66px;padding:12px 16px 12px 12px}
@@ -430,10 +430,10 @@ body.hasroll #rollbg{opacity:1;pointer-events:auto}
 .tile .sub{font-size:12.5px;margin-top:2px}
 /* the dock: End combat and End Turn speak the same serif */
 .dock .btn{font-family:Cinzel,serif;font-weight:600;letter-spacing:.04em}
-.dock .btn.pri{border:1.5px solid var(--gold)}
+.dock .btn.pri{border:1.5px solid var(--trim)}
 :root[data-theme="light"] .btn.pri{box-shadow:0 8px 20px -10px var(--acc)}
-.dock .startbtn.dockgo{font-family:Cinzel,serif;font-weight:600;letter-spacing:.04em;border:1.5px solid var(--gold)}
-.startbtn{border:1.5px solid var(--gold)}
+.dock .startbtn.dockgo{font-family:Cinzel,serif;font-weight:600;letter-spacing:.04em;border:1.5px solid var(--trim)}
+.startbtn{border:1.5px solid var(--trim)}
 </style>
 </head>
 <body>
@@ -681,7 +681,7 @@ const CLS = {
   sorcerer: { n: 'Sorcerer', c: '#E8364F' },
   warlock: { n: 'Warlock', c: '#9B4DF0' },
   wizard: { n: 'Wizard', c: '#4A62E8' },
-  bloodhunter: { n: 'Blood Hunter', c: '#CC1F3D' }
+  bloodhunter: { n: 'Blood Hunter', c: '#B0122F' }
 };
 const MASTERY_CLASSES = ['barbarian', 'fighter', 'paladin', 'ranger', 'rogue'];
 const MASTERY = {
@@ -2756,6 +2756,8 @@ function mixHex(a, b, t) {
 }
 // a class colour in three jobs: the fill (badge, buttons), the letter on that fill, and text written in it
 function accentSet(c, look) {
+  // dark keeps the class colours exactly as they are: their soft neon is the look
+  if (look !== 'light') return { fill: c, text: c, ink: lum(c) > 0.42 ? '#15121A' : '#FFFFFF' };
   const card = look === 'light' ? '#FBF7EC' : '#18161F',
     page = look === 'light' ? '#F3ECDC' : '#0F0E14',
     toward = look === 'light' ? '#2A3328' : '#FFFFFF';
