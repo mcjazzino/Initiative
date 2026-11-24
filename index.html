@@ -11164,6 +11164,7 @@ function hbSpeedSuggest(B) {
   if (m >= 2 && noArmour) parts.push({ n: 'Unarmored Movement', v: m >= 18 ? 30 : m >= 14 ? 25 : m >= 10 ? 20 : m >= 6 ? 15 : 10 });
   if (D.lv('Barbarian') >= 5 && !heavy) parts.push({ n: 'Fast Movement', v: 10 });
   if (D.lv('Paladin') >= 7 && /Glory/i.test(D.sub('Paladin'))) parts.push({ n: 'Aura of Alacrity', v: 10 });
+  if (D.lv('Rogue') >= 9 && /Scout/i.test(D.sub('Rogue'))) parts.push({ n: 'Superior Mobility', v: 10 });
   if (!o && D.lv('Ranger') >= 6 && !heavy) parts.push({ n: 'Roving', v: 10 });
   if (D.lv('Artificer') >= 3 && /Armorer/i.test(D.sub('Artificer')) && B.armorModel === 'Infiltrator') parts.push({ n: 'Powered Steps', v: 5 });
   if (featOn(B, 'Mobile') || featOn(B, 'Speedy')) parts.push({ n: featOn(B, 'Mobile') ? 'Mobile' : 'Speedy', v: 10 });
@@ -12380,7 +12381,7 @@ function hbBuild(B) {
       .forEach(x => {
         x.d = x.d.replace(/for 1d10 force\..*$/, `for 1d10+${m.CHA} force (Agonizing Blast).`);
       });
-  const sv = [...new Set([...(B.saves || HC[main.n].sv), ...(B.feats || []).filter(f => f.n === 'Resilient' && f.ab).map(f => ABN.indexOf(f.ab)), ...(D.lv('Fighter') >= 7 && /Samurai/i.test(D.sub('Fighter')) ? [4] : []), ...(D.lv('Monk') >= 14 ? [0, 1, 2, 3, 4, 5] : []), ...(D.lv('Ranger') >= 7 && /Gloom Stalker/i.test(D.sub('Ranger')) ? [(B.saves || HC[main.n].sv).includes(4) ? 3 : 4] : [])])],
+  const sv = [...new Set([...(B.saves || HC[main.n].sv), ...(B.feats || []).filter(f => f.n === 'Resilient' && f.ab).map(f => ABN.indexOf(f.ab)), ...(D.lv('Fighter') >= 7 && /Samurai/i.test(D.sub('Fighter')) ? [4] : []), ...(D.lv('Monk') >= 14 ? [0, 1, 2, 3, 4, 5] : []), ...(D.lv('Rogue') >= 15 ? (E === '2014' ? [4] : [4, 5]) : []), ...(D.lv('Ranger') >= 7 && /Gloom Stalker/i.test(D.sub('Ranger')) ? [(B.saves || HC[main.n].sv).includes(4) ? 3 : 4] : [])])],
     aura = D.lv('Paladin') >= 6 ? mx1(m.CHA) : 0;
   const saves = ABN.map((a, i) => m[a] + (sv.includes(i) ? p : 0) + aura);
   const joat = D.lv('Bard') >= 2,
@@ -12404,8 +12405,9 @@ function hbBuild(B) {
   const initParts = [{ n: 'Dexterity', v: m.DEX }];
   if (joat) initParts.push({ n: 'Jack of All Trades', v: half, jo: true });
   if (B.alert || featOn(B, 'Alert')) initParts.push(E === '2014' ? { n: 'Alert', v: 5 } : { n: 'Alert', v: p });
-  if (D.lv('Ranger') >= 3 && /Gloom Stalker/i.test(D.sub('Ranger')) && m.WIS) initParts.push({ n: 'Dread Ambusher', v: m.WIS });
+  if (D.lv('Ranger') >= 3 && /Gloom Stalker/i.test(D.sub('Ranger')) && m.WIS > 0) initParts.push({ n: 'Dread Ambusher', v: m.WIS });
   if (D.lv('Paladin') >= 7 && /Watchers/i.test(D.sub('Paladin'))) initParts.push({ n: 'Aura of the Sentinel', v: p });
+  if (D.lv('Rogue') >= 3 && /Swashbuckler/i.test(D.sub('Rogue')) && m.CHA > 0) initParts.push({ n: 'Rakish Audacity', v: m.CHA });
   const weapons = (B.wp || []).map(w => hbWeapon(B, w)).filter(Boolean);
   // Armorer (level 3+): the armour's own weapon, with Intelligence if it's higher
   if (D.lv('Artificer') >= 3 && /Armorer/i.test(D.sub('Artificer'))) {
@@ -12824,6 +12826,13 @@ function hfMore(B, D, F, add, res) {
   }
 
   if ((k = lv('Rogue'))) {
+    const csdc = 8 + p + m.DEX;
+    if (!o && k >= 5) pas('rog.cs', 'Cunning Strike', `When you Sneak Attack, trade dice for an effect (DC ${csdc}): Poison (1d6), Trip (1d6) or Withdraw (1d6). The Sneak Attack screen offers them.`);
+    if (!o && k >= 11) pas('rog.ics', 'Improved Cunning Strike', 'You can use two Cunning Strike effects on one Sneak Attack.');
+    if (!o && k >= 14) pas('rog.devious', 'Devious Strikes', `New Cunning Strike effects: Daze (2d6), Knock Out (6d6) and Obscure (3d6), DC ${csdc}.`);
+    if (k >= 7) pas('rog.evasion', 'Evasion', 'A DEX save for half damage: no damage on a success, half on a failure.');
+    if (k >= (o ? 11 : 7)) pas('rog.reliable', 'Reliable Talent', 'An ability check that uses a skill or tool you\'re proficient in: a d20 roll of 9 or lower counts as a 10.');
+    if (k >= 15) pas('rog.slippery', 'Slippery Mind', `Proficiency in ${o ? 'WIS saves' : 'WIS and CHA saves'} (already in your save bonuses).`);
     if (o && k >= 14) pas('rog.blind', 'Blindsense', 'You know where any hidden or invisible creature within 10 ft is, if you can hear.');
     if (k >= 18) pas('rog.elusive', 'Elusive', "No attack roll has advantage against you while you aren't Incapacitated.");
     if (k >= 20) {
@@ -13695,11 +13704,11 @@ function hfSubs(B, D, F, add, res) {
       }
     }
     if (is('Ranger', /Gloom Stalker/i)) {
-      if (o) add('sub.gs3', 'Dread Ambusher', 'F', `Your first turn of combat: +10 ft speed, and when you take the Attack action, one extra weapon attack; if it hits, +1d8 damage of the weapon's type. You add +${m.WIS} to initiative (already in your bonus).`, { once: 'ambush' });
+      if (o) add('sub.gs3', 'Dread Ambusher', 'F', `Your first turn of combat: +10 ft speed, and when you take the Attack action, one extra weapon attack; if it hits, +1d8 damage of the weapon's type. ${m.WIS > 0 ? `You add +${m.WIS} to initiative (already in your bonus).` : ''}`, { once: 'ambush' });
       else {
         res('dread', 'Dreadful Strike', mx(m.WIS), 'long');
         add('sub.gs3', 'Dreadful Strike', 'F', `Once per turn, when you hit with a weapon: +2d${k >= 11 ? 8 : 6} psychic damage.${k >= 11 ? ` Stalker's Flurry: also choose Sudden Strike (another attack against a creature within 5 ft of the target) or Mass Fear (the target and creatures within 10 ft of it: WIS save DC ${sdc} or Frightened until the start of your next turn).` : ''}`, { res: 'dread', once: 'dreadful' });
-        pas('sub.gs3a', 'Dread Ambusher', `Ambusher's Leap: at the start of your first turn of combat: +10 ft speed until the end of that turn. You add +${m.WIS} to initiative (already in your bonus).`);
+        pas('sub.gs3a', 'Dread Ambusher', `Ambusher's Leap: at the start of your first turn of combat: +10 ft speed until the end of that turn. ${m.WIS > 0 ? `You add +${m.WIS} to initiative (already in your bonus).` : ''}`);
       }
       pas('sub.gs3b', 'Umbral Sight', "Darkvision 60 ft (or +60 ft). In darkness you're Invisible to creatures relying on darkvision to see you.");
       if (k >= 7) pas('sub.gs7', 'Iron Mind', 'Proficiency in WIS saves, or INT if you already had it (already in your save bonuses).');
@@ -13756,6 +13765,46 @@ function hfSubs(B, D, F, add, res) {
 
   /* ---------- Rogue ---------- */
   if ((k = lv('Rogue')) >= 3) {
+    const rdc = 8 + p + m.DEX;
+    if (is('Rogue', /Thief/i)) {
+      if (k >= 9) pas('sub.thief9', 'Supreme Sneak', o ? 'Advantage on Stealth checks if you move no more than half your speed this turn.' : 'New Cunning Strike option, Stealth Attack (1d6): your attack doesn\'t end Hidden if you end the turn behind three-quarters or total cover.');
+      if (k >= 17) pas('sub.thief17', "Thief's Reflexes", `You take two turns in the first round of combat: your normal one, and another at initiative minus 10.`);
+    }
+    if (is('Rogue', /Assassin/i)) {
+      pas('sub.asn3', 'Assassinate', o ? "Advantage on attacks against creatures that haven't taken a turn yet in this combat; a hit against a Surprised creature is a critical hit." : `Advantage on initiative. In the first round: Advantage on attacks against creatures that haven't taken a turn yet, and your Sneak Attack adds +${k} damage.`);
+      if (!o && k >= 13) pas('sub.asn13', 'Envenom Weapons', 'When you use the Poison Cunning Strike: the target also takes 2d6 poison damage (ignoring resistance) on a failed save.');
+      if (k >= 17) pas('sub.asn17', 'Death Strike', o ? `When you hit a Surprised creature: CON save DC ${rdc} or the attack's damage is doubled.` : `When you hit with Sneak Attack in the first round: CON save DC ${rdc} or the attack's damage is doubled.`);
+    }
+    if (is('Rogue', /Swashbuckler/i)) {
+      pas('sub.swash3', 'Fancy Footwork', "When you make a melee attack against a creature on your turn: it can't make Opportunity Attacks against you for the rest of the turn.");
+      pas('sub.swash3b', 'Rakish Audacity', `${m.CHA > 0 ? `You add +${m.CHA} to initiative (already in your bonus). ` : ''}Sneak Attack also works without Advantage when the target is the only creature within 5 ft of you.`);
+      if (k >= 9) add('sub.swash9', 'Panache', 'A', "Persuasion against a creature's Insight (within 60 ft, it must hear you). Hostile: for 1 minute it has Disadvantage on attacks against anyone but you and can't make Opportunity Attacks against others. Not hostile: Charmed for 1 minute.");
+      if (k >= 13) add('sub.swash13', 'Elegant Maneuver', 'B', 'Advantage on your next Acrobatics or Athletics check this turn.');
+      if (k >= 17) {
+        res('duelist', 'Master Duelist', 1, 'short');
+        add('sub.swash17', 'Master Duelist', 'F', 'When you miss with an attack: reroll it with Advantage.', { res: 'duelist' });
+      }
+    }
+    if (is('Rogue', /Mastermind/i)) {
+      add('sub.mm3', 'Master of Tactics', 'B', 'Take the Help action. When you help an ally attack, the target can be up to 30 ft from you (it must see or hear you).', { status: 'Helping' });
+      if (k >= 13) add('sub.mm13', 'Misdirection', 'R', 'When you are targeted by an attack while a creature within 5 ft is giving you cover: the attack targets that creature instead.');
+      if (k >= 17) pas('sub.mm17', 'Soul of Deceit', 'Your thoughts can\'t be read unless you allow it, and magic can\'t make you tell the truth or tell that you lie.');
+    }
+    if (is('Rogue', /Inquisitive/i)) {
+      add('sub.inq3', 'Insightful Fighting', 'B', `Insight check against a creature's Deception (within your sight). Success: for 1 minute you can Sneak Attack it without Advantage (not with Disadvantage)${k >= 17 ? `, and Eye for Weakness adds +3d6 to that Sneak Attack` : ''}.`, { status: 'Insightful Fighting' });
+      add('sub.inq3b', 'Eye for Detail', 'B', 'A Perception check to spot a hidden creature or object, or an Investigation check to find clues.');
+      if (k >= 13) {
+        res('uneye', 'Unerring Eye', mx(m.WIS), 'long');
+        add('sub.inq13', 'Unerring Eye', 'A', 'Sense whether illusions, shapechangers or magic meant to deceive are within 30 ft (not what they are).', { res: 'uneye' });
+      }
+      if (k >= 17) pas('sub.inq17', 'Eye for Weakness', 'Your Sneak Attack against your Insightful Fighting target deals +3d6.');
+    }
+    if (is('Rogue', /Scout/i)) {
+      add('sub.scout3', 'Skirmisher', 'R', 'When an enemy ends its turn within 5 ft of you: move up to half your speed without provoking Opportunity Attacks.');
+      if (k >= 9) pas('sub.scout9', 'Superior Mobility', 'Your walking speed (and climb and swim speeds, if you have them) is +10 ft (already in your speed).');
+      if (k >= 13) pas('sub.scout13', 'Ambush Master', 'Advantage on initiative. In the first round, the first creature you hit: your allies have Advantage on attacks against it until the start of your next turn.');
+      if (k >= 17) add('sub.scout17', 'Sudden Strike', 'B', 'After you take the Attack action: one more attack. It can carry Sneak Attack even if you already used it this turn, but not against the same target.');
+    }
     if (is('Rogue', /Arcane Trickster/i)) {
       add('sub.at3', 'Mage Hand Legerdemain', 'B', 'Control your invisible Mage Hand: stow or retrieve objects, pick locks or disarm traps with it.');
       if (k >= 9) pas('sub.at9', 'Magical Ambush', 'If you are hidden when you cast a spell, the target has disadvantage on its save.');
