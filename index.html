@@ -411,9 +411,6 @@ body.hasroll #rollbg{opacity:1;pointer-events:auto}
 /* the portrait: a round seal with one thin ring (silver in dark, gold in light) */
 .badge{border-radius:50%;box-shadow:0 0 0 3px var(--bg),0 0 0 4.5px var(--trim)}
 .hero .badge{border-radius:50%;box-shadow:0 0 0 4px var(--bg),0 0 0 6px var(--trim)}
-/* the vine under your name */
-.vine{display:flex;justify-content:center;margin:8px 0 2px;color:var(--trim)}
-.vine svg{width:170px;height:14px}
 /* Action · Bonus · Reaction */
 .chip b{font-family:Cinzel,serif;font-weight:600;font-size:16px;letter-spacing:.02em;display:flex;align-items:center;justify-content:center;gap:2px}
 .chip span{font-size:13px}
@@ -4578,14 +4575,11 @@ function edBadge() {
   const n = customCount();
   return `<button class="edbadge" data-act="rules">${I.book}<span>${ED[CH().edition]}</span>${n ? `<span class="hb">+${n} house rule${n > 1 ? 's' : ''}</span>` : ''}</button>`;
 }
-// the vine under your name: a thin stem with a pair of leaves
-const VINE =
-  '<div class="vine" aria-hidden="true"><svg viewBox="0 0 170 14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M2 7H71M99 7H168"/><path d="M85 7c-5-6-11-5-13 0 5 3 9 2 13 0zM85 7c5-6 11-5 13 0-5 3-9 2-13 0z"/><circle cx="85" cy="7" r="1.6" fill="currentColor"/></svg></div>';
 function header(sub) {
   const ch = CH();
   if (S.ws) return wsHeader(sub);
   return `<div class="topbar"><div class="row"><div class="badge">${esc(ch.name[0])}</div><div><div class="cname">${esc(ch.name)}</div><div class="sm mut">${clsLine(ch) || (ch.multi ? esc(ch.multi) : CLS[ch.cls].n + ' ' + ch.level)}${ch.sub ? ' · ' + esc(ch.sub) : ''}</div></div></div><button class="iconbtn" data-act="menu" aria-label="Menu">${I.menu}</button></div>
-  <div class="row between" style="margin-bottom:4px">${vitals()}</div>${VINE}${sub || ''}`;
+  <div class="row between" style="margin-bottom:4px">${vitals()}</div>${sub || ''}`;
 }
 
 const PAW =
