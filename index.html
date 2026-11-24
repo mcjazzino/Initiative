@@ -10412,7 +10412,10 @@ const HC = {
       'School of Necromancy',
       'School of Transmutation',
       'Bladesinging',
-      'War Magic'
+      'War Magic',
+      'Order of Scribes',
+      'Chronurgy Magic',
+      'Graviturgy Magic'
     ]
   }
 };
@@ -12479,6 +12482,7 @@ function hbBuild(B) {
   if (D.lv('Paladin') >= 7 && /Watchers/i.test(D.sub('Paladin'))) initParts.push({ n: 'Aura of the Sentinel', v: p });
   if (D.lv('Rogue') >= 3 && /Swashbuckler/i.test(D.sub('Rogue')) && m.CHA > 0) initParts.push({ n: 'Rakish Audacity', v: m.CHA });
   if (D.lv('Wizard') >= (D.o14 ? 2 : 3) && /War Magic/i.test(D.sub('Wizard')) && m.INT > 0) initParts.push({ n: 'Tactical Wit', v: m.INT });
+  if (D.lv('Wizard') >= (D.o14 ? 2 : 3) && /Chronurgy/i.test(D.sub('Wizard')) && m.INT > 0) initParts.push({ n: 'Temporal Awareness', v: m.INT });
   const weapons = (B.wp || []).map(w => hbWeapon(B, w)).filter(Boolean);
   // Armorer (level 3+): the armour's own weapon, with Intelligence if it's higher
   if (D.lv('Artificer') >= 3 && /Armorer/i.test(D.sub('Artificer'))) {
@@ -14241,6 +14245,45 @@ function hfSubs(B, D, F, add, res) {
       if (k >= 6) pas('sub.blade6', 'Extra Attack', 'Attack twice when you take the Attack action; you can cast a cantrip in place of one of the attacks.');
       if (k >= 10) add('sub.blade10', 'Song of Defense', 'R', 'While your Bladesong is active and you take damage: expend a spell slot to reduce the damage by 5 × the slot\'s level.');
       if (k >= 14) pas('sub.blade14', 'Song of Victory', `While your Bladesong is active: +${m.INT} to the damage of your melee weapon attacks.`);
+    }
+    if (is('Wizard', /Scribes/i)) {
+      pas('sub.scr2', 'Awakened Spellbook', 'Your spellbook is your focus. When you cast a wizard spell with a slot, you can swap its damage type for one used by another spell of that level in your book. Once per long rest, cast a ritual spell at its normal casting time.');
+      if (k >= 6) {
+        res('mmind', 'Manifest Mind: cast from it', p, 'long');
+        add('sub.scr6', 'Manifest Mind', 'B', 'Your spectral mind appears within 60 ft (or moves 30 ft). It sheds dim light and lets you hear and see from it.', { status: 'Manifest Mind' });
+        add('sub.scr6b', 'Manifest Mind: cast from it', 'F', 'When you cast a wizard spell: cast it as if you were in your spectral mind\'s space. Again: expend a spell slot.', { res: 'mmind' });
+      }
+      if (k >= 10) pas('sub.scr10', 'Master Scrivener', 'After a long rest, make a spell scroll of a level 1 or 2 spell from your book, cast one level higher.');
+      if (k >= 14) {
+        res('oneword', 'One with the Word', 1, 'long');
+        add('sub.scr14', 'One with the Word', 'R', 'When you take damage while your spellbook is on you: take none of it. Then roll 3d6: your book loses spells whose levels add up to at least that much (you regain them after 1d6 long rests). Advantage on Arcana checks.', { res: 'oneword' });
+      }
+    }
+    if (is('Wizard', /Chronurgy/i)) {
+      res('cshift', 'Chronal Shift', 2, 'long');
+      add('sub.chr2', 'Chronal Shift', 'R', 'After a creature you can see within 30 ft makes an attack roll, ability check or save: it rerolls and uses the new roll.', { res: 'cshift' });
+      pas('sub.chr2b', 'Temporal Awareness', `You add +${m.INT} to initiative (already in your bonus).`);
+      if (k >= 6) {
+        res('stasis', 'Momentary Stasis', im, 'long');
+        add('sub.chr6', 'Momentary Stasis', 'A', `A Large or smaller creature within 60 ft: CON save DC ${idc} or Incapacitated with speed 0 until the end of your next turn (or until it takes damage).`, { res: 'stasis' });
+      }
+      if (k >= 10) {
+        res('abeyance', 'Arcane Abeyance', 1, 'short');
+        add('sub.chr10', 'Arcane Abeyance', 'F', 'When you cast a spell of level 4 or lower with a slot: store it in a bead for up to 1 hour. Whoever holds the bead can release it as an action, using your DC and attack bonus.', { res: 'abeyance' });
+      }
+      if (k >= 14) add('sub.chr14', 'Convergent Future', 'R', 'When a creature you can see within 60 ft makes an attack roll, ability check or save: ignore the die and decide whether it succeeds. You gain a level of exhaustion that only a long rest removes.');
+    }
+    if (is('Wizard', /Graviturgy/i)) {
+      add('sub.grav2', 'Adjust Density', 'A', 'A Large or smaller creature or object within 30 ft, for up to 1 minute (Concentration): halve its weight (+10 ft speed, double jumps, Disadvantage on STR checks and saves) or double it (−10 ft speed, Advantage on STR checks and saves).');
+      if (k >= 6) pas('sub.grav6', 'Gravity Well', 'When a creature fails a save against your spell, is hit by your spell attack, or chooses to be affected: you can move it 5 ft.');
+      if (k >= 10) {
+        res('attract', 'Violent Attraction', im, 'long');
+        add('sub.grav10', 'Violent Attraction', 'R', 'When a creature you can see within 60 ft hits with a weapon attack: +1d10 damage of the weapon\'s type. Or when a creature within 60 ft falls: +2d10 bludgeoning.', { res: 'attract' });
+      }
+      if (k >= 14) {
+        res('horizon', 'Event Horizon', 1, 'long');
+        add('sub.grav14', 'Event Horizon', 'A', `For 1 minute (Concentration): a 30-ft aura. A hostile creature that starts its turn in it makes a STR save DC ${idc}: on a failure 2d10 force and speed 0 until its next turn; on a success half damage and every foot it moves costs 2 extra. Again: expend a level 3+ slot.`, { res: 'horizon', status: 'Event Horizon' });
+      }
     }
     if (is('Wizard', /War Magic/i)) {
       add('sub.war2', 'Arcane Deflection', 'R', `When you are hit by an attack or fail a save: +2 AC against that attack, or +4 to that save. Until the end of your next turn you can only cast cantrips.${k >= 14 ? ` Deflecting Shroud: up to three creatures of your choice within 60 ft take ${Math.floor(k / 2)} force damage.` : ''}`);
