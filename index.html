@@ -10393,7 +10393,9 @@ const HC = {
       'Celestial Patron',
       'The Hexblade',
       'The Genie',
-      'The Undead'
+      'The Undead',
+      'The Fathomless',
+      'The Undying'
     ]
   },
   Wizard: {
@@ -12531,6 +12533,7 @@ function hbBuild(B) {
         ...(kept.some(f => f.id === 'sub.cel6') ? ['radiant'] : []),
         ...(kept.some(f => f.id === 'sub.goo10') ? ['psychic'] : []),
         ...(kept.some(f => f.id === 'sub.und10') ? ['necrotic'] : []),
+        ...(kept.some(f => f.id === 'sub.fath6') ? ['cold'] : []),
         ...(kept.some(f => f.id === 'sub.storm6') ? [{ Desert: 'fire', Sea: 'lightning', Tundra: 'cold' }[B.storm || 'Desert']] : []),
         ...hbSpcResist(B)
       ])
@@ -14128,6 +14131,36 @@ function hfSubs(B, D, F, add, res) {
       if (k >= 14) {
         res('lwish', 'Limited Wish', 1, 'long');
         add('sub.gen14', 'Limited Wish', 'A', "Ask your patron for the effect of any spell of level 6 or lower with a casting time of 1 action, from any class's list. Afterwards, wait 1d4 long rests before using it again.", { res: 'lwish' });
+      }
+    }
+    if (is('Warlock', /Fathomless/i)) {
+      const td = k >= 10 ? 2 : 1;
+      res('tentacle', 'Tentacle of the Deeps', p, 'long');
+      add('sub.fath1', 'Tentacle of the Deeps', 'B', `Summon a 10-ft tentacle within 60 ft for 1 minute, and make a melee spell attack (+${p + m.CHA}) against a creature within 10 ft of it: ${td}d8 cold, and its speed is 10 ft lower until the start of your next turn. On later turns, a Bonus Action moves it 30 ft and attacks again.`, { res: 'tentacle', status: 'Tentacle out' });
+      pas('sub.fath1b', 'Gift of the Sea', 'A swimming speed of 40 ft, and you can breathe underwater.');
+      if (k >= 6) {
+        pas('sub.fath6', 'Oceanic Soul', 'Resistance to cold damage. Underwater, you and any creature fully submerged can understand each other.');
+        add('sub.fath6b', 'Guardian Coil', 'R', `When you or a creature you can see within 10 ft of your tentacle takes damage: reduce it by ${td}d8.`);
+      }
+      if (k >= 10) {
+        res('grasping', 'Grasping Tentacles', 1, 'long');
+        add('sub.fath10', 'Grasping Tentacles', 'A', `Cast Evard's Black Tentacles without a slot. You gain ${k} temporary HP, and damage can't break your Concentration on it.`, { res: 'grasping', tempHp: k });
+      }
+      if (k >= 14) {
+        res('plunge', 'Fathomless Plunge', 1, 'short');
+        add('sub.fath14', 'Fathomless Plunge', 'A', 'Teleport yourself and up to five willing creatures within 30 ft to a body of water you have seen, within 1 mile.', { res: 'plunge' });
+      }
+    }
+    if (is('Warlock', /Undying/i)) {
+      pas('sub.undy1', 'Among the Dead', `You know Spare the Dying, and have Advantage on saves against disease. An undead that targets you with an attack or harmful spell makes a WIS save DC ${wdc} first, or must pick a new target (until you harm it).`);
+      if (k >= 6) {
+        res('defy', 'Defy Death', 1, 'long');
+        add('sub.undy6', 'Defy Death', 'F', `When you succeed on a death save, or stabilize a creature with Spare the Dying: regain 1d8+${mx(m.CON)} HP.`, { res: 'defy' });
+      }
+      if (k >= 10) pas('sub.undy10', 'Undying Nature', "You can hold your breath indefinitely, and you don't need food, water or sleep.");
+      if (k >= 14) {
+        res('indestr', 'Indestructible Life', 1, 'short');
+        add('sub.undy14', 'Indestructible Life', 'B', `Regain 1d8+${k} HP, and reattach a severed body part you hold.`, { res: 'indestr' });
       }
     }
     if (is('Warlock', /Undead/i)) {
