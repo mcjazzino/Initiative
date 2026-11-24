@@ -6392,13 +6392,11 @@ function menuSheet() {
   <div class="stepper" style="grid-template-columns:1fr 1fr"><button data-act="restSheet">Short Rest</button><button data-act="rest" data-arg="long">Long Rest</button></div>
   ${ch.bh ? `<button class="btn" style="margin-top:10px;border-color:var(--line)" data-act="bhSetup">${I.heart} Blood Hunter setup</button>` : ''}
   <button class="btn" style="margin-top:10px" data-act="pets">Companions${pets().length ? ` <span class="tag">${pets().length}</span>` : ''}</button>
-  <button class="btn" style="margin-top:10px" data-act="inspOpen">${ch.insp ? '★' : '☆'} ${is14('insp') ? 'Inspiration' : 'Heroic Inspiration'}: ${ch.insp ? 'you have it' : 'none'}</button>
-  <button class="btn" style="margin-top:10px" data-act="colOpen"><i class="cdot"></i> Appearance: ${LOOKS[myLook]} · ${esc(myCol ? (COLS.find(x => x[1] === myCol) || ['Class colour'])[0] : 'class colour')}</button>
-  <button class="btn" style="margin-top:10px" data-act="rules">${I.book} Ruleset: ${ED[ch.edition]}${customCount() ? ` + ${customCount()} house rules` : ''}</button>
   ${sheetNotes().length ? `<button class="btn" style="margin-top:10px" data-act="notes">Rules notes from your sheet <span class="tag warn">${sheetNotes().length}</span></button>` : ''}
   ${ch.source === 'ddb' && checkNeeds().any ? `<button class="btn" style="margin-top:10px" data-act="importCheck">Quick check <span class="tag warn">needs you</span></button>` : ''}
-  ${ch.source === 'ddb' ? `<button class="btn" style="margin-top:10px" data-act="link">${I.link} Update ${esc(ch.name.split(' ')[0])} from D&amp;D Beyond</button><button class="btn" style="margin-top:10px" data-act="linkOther">${I.link} Import a different character</button>` : `<button class="btn" style="margin-top:10px" data-act="link">${I.link} Link D&amp;D Beyond character</button>`}
   <button class="btn" style="margin-top:10px" data-act="${ch.source === 'hand' ? 'hbEdit' : 'hbStart'}">${ch.source === 'hand' ? 'Edit your character' : 'Build a character by hand'}</button>
+  <button class="btn" style="margin-top:10px" data-act="colOpen"><i class="cdot"></i> Appearance: ${LOOKS[myLook]} · ${esc(myCol ? (COLS.find(x => x[1] === myCol) || ['Class colour'])[0] : 'class colour')}</button>
+  <button class="btn" style="margin-top:10px" data-act="rules">${I.book} Ruleset: ${ED[ch.edition]}${customCount() ? ` + ${customCount()} house rules` : ''}</button>
   ${C().phase !== 'idle' ? `<button class="btn" style="margin-top:10px;color:var(--bad)" data-act="endCombatAsk">End Combat</button>` : ''}
   <div class="row" style="gap:8px;margin-top:10px"><button class="btn" style="flex:1" data-act="fbOpen">Send feedback</button><button class="btn" style="flex:1" data-act="aboutOpen">About this beta</button></div>
   <p class="sm mut" style="margin-top:16px;text-align:center">Initiative · beta ${APP_VERSION} · ${APP_BUILT}<br>Your character is kept on this device.</p>`;
