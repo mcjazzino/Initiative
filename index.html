@@ -12478,6 +12478,7 @@ function hbBuild(B) {
   if (D.lv('Ranger') >= 3 && /Gloom Stalker/i.test(D.sub('Ranger')) && m.WIS > 0) initParts.push({ n: 'Dread Ambusher', v: m.WIS });
   if (D.lv('Paladin') >= 7 && /Watchers/i.test(D.sub('Paladin'))) initParts.push({ n: 'Aura of the Sentinel', v: p });
   if (D.lv('Rogue') >= 3 && /Swashbuckler/i.test(D.sub('Rogue')) && m.CHA > 0) initParts.push({ n: 'Rakish Audacity', v: m.CHA });
+  if (D.lv('Wizard') >= (D.o14 ? 2 : 3) && /War Magic/i.test(D.sub('Wizard')) && m.INT > 0) initParts.push({ n: 'Tactical Wit', v: m.INT });
   const weapons = (B.wp || []).map(w => hbWeapon(B, w)).filter(Boolean);
   // Armorer (level 3+): the armour's own weapon, with Intelligence if it's higher
   if (D.lv('Artificer') >= 3 && /Armorer/i.test(D.sub('Artificer'))) {
@@ -12534,6 +12535,7 @@ function hbBuild(B) {
         ...(kept.some(f => f.id === 'sub.goo10') ? ['psychic'] : []),
         ...(kept.some(f => f.id === 'sub.und10') ? ['necrotic'] : []),
         ...(kept.some(f => f.id === 'sub.fath6') ? ['cold'] : []),
+        ...(kept.some(f => f.id === 'sub.nec10') ? ['necrotic'] : []),
         ...(kept.some(f => f.id === 'sub.storm6') ? [{ Desert: 'fire', Sea: 'lightning', Tundra: 'cold' }[B.storm || 'Desert']] : []),
         ...hbSpcResist(B)
       ])
@@ -14181,6 +14183,79 @@ function hfSubs(B, D, F, add, res) {
 
   /* ---------- Wizard ---------- */
   if ((k = lv('Wizard')) >= (o ? 2 : 3)) {
+    const idc = dc('INT'),
+      im = mx(m.INT);
+    if (is('Wizard', /Abjur/i)) {
+      // Arcane Ward and Projected Ward are cards the combat screen adds itself (with the ward's HP)
+      if (k >= 6) pas('sub.abj6', 'Projected Ward', 'When a creature you can see within 30 ft takes damage: your Reaction lets your Arcane Ward absorb it (the card appears once your ward is up).');
+      if (k >= 10) pas('sub.abj10', o ? 'Improved Abjuration' : 'Spell Breaker', o ? `Add +${p} to the ability check of an abjuration spell (Counterspell, Dispel Magic).` : `Counterspell and Dispel Magic are always prepared; you can cast Dispel Magic as a Bonus Action, add +${p} to their ability checks, and a failed attempt doesn't spend the slot.`);
+      if (k >= 14) pas('sub.abj14', 'Spell Resistance', 'Advantage on saves against spells, and resistance to damage from spells.');
+    }
+    if (is('Wizard', /Divin/i)) {
+      // Portent is a card the combat screen adds itself (with your rolls)
+      if (k >= 6) pas('sub.div6', 'Expert Divination', 'When you cast a divination spell of level 2 or higher with a slot: regain a lower-level slot (level 5 at most).');
+      if (k >= 10) add('sub.div10', 'The Third Eye', o ? 'A' : 'B', 'Until your next rest, pick one: darkvision 120 ft, see into the Ethereal Plane within 60 ft, read any language, or see invisible creatures within 10 ft.');
+      if (k >= 14) pas('sub.div14', 'Greater Portent', 'Roll three Portent dice instead of two.');
+    }
+    if (is('Wizard', /Evoc/i)) {
+      if (k >= (o ? 2 : 6)) pas('sub.evo2', 'Sculpt Spells', 'When you cast an evocation spell that affects creatures you can see: up to 1 + the spell\'s level of them automatically succeed on their saves, and take no damage if they would take half.');
+      if (k >= (o ? 6 : 3)) pas('sub.evo6', 'Potent Cantrip', 'Your damaging cantrips with a save still deal half damage on a success (the spell cards say so).');
+      if (k >= 10) pas('sub.evo10', 'Empowered Evocation', `Add +${m.INT} to one damage roll of your wizard evocation spells (the spell cards say so).`);
+      if (k >= 14) {
+        res('overchannel', 'Overchannel', 1, 'long');
+        add('sub.evo14', 'Overchannel', 'F', 'When you cast a level 1–5 wizard spell that deals damage: it deals maximum damage. Free once per long rest; each further use before then deals you 2d12 necrotic per spell level (+1d12 per level each time), ignoring resistance.', { res: 'overchannel' });
+      }
+    }
+    if (is('Wizard', /Conjur/i)) {
+      add('sub.con2', 'Minor Conjuration', 'A', 'Conjure a nonmagical object up to 3 ft on a side and 10 lb, in your hand or within 10 ft, for 1 hour.');
+      if (k >= 6) {
+        res('transpose', 'Benign Transposition', 1, 'long');
+        add('sub.con6', 'Benign Transposition', 'A', 'Teleport up to 30 ft, or swap places with a willing Small or Medium creature within 30 ft. Recharges on a long rest, or when you cast a conjuration spell of level 1 or higher.', { res: 'transpose' });
+      }
+      if (k >= 10) pas('sub.con10', 'Focused Conjuration', "Taking damage can't break your Concentration on a conjuration spell.");
+      if (k >= 14) pas('sub.con14', 'Durable Summons', 'A creature you summon or create with a conjuration spell has 30 temporary HP.');
+    }
+    if (is('Wizard', /Enchant/i)) {
+      add('sub.ench2', 'Hypnotic Gaze', 'A', `A creature within 5 ft that can see or hear you: WIS save DC ${idc} or Charmed until the end of your next turn (speed 0, Incapacitated, visibly dazed). Your Action on later turns keeps it going, while you stay within 5 ft. Once per long rest per creature on a success or when it ends.`);
+      if (k >= 6) add('sub.ench6', 'Instinctive Charm', 'R', `When a creature within 30 ft attacks you: WIS save DC ${idc} or it attacks the creature closest to it instead (not you or itself). A creature that saves is immune for 8 hours.`);
+      if (k >= 10) pas('sub.ench10', 'Split Enchantment', 'An enchantment spell that targets one creature can target a second one.');
+      if (k >= 14) pas('sub.ench14', 'Alter Memories', 'A creature you charm with an enchantment spell doesn\'t know it was charmed, and you can make it forget up to ' + (1 + mx(m.CHA)) + ' hours of time.');
+    }
+    if (is('Wizard', /Necro/i)) {
+      pas('sub.nec2', 'Grim Harvest', 'Once per turn, when a spell of level 1+ kills a creature (not a construct or undead): regain 2 × the spell\'s level in HP, or 3 × if it is a necromancy spell.');
+      if (k >= 6) pas('sub.nec6', 'Undead Thralls', `Animate Dead can raise one more creature, and your undead get +${k} HP and +${p} to their weapon damage.`);
+      if (k >= 10) pas('sub.nec10', 'Inured to Undeath', "Resistance to necrotic damage, and your hit point maximum can't be reduced.");
+      if (k >= 14) add('sub.nec14', 'Command Undead', 'A', `An undead within 60 ft: CHA save DC ${idc} (with Advantage if its INT is 8 or more) or it obeys you until you use this again. Intelligent undead repeat the save every hour.`);
+    }
+    if (is('Wizard', /Transmut/i)) {
+      if (k >= 6) pas('sub.trans6', "Transmuter's Stone", 'Your stone gives its bearer one benefit: darkvision 60 ft, +10 ft speed, proficiency in CON saves, or resistance to acid, cold, fire, lightning or thunder. Change it when you cast a transmutation spell of level 1+.');
+      if (k >= 10) {
+        res('shapech', 'Shapechanger', 1, 'short');
+        add('sub.trans10', 'Shapechanger', 'A', 'Cast Polymorph on yourself without a slot, turning into a beast of CR 1 or lower.', { res: 'shapech' });
+      }
+      if (k >= 14) add('sub.trans14', 'Master Transmuter', 'A', 'Destroy your stone for one effect: Major Transformation, Panacea (heal fully and end diseases, poisons and curses), Restore Life (Raise Dead without a slot) or Restore Youth.');
+    }
+    if (is('Wizard', /Blades/i)) {
+      // Bladesong is a card the combat screen adds itself; Extra Attack is in your attacks
+      pas('sub.blade2', 'Training in War and Song', 'Proficiency with light armour and one one-handed melee weapon, and with Performance. You can use it as a spellcasting focus.');
+      if (k >= 6) pas('sub.blade6', 'Extra Attack', 'Attack twice when you take the Attack action; you can cast a cantrip in place of one of the attacks.');
+      if (k >= 10) add('sub.blade10', 'Song of Defense', 'R', 'While your Bladesong is active and you take damage: expend a spell slot to reduce the damage by 5 × the slot\'s level.');
+      if (k >= 14) pas('sub.blade14', 'Song of Victory', `While your Bladesong is active: +${m.INT} to the damage of your melee weapon attacks.`);
+    }
+    if (is('Wizard', /War Magic/i)) {
+      add('sub.war2', 'Arcane Deflection', 'R', `When you are hit by an attack or fail a save: +2 AC against that attack, or +4 to that save. Until the end of your next turn you can only cast cantrips.${k >= 14 ? ` Deflecting Shroud: up to three creatures of your choice within 60 ft take ${Math.floor(k / 2)} force damage.` : ''}`);
+      pas('sub.war2b', 'Tactical Wit', `You add +${m.INT} to initiative (already in your bonus).`);
+      if (k >= 6) {
+        res('surge', 'Power Surge', im, 'long');
+        add('sub.war6', 'Power Surge', 'F', `Once per turn, when you deal damage with a wizard spell: +${Math.floor(k / 2)} force damage. You gain a surge when you end a spell with Dispel Magic or Counterspell (and have at least one after a short rest).`, { res: 'surge' });
+      }
+      if (k >= 10) pas('sub.war10', 'Durable Magic', 'While you are concentrating on a spell: +2 AC and +2 to all saves.');
+      if (k >= 14) pas('sub.war14', 'Deflecting Shroud', `When you use Arcane Deflection: up to three creatures of your choice within 60 ft take ${Math.floor(k / 2)} force damage.`);
+    }
+    if (is('Wizard', /Illusion/i)) {
+      if (k >= (o ? 2 : 3)) pas('sub.ill2', o ? 'Improved Minor Illusion' : 'Improved Illusions', o ? 'You know Minor Illusion, and can create a sound and an image with one casting.' : 'Your illusion spells need no verbal components, and their range is +60 ft. You know Minor Illusion, and can cast it as a Bonus Action with a sound and an image at once.');
+      if (o && k >= 6) pas('sub.ill6o', 'Malleable Illusions', 'When you cast an illusion spell lasting 1 minute or longer: you can change it with your Action while you can see it.');
+    }
     if (is('Wizard', /Illusion/i)) {
       if (!o && k >= 6) {
         res('phantasm', 'Phantasmal Creatures', 1, 'long');
@@ -14188,7 +14263,7 @@ function hfSubs(B, D, F, add, res) {
       }
       if (k >= 10) {
         res('illself', 'Illusory Self', 1, 'short');
-        add('sub.ill10', 'Illusory Self', 'R', 'When a creature makes an attack roll against you: an illusory duplicate makes it miss.', { res: 'illself' });
+        add('sub.ill10', 'Illusory Self', 'R', `When a creature makes an attack roll against you: an illusory duplicate makes it miss.${o ? '' : ' Again: expend a level 2+ spell slot.'}`, { res: 'illself' });
       }
       if (k >= 14) add('sub.ill14', 'Illusory Reality', 'B', 'When you cast an illusion spell with a slot: make one nonmagical, inanimate object in it real for 1 minute. It can\'t deal damage or give conditions.');
     }
