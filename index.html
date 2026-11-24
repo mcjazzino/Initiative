@@ -8302,6 +8302,15 @@ function doEffect(o) {
     c.attacksLeft++;
     c.atkMax = (c.atkMax || 0) + 1;
   }
+  // Magical Cunning / Eldritch Master: Pact Magic slots back
+  if (o.regainPact) {
+    const P = (CH().slots || {}).P;
+    if (P) {
+      const n = o.regainPact === 'all' ? P.used : Math.min(P.used, Math.ceil(P.max / 2));
+      P.used -= n;
+      toast(`<b>${esc(o.n)}</b>: ${n ? `regained ${n} Pact Magic slot${n > 1 ? 's' : ''}` : 'no Pact Magic slots were used'} (${P.max - P.used}/${P.max})`);
+    }
+  }
   // a feature that gives points back to another pool (Sorcerous Restoration)
   if (o.gain) {
     const r = CH().res[o.gain];
@@ -9641,7 +9650,7 @@ const ACT = {
     doEffect(o);
     if (o.curse && bh() && bh().patron === 'hexblade' && isProfane())
       addStatus(`Hexblade: +${CH().prof || 3} on your next hit vs the cursed target`);
-    if (!o.effect && !o.refill && !o.gain)
+    if (!o.effect && !o.refill && !o.gain && !o.regainPact)
       toast(
         o.atk
           ? `<b>${esc(o.n)}</b>: +${o.atk.hit} to hit · ${esc(o.atk.dmg)} ${esc(o.atk.type)}`
@@ -11261,7 +11270,7 @@ function hbWeapon(B, w) {
   const alt =
     D.lv('Artificer') >= 3 && /Battle Smith/i.test(D.sub('Artificer')) && +w.mg
       ? 'INT'
-      : D.lv('Warlock') && /Hexblade/i.test(D.sub('Warlock')) && !has('2')
+      : D.lv('Warlock') && ((/Hexblade/i.test(D.sub('Warlock')) && !has('2')) || (!D.o14 && !ranged && (B.on || []).includes('wl.blade')))
         ? 'CHA'
         : null;
   if (alt && m[alt] > m[ab]) ab = alt;
@@ -11996,15 +12005,42 @@ function hfGen(B) {
     }
   }
   if ((k = lv('Warlock'))) {
-    if (k >= 2)
-      add(
-        'wl.agon',
-        'Agonizing Blast',
-        'F',
-        `Add +${m.CHA} to the damage of each Eldritch Blast beam.`,
-        { passive: true },
-        true
-      );
+    // Eldritch Invocations: switch on the ones you know (5.5e: from level 1, and the Pact Boons are invocations)
+    const wdc = dc('CHA'),
+      inv = (id, n, t, d, x = {}, min = 2, ed = '') => {
+        if (k >= (o ? Math.max(2, min) : min) && (!ed || ed === (o ? '2014' : '2024'))) add('wl.' + id, n, t, d, x, true);
+      },
+      pas_ = { passive: true };
+    inv('agon', 'Agonizing Blast', 'F', `Add +${m.CHA} to the damage of each Eldritch Blast beam.`, pas_, o ? 2 : 2);
+    inv('armor', 'Armor of Shadows', 'A', 'Cast Mage Armor on yourself without a slot (pick Mage Armor on the Armour step for its AC).', {}, 1);
+    inv('sight', "Devil's Sight", 'F', 'You see normally in darkness, magical or not, out to 120 ft.', pas_, 2);
+    inv('mind', 'Eldritch Mind', 'F', 'Advantage on Constitution saves to keep Concentration.', pas_, 1);
+    inv('spear', 'Eldritch Spear', 'F', `Eldritch Blast reaches ${o ? 300 : 120 + 30 * k} ft.`, pas_, 2);
+    inv('vigor', 'Fiendish Vigor', 'A', o ? 'Cast False Life on yourself without a slot (1d4+4 temporary HP).' : 'Cast False Life on yourself without a slot, taking the highest number instead of rolling (2d4+4 = 12 temporary HP).', o ? {} : { tempHp: 12 }, 2);
+    inv('repel', 'Repelling Blast', 'F', 'When an Eldritch Blast beam hits a Large or smaller creature: push it up to 10 ft away.', pas_, 2);
+    inv('grasp', 'Grasp of Hadar', 'F', 'Once per turn, when an Eldritch Blast beam hits: pull the creature up to 10 ft toward you.', pas_, 2, '2014');
+    inv('lance', 'Lance of Lethargy', 'F', 'Once per turn, when an Eldritch Blast beam hits: its speed is 10 ft lower until the end of your next turn.', pas_, 2, '2014');
+    inv('shadows', 'One with Shadows', 'A', 'In dim light or darkness: become Invisible until you move or take an action or reaction.', { status: 'Invisible' }, 5);
+    inv('gaze', 'Gaze of Two Minds', 'B', 'Touch a willing creature: see and hear through its senses until the end of your next turn (5.5e: cast spells from its space).', {}, 5, '2024');
+    if (o) {
+      inv('hexmad', 'Maddening Hex', 'B', `A creature cursed by your Hex (or a warlock curse) within 30 ft: it and creatures of your choice within 5 ft of it take ${mx(m.CHA)} psychic damage.`, {}, 5);
+      inv('hexrel', 'Relentless Hex', 'B', 'Teleport up to 30 ft to a space within 5 ft of a creature cursed by your Hex (or a warlock curse).', {}, 7);
+      if (k >= 5) res('tomb', 'Tomb of Levistus', 1, 'short');
+      inv('tomb', 'Tomb of Levistus', 'R', `When you take damage: gain ${10 * k} temporary HP (applied before the damage), but you are encased in ice: speed 0 and Incapacitated until the end of your next turn, and vulnerable to fire.`, { res: 'tomb' }, 5);
+    }
+    // Pact of the Blade invocations
+    inv('smite', 'Eldritch Smite', 'F', 'Once per turn, when you hit with your pact weapon: spend a Pact Magic slot for +1d8 force, +1d8 per slot level, and knock a Huge or smaller target Prone.', {}, 5);
+    inv('thirst', 'Thirsting Blade', 'F', 'Attack twice with your pact weapon when you take the Attack action (already in your attacks).', pas_, 5);
+    inv('life', 'Lifedrinker', 'F', o ? `Your pact weapon hits deal +${mx(m.CHA)} necrotic damage.` : 'Once per turn, when your pact weapon hits: +1d6 necrotic, psychic or radiant damage, and you can spend a Hit Die to heal (roll + CON).', pas_, o ? 12 : 9);
+    inv('devour', 'Devouring Blade', 'F', 'Thirsting Blade gives you three attacks with your pact weapon (already in your attacks).', pas_, 12, '2024');
+    // the Pact Boons: invocations in 5.5e, a level 3 choice in 5e
+    const pb = (id, n, t, d, x = {}) => {
+      if (k >= (o ? 3 : 1)) add((o ? 'pb.' : 'wl.') + id, n, t, d, x, true);
+    };
+    pb('blade', 'Pact of the Blade', o ? 'A' : 'B', o ? 'Create your pact weapon in your empty hand (a melee weapon of your choice). You are proficient with it, and it counts as magical.' : 'Conjure your pact weapon or bond a magic weapon. You are proficient with it, it attacks with Charisma (already in your weapons), and it can deal necrotic, psychic or radiant damage.');
+    pb('chain', 'Pact of the Chain', 'A', 'Cast Find Familiar with a special form (imp, pseudodragon, quasit, sprite...). When you take the Attack action, your familiar can make one attack instead of one of yours, with its Reaction.');
+    pb('tome', 'Pact of the Tome', 'F', 'Your Book of Shadows holds three extra cantrips from any class list (and, in 5.5e, two level 1 rituals). Add them on the Spells step.', pas_);
+    if (o) pb('talisman', 'Pact of the Talisman', 'F', 'Your talisman: when its wearer fails an ability check, they add 1d4 (proficiency bonus times per long rest).', pas_);
     if (/Hexblade/i.test(sub('Warlock'))) {
       res('hexcurse', "Hexblade's Curse", 1, 'short');
       add(
@@ -12293,6 +12329,11 @@ function hbAttacks(B) {
   if (D.lv('Bard') >= 6 && /Valor|Swords/i.test(D.sub('Bard'))) a = Math.max(a, 2);
   if (D.lv('Wizard') >= 6 && /Blades/i.test(D.sub('Wizard'))) a = Math.max(a, 2);
   if (D.lv('Artificer') >= 5 && /Battle Smith|Armorer/i.test(D.sub('Artificer'))) a = Math.max(a, 2);
+  // Thirsting Blade / Devouring Blade (pact weapon attacks)
+  const wk = D.lv('Warlock'),
+    on = id => (B.on || []).includes(id);
+  if (wk >= 5 && on('wl.thirst')) a = Math.max(a, 2);
+  if (wk >= 12 && !D.o14 && on('wl.thirst') && on('wl.devour')) a = Math.max(a, 3);
   return a;
 }
 
@@ -12400,6 +12441,14 @@ function hbBuild(B) {
       .forEach(x => {
         x.d = x.d.replace(/for 1d10 force\..*$/, `for 1d10+${m.CHA} force (Agonizing Blast).`);
       });
+  // Eldritch Spear and the beam riders, written into the cantrip
+  spells
+    .filter(x => x.n === 'Eldritch Blast')
+    .forEach(x => {
+      if (kept.some(f => f.id === 'wl.spear')) x.d = x.d.replace('(120 ft)', `(${E === '2014' ? 300 : 120 + 30 * D.lv('Warlock')} ft, Eldritch Spear)`);
+      const riders = [kept.some(f => f.id === 'wl.repel') && 'Repelling Blast: a hit pushes it 10 ft', kept.some(f => f.id === 'wl.grasp') && 'Grasp of Hadar: once per turn, pull it 10 ft', kept.some(f => f.id === 'wl.lance') && 'Lance of Lethargy: once per turn, −10 ft speed'].filter(Boolean);
+      if (riders.length) x.d += ' ' + riders.join('. ') + '.';
+    });
   const sv = [...new Set([...(B.saves || HC[main.n].sv), ...(B.feats || []).filter(f => f.n === 'Resilient' && f.ab).map(f => ABN.indexOf(f.ab)), ...(D.lv('Fighter') >= 7 && /Samurai/i.test(D.sub('Fighter')) ? [4] : []), ...(D.lv('Monk') >= 14 ? [0, 1, 2, 3, 4, 5] : []), ...(D.lv('Rogue') >= 15 ? (E === '2014' ? [4] : [4, 5]) : []), ...(D.lv('Ranger') >= 7 && /Gloom Stalker/i.test(D.sub('Ranger')) ? [(B.saves || HC[main.n].sv).includes(4) ? 3 : 4] : [])])],
     aura = D.lv('Paladin') >= 6 ? mx1(m.CHA) : 0;
   const saves = ABN.map((a, i) => m[a] + (sv.includes(i) ? p : 0) + aura);
@@ -12479,6 +12528,9 @@ function hbBuild(B) {
         ...(kept.some(f => f.id === 'sub.war17') && E !== '2014' ? ['bludgeoning', 'piercing', 'slashing'] : []),
         ...(kept.some(f => f.id === 'sub.forge6') ? ['fire'] : []),
         ...(kept.some(f => f.id === 'sub.sst6') ? ['lightning', 'thunder'] : []),
+        ...(kept.some(f => f.id === 'sub.cel6') ? ['radiant'] : []),
+        ...(kept.some(f => f.id === 'sub.goo10') ? ['psychic'] : []),
+        ...(kept.some(f => f.id === 'sub.und10') ? ['necrotic'] : []),
         ...(kept.some(f => f.id === 'sub.storm6') ? [{ Desert: 'fire', Sea: 'lightning', Tundra: 'cold' }[B.storm || 'Desert']] : []),
         ...hbSpcResist(B)
       ])
@@ -12879,6 +12931,10 @@ function hfMore(B, D, F, add, res) {
     if (k >= 20) note('sor.innate', 'Arcane Apotheosis: while it\'s active, one Metamagic option per turn costs no Sorcery Points.');
   }
 
+  if ((k = lv('Warlock')) && k >= (o ? 20 : 2)) {
+    res('cunning', o ? 'Eldritch Master' : 'Magical Cunning', 1, 'long');
+    add('wl.cunning', o ? 'Eldritch Master' : 'Magical Cunning', 'O', o ? 'Spend 1 minute entreating your patron: regain all your Pact Magic slots.' : k >= 20 ? 'Eldritch Master: spend 1 minute on an esoteric rite to regain all your Pact Magic slots.' : 'Spend 1 minute on an esoteric rite to regain expended Pact Magic slots, up to half your maximum (rounded up).', { res: 'cunning', regainPact: o || k >= 20 ? 'all' : 'half' });
+  }
   if ((k = lv('Warlock')) && k >= 11) {
     const lvls = [6, 7, 8, 9].filter((l, i) => k >= 11 + 2 * i);
     lvls.forEach(l => {
@@ -13996,7 +14052,7 @@ function hfSubs(B, D, F, add, res) {
       if (k >= 10) pas('sub.fiend10', 'Fiendish Resilience', 'Choose a damage type (not force) after each rest: resistance to it.');
       if (k >= 14) {
         res('hurl', 'Hurl Through Hell', 1, 'long');
-        add('sub.fiend14', 'Hurl Through Hell', 'F', `When you hit a creature with an attack: ${o ? '' : `CHA save DC ${dc('CHA')} or `}it vanishes through the lower planes until the end of your next turn and takes 8d10 psychic damage (non-fiends)${o ? '' : ', Incapacitated'}. 5.5e: you can also spend a Pact slot to use it again.`, { res: 'hurl' });
+        add('sub.fiend14', 'Hurl Through Hell', 'F', `When you hit a creature with an attack: ${o ? '' : `CHA save DC ${dc('CHA')} or `}it vanishes through the lower planes until the end of your next turn and takes ${o ? 10 : 8}d10 psychic damage (non-fiends)${o ? '' : ', Incapacitated'}.${o ? '' : ' Again: spend a Pact Magic slot.'}`, { res: 'hurl' });
       }
     }
     if (is('Warlock', /Archfey/i)) {
@@ -14007,8 +14063,13 @@ function hfSubs(B, D, F, add, res) {
         res('feysteps', 'Steps of the Fey', mx(m.CHA), 'long');
         add('sub.arch3', 'Steps of the Fey', 'B', 'Cast Misty Step without a slot. Then choose: Refreshing Step (a creature within 10 ft gains 1d10 temporary HP) or Taunting Step (creatures within 5 ft of where you left: WIS save or disadvantage on attacks against anyone but you).', { res: 'feysteps' });
       }
-      if (k >= 6) add('sub.arch6', 'Misty Escape', 'R', o ? 'When you take damage: turn Invisible and teleport up to 60 ft (once per short rest).' : 'When you take damage: cast Misty Step (uses Steps of the Fey). You can also choose Disappearing Step (Invisible until your next turn) or Dreadful Step (creatures within 5 ft: WIS save or 2d10 psychic).', o ? {} : { res: 'feysteps' });
-      if (k >= 10 && !o) add('sub.arch10r', 'Beguiling Defenses', 'R', `When a creature hits you with an attack: halve the damage, and it makes a WIS save DC ${dc('CHA')} or takes psychic damage equal to the damage you took (once per long rest, or spend a Pact slot).`);
+      if (k >= 6 && o) res('mistyesc', 'Misty Escape', 1, 'short');
+      if (k >= 6) add('sub.arch6', 'Misty Escape', 'R', o ? 'When you take damage: turn Invisible and teleport up to 60 ft. You stay Invisible until the start of your next turn, or until you attack or cast a spell.' : 'When you take damage: cast Misty Step (uses Steps of the Fey). You can also choose Disappearing Step (Invisible until your next turn) or Dreadful Step (creatures within 5 ft: WIS save or 2d10 psychic).', o ? { res: 'mistyesc', status: 'Invisible' } : { res: 'feysteps' });
+      if (k >= 10 && !o) {
+        res('beguile', 'Beguiling Defenses', 1, 'long');
+        add('sub.arch10r', 'Beguiling Defenses', 'R', `When a creature hits you with an attack: halve the damage, and it makes a WIS save DC ${dc('CHA')} or takes psychic damage equal to the damage you took. Again: spend a Pact Magic slot.`, { res: 'beguile' });
+      }
+      if (k >= 10 && o) add('sub.arch10r', 'Beguiling Defenses', 'R', `When a creature tries to Charm you: it makes a WIS save DC ${dc('CHA')} or is Charmed by you for 1 minute (or until it takes damage).`);
       if (k >= 10) pas('sub.arch10', 'Beguiling Defenses: immune to Charmed', o ? "You can't be Charmed; a creature that tries to charm you makes a WIS save or is Charmed by you." : "Immune to Charmed. When a creature damages you, use your Reaction: halve the damage and it takes psychic damage equal to the other half (WIS save negates).");
       if (k >= 14) {
         if (o) {
@@ -14021,7 +14082,10 @@ function hfSubs(B, D, F, add, res) {
       pas('sub.goo1', 'Awakened Mind', 'Telepathy with a creature within 30 ft (5.5e: open a link to one creature within your telepathy range).');
       if (!o) pas('sub.goo3', 'Psychic Spells', 'Your Enchantment and Illusion warlock spells can deal psychic damage and need no verbal or somatic components.');
       if (k >= 6) {
-        if (o) add('sub.goo6', 'Entropic Ward', 'R', 'When a creature attacks you: impose disadvantage. If it misses, advantage on your next attack against it (once per short rest).');
+        if (o) {
+          res('entropic', 'Entropic Ward', 1, 'short');
+          add('sub.goo6', 'Entropic Ward', 'R', 'When a creature attacks you: it has Disadvantage. If it misses, you have Advantage on your next attack against it before the end of your next turn.', { res: 'entropic' });
+        }
         else {
           res('clair', 'Clairvoyant Combatant', 1, 'short');
           add('sub.goo6', 'Clairvoyant Combatant', 'F', `When you open a telepathic link: the creature makes a WIS save DC ${dc('CHA')}. On a failure, for 1 minute it has disadvantage on attacks against you, and you have advantage on attacks against it.`, { res: 'clair' });
@@ -14039,6 +14103,45 @@ function hfSubs(B, D, F, add, res) {
       if (k >= 14) {
         res('searing', 'Searing Vengeance', 1, 'long');
         add('sub.cel14', 'Searing Vengeance', 'F', `When you or an ally within 60 ft makes a death save: they regain half their HP max and stand up; enemies within 30 ft take 2d8+${m.CHA} radiant damage and are Blinded until the end of the turn.`, { res: 'searing' });
+      }
+    }
+    const wdc = dc('CHA');
+    if (is('Warlock', /Hexblade/i)) {
+      pas('sub.hex1', 'Hex Warrior', 'Proficiency with medium armour, shields and martial weapons. Your pact weapon, or one one-handed weapon you touch after a long rest, attacks with Charisma (already in its numbers).');
+      if (k >= 6) {
+        res('specter', 'Accursed Specter', 1, 'long');
+        add('sub.hex6', 'Accursed Specter', 'F', `When you kill a humanoid: its spirit rises as a specter under your control until your next long rest, with ${Math.floor(k / 2)} temporary HP and +${mx(m.CHA)} to its attacks. It acts on your initiative.`, { res: 'specter' });
+      }
+      if (k >= 10) add('sub.hex10', 'Armor of Hexes', 'R', "When the target of your Hexblade's Curse hits you: roll a d6. On a 4 or higher, the attack misses.");
+      if (k >= 14) pas('sub.hex14', 'Master of Hexes', "When the target of your Hexblade's Curse dies: move the curse to another creature within 30 ft (you don't regain HP from the first).");
+    }
+    if (is('Warlock', /Genie/i)) {
+      res('respite', 'Bottled Respite', 1, 'long');
+      pas('sub.gen1', "Genie's Vessel", `A tiny object holds your patron's power: AC ${wdc}, ${k + p} HP.`);
+      add('sub.gen1b', "Genie's Vessel: Bottled Respite", 'A', `Vanish into your vessel for up to ${2 * p} hours${k >= 10 ? ', with up to five willing creatures (Sanctuary Vessel: a short rest there takes 10 minutes, and each gets +' + p + ' HP from Hit Dice)' : ''}. You leave as a Bonus Action, or when the vessel is destroyed.`, { res: 'respite' });
+      add('sub.gen1c', "Genie's Wrath", 'F', `Once on each of your turns, when you hit with an attack: +${p} damage (Dao bludgeoning, Djinni thunder, Efreeti fire, Marid cold).`, { once: 'gwrath' });
+      if (k >= 6) {
+        res('egift', 'Elemental Gift: flight', p, 'long');
+        pas('sub.gen6', 'Elemental Gift', "Resistance to your genie's damage type (Dao bludgeoning, Djinni thunder, Efreeti fire, Marid cold).");
+        add('sub.gen6b', 'Elemental Gift: flight', 'B', 'For 10 minutes: a flying speed of 30 ft, and you can hover.', { res: 'egift', status: 'Flying 30 ft' });
+      }
+      if (k >= 14) {
+        res('lwish', 'Limited Wish', 1, 'long');
+        add('sub.gen14', 'Limited Wish', 'A', "Ask your patron for the effect of any spell of level 6 or lower with a casting time of 1 action, from any class's list. Afterwards, wait 1d4 long rests before using it again.", { res: 'lwish' });
+      }
+    }
+    if (is('Warlock', /Undead/i)) {
+      res('fdread', 'Form of Dread', p, 'long');
+      add('sub.und1', 'Form of Dread', 'B', `For 1 minute: gain 1d10+${k} temporary HP, you can't be Frightened, and once per turn when you hit with an attack, the target makes a WIS save DC ${wdc} or is Frightened of you until the end of your next turn.${k >= 10 ? ' Necrotic Husk: you are immune to necrotic damage while in this form.' : ''}`, { res: 'fdread', status: 'Form of Dread' });
+      if (k >= 6) pas('sub.und6', 'Grave Touched', "You don't need to eat, drink or breathe. Once per turn, when you hit and roll damage, it can become necrotic; in Form of Dread, roll one extra damage die.");
+      if (k >= 10) {
+        pas('sub.und10', 'Necrotic Husk', 'Resistance to necrotic damage (immunity in Form of Dread).');
+        res('husk', 'Necrotic Husk', 1, 'long');
+        add('sub.und10b', 'Necrotic Husk: refuse death', 'F', `When you drop to 0 HP: drop to 1 HP instead, and creatures of your choice within 30 ft take 2d10+${k} necrotic damage. You gain a level of exhaustion.`, { res: 'husk' });
+      }
+      if (k >= 14) {
+        res('projection', 'Spirit Projection', 1, 'long');
+        add('sub.und14', 'Spirit Projection', 'A', 'For up to 1 hour (Concentration): your spirit leaves your body. It has resistance to bludgeoning, piercing and slashing damage, casts conjuration and necromancy spells without components, and can fly 30 ft through objects. In Form of Dread: your spell damage heals you for half.', { res: 'projection', status: 'Spirit Projection' });
       }
     }
   }
@@ -14722,8 +14825,10 @@ function hbFeatures() {
         ? 'Gorgon · homebrew, check with your DM'
         : f.id.startsWith('cle.b')
           ? 'Blessed Strikes: pick one'
-          : f.id.startsWith('wl.')
-            ? 'Eldritch invocations'
+          : f.id.startsWith('wl.') && f.opt
+            ? (k => `Eldritch Invocations you know (pick ${B.ed === '2014' ? [0, 0, 2, 2, 2, 3, 3, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8][k] : [0, 1, 3, 3, 3, 5, 5, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10, 10][k]})`)(+((B.cls.find(c => c.n === 'Warlock') || {}).lvl || 0))
+            : f.id.startsWith('pb.')
+              ? 'Pact Boon: pick one'
             : f.opt
               ? f.id.startsWith('bm.')
                 ? 'Maneuvers you know'
@@ -14859,7 +14964,7 @@ function wpnProf(B, n) {
   }
   if (any(/Rogue/) && /\b[FL]\b/.test(props)) return true;
   if (any(/Monk/) && /\bL\b/.test(props)) return true;
-  if (sub(/Valor/)) return true;
+  if (sub(/Valor|Hexblade/)) return true;
   if (sub(/Swords/) && n === 'Scimitar') return true; // College of Swords: medium armour and the scimitar
   return false;
 }
