@@ -10615,6 +10615,7 @@ const SPL = {
 };
 // cantrips: [cast time, concentration, text(n dice, edition), cast time in 2014 if different]
 const CANT = {
+  'Sapping Sting': ['A', 0, n => `A creature within 30 ft: CON save or ${n}d4 necrotic and it falls Prone.`],
   'Fire Bolt': ['A', 0, n => `Ranged spell attack, 120 ft: ${n}d10 fire.`],
   'Eldritch Blast': [
     'A',
@@ -10767,6 +10768,21 @@ const CANT = {
 };
 // higher-level spells the app's built-in lists don't carry: [level, cast time, concentration, text, text in 2014 if different]
 const EXTRA_SP = {
+  // dunamancy (Explorer's Guide to Wildemount): open to Chronurgy and Graviturgy wizards, or by your DM
+  'Gift of Alacrity': [1, 'O', 0, 'Cast over 1 minute. A willing creature you touch adds 1d8 to its initiative rolls for 8 hours.'],
+  'Magnify Gravity': [1, 'A', 0, 'A 10-ft-radius sphere within 60 ft: CON save or 2d8 force and its speed is halved until the end of its next turn (half damage, speed normal, on a success). +1d8 per slot level above 1st.'],
+  "Fortune's Favor": [2, 'O', 0, 'Cast over 1 minute (a 100 gp pearl, consumed). For 1 hour, you or a willing creature within 60 ft can, once: roll an extra d20 on an attack roll, ability check or save and pick, or make an attacker roll a d20 and choose which result it uses. +1 creature per slot level above 2nd.'],
+  'Immovable Object': [2, 'A', 0, 'An object of 10 lb or less you touch is fixed in place for 1 hour, holding up to 4,000 lb. You can set a password so others can move it.'],
+  Wristpocket: [2, 'A', 1, 'Ritual. Send an object of 5 lb or less you hold to a pocket dimension, or call it back to your hand, as an action while you concentrate (up to 1 hour).'],
+  'Pulse Wave': [3, 'A', 0, 'A 30-ft cone: CON save or 6d6 force, and you push or pull the creature up to 15 ft (half damage, not moved, on a success). +1d6 damage and +5 ft per slot level above 3rd.'],
+  'Gravity Sinkhole': [4, 'A', 0, 'A 20-ft-radius sphere within 120 ft: CON save or 5d10 force and pulled to the center (half damage, not pulled, on a success). +1d10 per slot level above 4th.'],
+  'Temporal Shunt': [5, 'R', 0, 'When a creature within 120 ft makes an attack roll or starts casting a spell: WIS save or it vanishes until the start of your next turn, and the attack or spell has no effect. +1 creature per slot level above 5th (within 30 ft of each other).'],
+  'Gravity Fissure': [6, 'A', 0, 'A 100-ft line, 5 ft wide, from you: CON save or 8d8 force (half on a success). Creatures within 10 ft of the line: CON save or 8d8 force and pulled into the line. +1d8 per slot level above 6th.'],
+  'Tether Essence': [7, 'A', 1, 'Two creatures within 60 ft: CON save each (with Disadvantage if they are within 30 ft of each other). If both fail, for up to 1 hour any damage or healing one takes, the other takes too. It ends if either drops to 0 HP.'],
+  'Dark Star': [8, 'A', 1, "A sphere up to 40 ft in radius within 150 ft for up to 1 minute: magical darkness, difficult terrain, and silence (no spells with verbal components inside). A creature that enters it or starts its turn there: CON save or 8d10 force (half on a success). A creature dropped to 0 HP by it is annihilated."],
+  'Reality Break': [8, 'A', 1, "A creature within 60 ft: WIS save or it can't take reactions for up to 1 minute, and at the start of each of its turns it rolls a d10: 1–2 6d12 psychic and Stunned until the end of the turn; 3–5 DEX save or 8d12 force (half on a success); 6–8 teleported up to 30 ft, 10d12 force and Prone; 9–10 10d12 cold and Blinded until the end of the turn. It repeats the save at the end of each of its turns."],
+  'Ravenous Void': [9, 'A', 1, 'A 20-ft-radius sphere within 1,000 ft for up to 1 minute. The area within 100 ft of it is difficult terrain, and creatures there are pulled toward it (STR save). A creature that enters the sphere or starts its turn there takes 5d10 force and is Restrained while inside. A creature dropped to 0 HP by it is annihilated.'],
+  'Time Ravage': [9, 'A', 0, 'A creature within 90 ft (a 5,000 gp hourglass, consumed): CON save or 10d12 necrotic and it ages so that it has only 30 days left to live, unless it is immortal or magic restores it (half damage, no ageing, on a success).'],
   'Mage Armor': [1, 'A', 0, "A willing creature you touch that isn't wearing armour: its AC becomes 13 + DEX for 8 hours (it ends if it puts on armour). Cast on yourself, it turns your AC's Mage Armor on."],
   'Inflict Wounds': [
     1,
@@ -11030,7 +11046,22 @@ const SCHOOL = {
   Slow: 'Transmutation',
   'Elemental Weapon': 'Transmutation',
   Polymorph: 'Transmutation',
-  Disintegrate: 'Transmutation'
+  Disintegrate: 'Transmutation',
+  'Sapping Sting': 'Necromancy',
+  'Gift of Alacrity': 'Divination',
+  'Magnify Gravity': 'Transmutation',
+  "Fortune's Favor": 'Divination',
+  'Immovable Object': 'Transmutation',
+  Wristpocket: 'Conjuration',
+  'Pulse Wave': 'Evocation',
+  'Gravity Sinkhole': 'Evocation',
+  'Temporal Shunt': 'Transmutation',
+  'Gravity Fissure': 'Evocation',
+  'Tether Essence': 'Necromancy',
+  'Dark Star': 'Evocation',
+  'Reality Break': 'Conjuration',
+  'Ravenous Void': 'Evocation',
+  'Time Ravage': 'Necromancy'
 };
 function spLib(E, L) {
   const n = 1 + (L >= 5) + (L >= 11) + (L >= 17),
