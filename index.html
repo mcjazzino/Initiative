@@ -447,11 +447,28 @@ body.hasroll #rollbg{opacity:1;pointer-events:auto}
 .mrow .mi .cdot{margin:0}
 .mrow .ml{flex:1;min-width:0}
 .mrow .mv{color:var(--mut);font-weight:600;font-size:13px;text-align:right}
-.mrow .chev{color:var(--dim);font-size:20px;line-height:1;margin-left:2px}
+.mrow .chev{color:var(--dim);font-size:18px;line-height:1;margin-left:2px}
 .mrow.bad{color:var(--bad)}
 .mrow.bad .mi{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad)}
 .mrest button{display:flex;align-items:center;justify-content:center;gap:8px}
 .mrest svg{width:18px;height:18px}
+
+/* ---------- consistency pass: one rhythm, one set of type roles ---------- */
+/* detail lines under a title: the class line, card and chip states */
+.det,.tile .sub,.chip span{font-size:13px;font-weight:600;color:var(--mut)}
+.det{margin-top:2px}
+/* the serif's two weights: 700 for display (name, portrait, big numbers), 600 for titles */
+.badge,.move .big,.hpbig,.startbtn,.hero .display,.offcard .display{font-weight:700}
+.move .big + span,.move .big ~ .unit{font-size:15px;font-weight:600;color:var(--mut)}
+/* list rows read like list items: same size and weight as item titles */
+.mrow{font-size:16px;font-weight:800}
+/* one chevron size */
+.chev,.item .chev{font-size:18px}
+/* vertical rhythm: 12px between blocks, 10px between siblings in a row */
+.econ{gap:10px;margin:12px 0}
+.tiles{gap:10px;margin-top:12px;grid-auto-rows:1fr}
+.sec,.mhead{margin:18px 4px 8px}
+.mhead:first-child{margin-top:4px}
 </style>
 </head>
 <body>
@@ -4599,7 +4616,7 @@ function edBadge() {
 function header(sub) {
   const ch = CH();
   if (S.ws) return wsHeader(sub);
-  return `<div class="topbar"><div class="row"><div class="badge">${esc(ch.name[0])}</div><div><div class="cname">${esc(ch.name)}</div><div class="sm mut">${clsLine(ch) || (ch.multi ? esc(ch.multi) : CLS[ch.cls].n + ' ' + ch.level)}${ch.sub ? ' · ' + esc(ch.sub) : ''}</div></div></div><button class="iconbtn" data-act="menu" aria-label="Menu">${I.menu}</button></div>
+  return `<div class="topbar"><div class="row"><div class="badge">${esc(ch.name[0])}</div><div><div class="cname">${esc(ch.name)}</div><div class="det">${clsLine(ch) || (ch.multi ? esc(ch.multi) : CLS[ch.cls].n + ' ' + ch.level)}${ch.sub ? ' · ' + esc(ch.sub) : ''}</div></div></div><button class="iconbtn" data-act="menu" aria-label="Menu">${I.menu}</button></div>
   <div class="row between" style="margin-bottom:4px">${vitals()}</div>${sub || ''}`;
 }
 
@@ -4623,10 +4640,10 @@ function wsHeader(sub) {
     )
     .join('');
   return `<div class="wsframe">
-   <div class="ghost"><div class="row"><div class="badge" style="width:34px;height:34px;font-size:15px;border-radius:10px">${esc(ch.name[0])}</div><div><div class="display" style="font-weight:800;font-size:14px">${esc(ch.name)}</div><div class="xs mut" style="font-size:11.5px">Druid form · ${hp.cur}/${hp.max} HP · AC ${ch.ac}</div></div></div><button class="iconbtn" style="width:34px;height:34px" data-act="menu">${I.menu}</button></div>
+   <div class="ghost"><div class="row"><div class="badge" style="width:34px;height:34px;font-size:15px">${esc(ch.name[0])}</div><div><div class="display" style="font-weight:800;font-size:14px">${esc(ch.name)}</div><div class="xs mut" style="font-size:11.5px">Druid form · ${hp.cur}/${hp.max} HP · AC ${ch.ac}</div></div></div><button class="iconbtn" style="width:34px;height:34px" data-act="menu">${I.menu}</button></div>
    <div class="beastcard ${S.ws.fresh ? 'anim' : ''}">
     <div class="row between"><span class="wsribbon">${PAW}Wild Shape</span><button class="btn sm" style="padding:7px 11px" data-act="revert">Change back</button></div>
-    <div class="row" style="margin-top:12px;gap:12px"><div class="beastic">${PAW}</div><div style="min-width:0"><div class="display" style="font-size:25px;font-weight:800;line-height:1.1">${esc(b.n)}</div><div class="sm mut">${b.size} beast · CR ${crTxt(b.cr)}</div></div></div>
+    <div class="row" style="margin-top:12px;gap:12px"><div class="beastic">${PAW}</div><div style="min-width:0"><div class="display" style="font-size:25px;font-weight:700;line-height:1.1">${esc(b.n)}</div><div class="sm mut">${b.size} beast · CR ${crTxt(b.cr)}</div></div></div>
     <button class="hpbar" data-act="hp"><div class="row between sm" style="font-weight:800"><span>${old ? 'Beast HP' : 'Wild Shape temp HP'}</span><span>${pool} / ${poolMax}${old ? '' : ` <span class="mut">· your HP ${hp.cur}/${hp.max}</span>`}</span></div><div class="bar" style="margin-top:7px;height:12px"><i style="width:${pct}%;background:${pct > 50 ? 'var(--acc)' : pct > 25 ? 'var(--warn)' : 'var(--bad)'}"></i></div></button>
     <div class="row" style="flex-wrap:wrap;gap:6px;margin-top:10px"><span class="pill">${I.shield}${wsAC()}</span>${speeds}<button class="pill" data-act="conditions">${I.cond}${condCount() || ''}</button>${S.conc ? `<button class="pill" data-act="dropConc" style="border-color:var(--line);background:var(--soft)">${I.conc}${esc(S.conc)} ✕</button>` : ''}</div>
    </div></div>${sub || ''}`;
@@ -4645,7 +4662,7 @@ function homeView() {
         : 'Demo character';
   return `<div class="topbar"><div class="appname">Initiative</div><button class="iconbtn" data-act="menu">${I.menu}</button></div>
   <div class="hero"><div class="badge">${esc(ch.name[0])}</div>
-   <button class="display" style="font-size:26px;font-weight:800;background:none;border:0;color:inherit;padding:0" data-act="rename" title="Rename">${esc(ch.name)} <span class="mut" style="font-size:13px">✎</span></button>
+   <button class="display" style="font-size:26px;font-weight:700;background:none;border:0;color:inherit;padding:0" data-act="rename" title="Rename">${esc(ch.name)} <span class="mut" style="font-size:13px">✎</span></button>
    <div class="mut" style="margin-top:4px">${ch.species ? esc(ch.species) + ' · ' : ''}${clsList() ? `Level ${ch.level} · ${clsLine(ch)}` : ch.multi ? `Level ${ch.level} · ${esc(ch.multi)}` : `Level ${ch.level} ${CLS[ch.cls].n}`}${ch.sub ? ' · ' + esc(ch.sub) : ''}</div>${clsBar()}
    <div class="row" style="justify-content:center;margin-top:10px;gap:6px">${edBadge()}${ch.build ? `<button class="pill" data-act="hbEdit">✎ Edit character</button>` : ''}</div>
    <div class="row" style="justify-content:center;margin-top:12px">${vitals()}</div>
@@ -4781,15 +4798,15 @@ function turnView() {
   <div class="econ">${chip('action', 'Action')}${chip('bonus', 'Bonus')}${chip('reaction', 'Reaction')}</div>
   ${c.attacksLeft > 0 ? `<button class="card row between" style="width:100%;margin-bottom:10px;border-color:var(--line)" data-act="atkTick"><div style="text-align:left"><div style="font-weight:800">Attacks remaining: ${c.attacksLeft}</div><div class="sm mut">Tap after each attack · you can move between them</div></div><div class="atkpips">${Array.from({ length: Math.max(c.atkMax || 0, c.attacksLeft) }, (_, i) => `<i class="${i < c.attacksLeft ? '' : 'u'}"></i>`).join('')}</div></button>` : ''}
   <button class="card move" style="width:100%;text-align:left" data-act="movement">
-   <div class="row between"><div><div class="ctitle">Movement</div><div class="row" style="align-items:baseline;gap:8px;margin-top:4px"><span class="big" style="color:${left ? 'var(--txt)' : 'var(--dim)'}">${left}</span><span class="mut" style="font-weight:700">/ ${tot} ft left</span></div></div>
+   <div class="row between"><div><div class="ctitle">Movement</div><div class="row" style="align-items:baseline;gap:8px;margin-top:4px"><span class="big" style="color:${left ? 'var(--txt)' : 'var(--dim)'}">${left}</span><span class="mut" style="font-size:15px;font-weight:600">/ ${tot} ft left</span></div></div>
    <div class="ic2">${I.boot}</div></div>
    <div class="bar"><i style="width:${pct}%"></i></div>
    <div class="sm mut" style="margin-top:8px">${c.surprisedTurn ? 'Surprised — no movement this turn' : c.noMove ? "Steady Aim: you can't move this turn" : `Moved ${c.moveUsed} ft${c.dash ? ` · Dash +${c.dash} ft` : ''} · tap to log`}${sn ? ` · <span style="color:var(--warn)">${sn}</span>` : ''}${c.status.includes('Disengaged') ? ' · <span style="color:var(--ok)">No opportunity attacks</span>' : ''}</div>
   </button>
   <div class="tiles">
    ${tile('actions', I.sword, 'Actions', c.action ? 'Available' : 'Used: ' + esc(spentOn('action') || ''), !c.action)}
-   ${tile('bonus', I.bolt, 'Bonus Actions', c.bonus ? (nBonus ? nBonus + ' available' : 'None you can use') : 'Used: ' + esc(spentOn('bonus') || ''), !c.bonus || !nBonus)}
-   ${tile('spells', I.spark, 'Spells', S.ws ? 'Not in beast form' : ch.spells.length ? (castable ? castable + ' castable now' : 'None castable now') : 'No spells', !castable)}
+   ${tile('bonus', I.bolt, 'Bonus', c.bonus ? (nBonus ? nBonus + ' available' : 'None you can use') : 'Used: ' + esc(spentOn('bonus') || ''), !c.bonus || !nBonus)}
+   ${tile('spells', I.spark, 'Spells', S.ws ? 'Not in beast form' : ch.spells.length ? (castable ? castable + ' castable' : 'None castable') : 'No spells', !castable)}
    ${tile('inventory', I.bag, 'Inventory', S.ws ? 'Merged into form' : nItems + (nItems === 1 ? ' item' : ' items'), !!S.ws)}
   </div>
   ${condCard()}${c.status.length || c.held.length || S.cond.prone || condList().length || S.rage ? `<div class="status">${S.rage ? `<span class="tag a">Raging · +${rageDmg()} STR damage · resist B/P/S${is14('rage') ? ` · round ${S.rage.rounds}/10` : ''}</span>` : ''}${S.cond.prone ? `<button class="tag warn" style="border:0" data-act="use" data-arg="xstand">Prone · tap to stand up (${Math.floor((S.ws ? beast().sp.walk || 0 : CH().speed) / 2)} ft)</button>` : ''}${condTags()}${c.status.map(s => `<span class="tag a">${esc(s)}</span>`).join('')}${c.held.length ? `<span class="tag warn">${c.held.length} held action</span>` : ''}</div>` : ''}
@@ -4820,7 +4837,7 @@ function offView() {
     `${S.dying ? `<div style="margin-top:12px">${dyingPanel()}</div>` : ''}
   <button class="react ${c.reaction ? '' : 'used'}" style="margin-top:14px;width:100%;display:block" data-act="toReactions">
    <div class="ring">${I.shield}</div>
-   <div class="display" style="font-size:20px;font-weight:800">${c.reaction ? 'Reaction Ready' : 'Reaction Used'}</div>
+   <div class="display" style="font-size:20px;font-weight:700">${c.reaction ? 'Reaction Ready' : 'Reaction Used'}</div>
    <div class="sm mut" style="margin-top:4px">${c.reaction ? `You can respond once before your next turn${nR ? ` · <b style="color:var(--acct)">${c.held.length ? 'see held actions & ' : ''}${nR} option${nR > 1 ? 's' : ''} below ↓</b>` : ''}` : `${spentOn('reaction') === 'Surprised' ? 'Surprised — no reactions until your first turn ends' : `Used on ${esc(spentOn('reaction') || 'a reaction')} · back at the start of your turn`}`}</div>
   </button>
   ${condCard()}${c.status.length || S.cond.prone || condList().length || S.rage ? `<div class="status">${S.rage ? '<span class="tag a">Raging — halve bludgeoning, piercing & slashing damage</span>' : ''}${S.cond.prone ? '<span class="tag warn">Prone — melee attacks vs you have advantage</span>' : ''}${condTags()}${c.status.map(s => `<span class="tag a">${esc(s)}${s === 'Dodging' ? ' — attacks vs you have disadvantage' : ''}</span>`).join('')}</div>` : ''}
