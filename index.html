@@ -2304,6 +2304,7 @@ const SUB_SP = {
   'Oath of Redemption': ['sanctuary, sleep', 'calm emotions, hold person', 'counterspell, hypnotic pattern', "otiluke's resilient sphere, stoneskin", 'hold monster, wall of force'],
   'Oath of Glory': ['guiding bolt, heroism', 'enhance ability, magic weapon', 'haste, protection from energy', 'compulsion, freedom of movement', 'commune, flame strike'],
   'Oath of the Watchers': ['alarm, detect magic', 'moonbeam, see invisibility', 'counterspell, nondetection', 'aura of purity, banishment', 'hold monster, scrying'],
+  Oathbreaker: ['hellish rebuke, inflict wounds', 'crown of madness, darkness', 'animate dead, bestow curse', 'blight, confusion', 'contagion, dominate person'],
   'Oath of the Crown': ['command, compelled duel', 'warding bond, zone of truth', "aura of vitality, spirit guardians", 'banishment, guardian of faith', 'circle of power, geas'],
   'Gloom Stalker': ['disguise self', 'rope trick', 'fear', 'greater invisibility', 'seeming'],
   'Horizon Walker': ['protection from evil and good', 'misty step', 'haste', 'banishment', 'teleportation circle'],
@@ -10315,7 +10316,9 @@ const HC = {
       'Oath of Glory',
       'Oath of Conquest',
       'Oath of Redemption',
-      'Oath of the Watchers'
+      'Oath of the Watchers',
+      'Oath of the Crown',
+      'Oathbreaker'
     ]
   },
   Ranger: {
@@ -11248,8 +11251,10 @@ function hbWeapon(B, w) {
     // fighting styles: Archery (+2 to hit, ranged), Dueling (+2 damage, one-handed melee)
     arch = ranged && featOn(B, 'Archery') ? 2 : 0,
     duel = !ranged && !has('2') && featOn(B, 'Dueling') ? 2 : 0,
+    // Oathbreaker's Aura of Hate: +CHA to melee weapon damage
+    hate = !ranged && D.lv('Paladin') >= 7 && /Oathbreaker/i.test(D.sub('Paladin')) ? Math.max(1, m.CHA) : 0,
     hit = m[ab] + (w.np ? 0 : p) + mg + xtra(w.hit) + arch,
-    db = m[ab] + mg + xtra(w.dm) + duel,
+    db = m[ab] + mg + xtra(w.dm) + duel + hate,
     plus = v => (v ? (v > 0 ? '+' : '') + v : '');
   const props = [
     has('F') && 'Finesse',
@@ -11282,7 +11287,7 @@ function hbWeapon(B, w) {
     magic: mg || undefined,
     str: ab === 'STR',
     ranged: !!ranged,
-    note: [vers ? `Versatile: ${vers}${plus(db - duel)} with two hands` : '', duel ? 'Dueling +2 included: one weapon in hand, no other' : '', arch ? 'Archery +2 to hit included' : ''].filter(Boolean).join(' · '),
+    note: [vers ? `Versatile: ${vers}${plus(db - duel)} with two hands` : '', duel ? 'Dueling +2 included: one weapon in hand, no other' : '', arch ? 'Archery +2 to hit included' : '', hate ? `Aura of Hate +${hate} included` : ''].filter(Boolean).join(' · '),
     full: ''
   };
 }
@@ -12769,6 +12774,14 @@ function hfMore(B, D, F, add, res) {
           { res: 'cd' }
         );
       }
+      if (/Crown/i.test(s)) {
+        add('pal.challenge', "Channel Divinity: Champion's Challenge", 'B', `Creatures of your choice within 30 ft: WIS save DC ${pdc} or they can't willingly move more than 30 ft away from you.`, { res: 'cd' });
+        add('pal.tide', 'Channel Divinity: Turn the Tide', 'B', `Creatures of your choice within 30 ft that are at half their HP or less: each regains 1d6+${cha} HP.`, { res: 'cd' });
+      }
+      if (/Oathbreaker/i.test(s)) {
+        add('pal.control', 'Channel Divinity: Control Undead', 'A', `An undead within 30 ft: WIS save DC ${pdc} or it obeys your commands for 24 hours (undead of CR ${k} or higher are immune).`, { res: 'cd' });
+        add('pal.dread', 'Channel Divinity: Dreadful Aspect', 'A', `Creatures of your choice within 30 ft: WIS save DC ${pdc} or Frightened of you for 1 minute (one that ends its turn more than 30 ft away repeats the save).`, { res: 'cd' });
+      }
       if (/Watchers/i.test(s)) {
         add(
           'pal.will',
@@ -13603,6 +13616,22 @@ function hfSubs(B, D, F, add, res) {
       add('sub.red7', 'Aura of the Guardian', 'R', `When a creature within ${r} ft takes damage: you take that damage instead (it can't be reduced or prevented).`);
       if (k >= 15) pas('sub.red15', 'Protective Spirit', `At the end of each of your turns, if you're below half your HP and not Incapacitated: regain 1d6+${Math.floor(k / 2)} HP.`);
       if (k >= 20) pas('sub.red20', 'Emissary of Redemption', 'Resistance to all damage from other creatures, and a creature that hits you takes radiant damage equal to half what you take. You lose this against a creature you attack, damage or force to save, until a long rest.');
+    }
+    if (is('Paladin', /Crown/i)) {
+      add('sub.crown7', 'Divine Allegiance', 'R', 'When a creature within 5 ft takes damage: you take that damage instead (it can\'t be reduced or prevented).');
+      if (k >= 15) pas('sub.crown15', 'Unyielding Spirit', 'Advantage on saves against being Paralyzed or Stunned.');
+      if (k >= 20) {
+        cap20('exalted', 'Exalted Champion');
+        add('sub.crown20', 'Exalted Champion', 'A', 'For 1 hour: resistance to bludgeoning, piercing and slashing damage from nonmagical weapons; allies within 30 ft have Advantage on death saves; you and allies within 30 ft have Advantage on WIS saves. Once per long rest.', { res: 'exalted', status: 'Exalted Champion' });
+      }
+    }
+    if (is('Paladin', /Oathbreaker/i)) {
+      pas('sub.ob7', 'Aura of Hate', `You, and fiends and undead within ${r} ft, add +${cha} to melee weapon damage (already in your weapon damage).`);
+      if (k >= 15) pas('sub.ob15', 'Supernatural Resistance', 'Resistance to bludgeoning, piercing and slashing damage from nonmagical weapons.');
+      if (k >= 20) {
+        cap20('dread', 'Dread Lord');
+        add('sub.ob20', 'Dread Lord', 'A', `For 1 minute: a 30-ft aura dims bright light. Enemies Frightened of you that start their turn in it take 4d10 psychic damage, and attacks that rely on sight have Disadvantage against you and allies of your choice in it. As a Bonus Action: a melee spell attack (+${p + m.CHA}) against a creature in the aura, 3d10+${m.CHA} necrotic. Once per long rest.`, { res: 'dread', status: 'Dread Lord' });
+      }
     }
     if (is('Paladin', /Watchers/i)) {
       pas('sub.wat7', 'Aura of the Sentinel', `You and creatures of your choice within ${r} ft add +${p} to initiative.`);
