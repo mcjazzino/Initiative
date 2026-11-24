@@ -8299,6 +8299,15 @@ function doEffect(o) {
     c.attacksLeft++;
     c.atkMax = (c.atkMax || 0) + 1;
   }
+  // a feature that gives points back to another pool (Sorcerous Restoration)
+  if (o.gain) {
+    const r = CH().res[o.gain];
+    if (r) {
+      const before = r.cur;
+      r.cur = Math.min(r.max, r.cur + (o.gainN || 1));
+      toast(`<b>${esc(o.n)}</b>: +${r.cur - before} ${esc(resName(o.gain))} (now ${r.cur}/${r.max})`);
+    }
+  }
   // a feature that restores another pool (Uncanny Metabolism: all Focus back)
   if (o.refill) {
     const r = CH().res[o.refill];
@@ -8463,6 +8472,10 @@ const ACT = {
       r = f && ch.res[f.spk];
     if (!x || x.used >= x.max) return;
     const n = k === 'P' ? x.lvl : +k;
+    // you can never hold more Sorcery Points than your level allows
+    if (r && r.cur + n > r.max) return toast(`That would take you past your ${r.max} Sorcery Points`);
+    // 5e: converting takes your Bonus Action
+    if (is14('sorc') && !spend('B', 'Convert a spell slot')) return;
     x.used++;
     if (r) r.cur += n;
     closeSheet();
@@ -9625,7 +9638,7 @@ const ACT = {
     doEffect(o);
     if (o.curse && bh() && bh().patron === 'hexblade' && isProfane())
       addStatus(`Hexblade: +${CH().prof || 3} on your next hit vs the cursed target`);
-    if (!o.effect && !o.refill)
+    if (!o.effect && !o.refill && !o.gain)
       toast(
         o.atk
           ? `<b>${esc(o.n)}</b>: +${o.atk.hit} to hit · ${esc(o.atk.dmg)} ${esc(o.atk.type)}`
@@ -10338,7 +10351,8 @@ const HC = {
       'Swashbuckler',
       'Mastermind',
       'Inquisitive',
-      'Scout'
+      'Scout',
+      'Phantom'
     ]
   },
   Sorcerer: {
@@ -11178,6 +11192,7 @@ function hbHpSuggest(B) {
     const d = HC[c.n].hd;
     for (let l = 1; l <= c.lvl; l++) t += Math.max(1, (i === 0 && l === 1 ? d : d / 2 + 1) + D.m.CON);
   });
+  if (/Draconic/i.test(D.sub('Sorcerer')) && D.lv('Sorcerer') >= (D.o14 ? 1 : 3)) t += D.lv('Sorcerer'); // Draconic Resilience
   if (featOn(B, 'Tough')) t += 2 * D.L;
   if (featOn(B, 'Boon of Fortitude')) t += 40;
   return t;
@@ -11925,8 +11940,8 @@ function hfGen(B) {
         'sor.conv',
         'Font of Magic: Convert Spell Slots',
         'F',
-        'Turn a spell slot into Sorcery Points equal to its level.',
-        { kind: 'convertSlot', spk: 'sp' }
+        `Turn a spell slot into Sorcery Points equal to its level (no more than your ${k}).`,
+        { kind: 'convertSlot', spk: 'sp', rk: 'sorc', t14: 'B' }
       );
       const top = Math.min(5, hbMaxSp(B)),
         cost = { 1: 2, 2: 3, 3: 5, 4: 6, 5: 7 };
@@ -12288,7 +12303,7 @@ function hbBuild(B) {
     main = classes[0];
   const on = f => (f.opt ? (B.on || []).includes(f.id) : !(B.off || []).includes(f.id));
   const kept = G.F.filter(on),
-    IMM = [...new Set([...(G.F.filter(on).some(f => f.id === 'sub.land10') && E === '2014' ? ['poison'] : []), ...(G.F.filter(on).some(f => f.id === 'sub.forge17') ? ['fire'] : []), ...(E === '2014' && D.lv('Monk') >= 10 ? ['poison'] : [])])],
+    IMM = [...new Set([...(G.F.filter(on).some(f => f.id === 'sub.land10') && E === '2014' ? ['poison'] : []), ...(G.F.filter(on).some(f => f.id === 'sub.forge17') ? ['fire'] : []), ...(E === '2014' && D.lv('Monk') >= 10 ? ['poison'] : []), ...(G.F.filter(on).some(f => f.id === 'sub.sst18') ? ['lightning', 'thunder'] : [])])],
     druSub = D.sub('Druid'),
     sk = spcKey(B.species),
     so = spcOpt(B);
@@ -12459,6 +12474,7 @@ function hbBuild(B) {
         ...(kept.some(f => f.id === 'sub.land10') && E !== '2014' && LAND_WARD[B.land] ? [LAND_WARD[B.land]] : []),
         ...(kept.some(f => f.id === 'sub.war17') && E !== '2014' ? ['bludgeoning', 'piercing', 'slashing'] : []),
         ...(kept.some(f => f.id === 'sub.forge6') ? ['fire'] : []),
+        ...(kept.some(f => f.id === 'sub.sst6') ? ['lightning', 'thunder'] : []),
         ...(kept.some(f => f.id === 'sub.storm6') ? [{ Desert: 'fire', Sea: 'lightning', Tundra: 'cold' }[B.storm || 'Desert']] : []),
         ...hbSpcResist(B)
       ])
@@ -12847,6 +12863,13 @@ function hfMore(B, D, F, add, res) {
     }
   }
 
+  if ((k = lv('Sorcerer')) >= (o ? 20 : 5)) {
+    if (o) pas('sor.restore', 'Sorcerous Restoration', 'When you finish a short rest: regain 4 Sorcery Points (tap your pool).');
+    else {
+      res('sorrest', 'Sorcerous Restoration', 1, 'long');
+      add('sor.restore', 'Sorcerous Restoration', 'O', `When you finish a short rest: regain up to ${Math.floor(k / 2)} Sorcery Points. Once per long rest.`, { res: 'sorrest', gain: 'sp', gainN: Math.floor(k / 2) });
+    }
+  }
   if ((k = lv('Sorcerer')) && !o) {
     if (k >= 7) note('sor.innate', 'Sorcery Incarnate: no uses left? Spend 2 Sorcery Points instead. While it\'s active, you can use two Metamagic options on one spell.');
     if (k >= 20) note('sor.innate', 'Arcane Apotheosis: while it\'s active, one Metamagic option per turn costs no Sorcery Points.');
@@ -13805,6 +13828,21 @@ function hfSubs(B, D, F, add, res) {
       if (k >= 13) pas('sub.scout13', 'Ambush Master', 'Advantage on initiative. In the first round, the first creature you hit: your allies have Advantage on attacks against it until the start of your next turn.');
       if (k >= 17) add('sub.scout17', 'Sudden Strike', 'B', 'After you take the Attack action: one more attack. It can carry Sneak Attack even if you already used it this turn, but not against the same target.');
     }
+    if (is('Rogue', /Phantom/i)) {
+      const wd = Math.ceil(Math.ceil(k / 2) / 2);
+      res('wails', 'Wails from the Grave', p, 'long');
+      add('sub.ph3', 'Wails from the Grave', 'F', `Right after you deal Sneak Attack damage: another creature within 30 ft of the first takes ${wd}d6 necrotic${k >= 17 ? ', and Death\'s Friend deals it to the first creature too' : ''}.${k >= 9 ? ' Or destroy a soul trinket instead of spending a use.' : ''}`, { res: 'wails' });
+      if (k >= 9) {
+        pas('sub.ph9', 'Tokens of the Departed', `When a creature you can see within 30 ft dies, your Reaction makes a soul trinket (at most ${p}). While you hold one: Advantage on death saves and CON saves.`);
+        res('trinket', 'Soul trinkets', p, 'long');
+        add('sub.ph9b', 'Tokens of the Departed: ask a spirit', 'A', 'Destroy a soul trinket: ask its spirit one question. It answers briefly, in a language it knew.', { res: 'trinket' });
+      }
+      if (k >= 13) {
+        res('ghostwalk', 'Ghost Walk', 1, 'long');
+        add('sub.ph13', 'Ghost Walk', 'B', 'For 10 minutes: fly 10 ft and hover, attacks against you have Disadvantage, and you can move through creatures and objects (difficult terrain; 1d10 force if you end a turn inside one). Once per long rest, or destroy a soul trinket.', { res: 'ghostwalk', status: 'Ghost Walk: attacks against you have Disadvantage' });
+      }
+      if (k >= 17) pas('sub.ph17', "Death's Friend", 'Wails from the Grave also hits the first creature. After a long rest, a soul trinket appears in your hand if you have none.');
+    }
     if (is('Rogue', /Arcane Trickster/i)) {
       add('sub.at3', 'Mage Hand Legerdemain', 'B', 'Control your invisible Mage Hand: stow or retrieve objects, pick locks or disarm traps with it.');
       if (k >= 9) pas('sub.at9', 'Magical Ambush', 'If you are hidden when you cast a spell, the target has disadvantage on its save.');
@@ -13839,8 +13877,11 @@ function hfSubs(B, D, F, add, res) {
       pas('sub.drac1', 'Draconic Resilience', 'HP +1 per sorcerer level; without armour, AC 10 + DEX + CHA.');
       if (k >= 6) pas('sub.drac6', 'Elemental Affinity', `Add +${m.CHA} to one damage roll of a spell that deals your dragon's damage type${o ? '; spend 1 Sorcery Point for resistance to it for 1 hour' : ', and you have resistance to that type'}.`);
       if (k >= 14) {
-        res('wings', 'Dragon Wings', 1, 'long');
-        add('sub.drac14', 'Dragon Wings', 'B', 'Sprout wings: fly speed 60 ft for 1 hour (or until you dismiss them).', { res: 'wings', status: 'Flying', d14: 'Sprout wings: fly speed equal to your speed until you dismiss them.' });
+        if (o) add('sub.drac14', 'Dragon Wings', 'B', "Sprout wings (not through armour made for it): a flying speed equal to your speed until you dismiss them.", { status: 'Flying' });
+        else {
+          res('wings', 'Dragon Wings', 1, 'long');
+          add('sub.drac14', 'Dragon Wings', 'B', 'Sprout wings: fly speed 60 ft for 1 hour (or until you dismiss them). Once per long rest, or spend 3 Sorcery Points.', { res: 'wings', status: 'Flying' });
+        }
       }
       if (!o && k >= 18) {
         res('dragcomp', 'Dragon Companion', 1, 'long');
@@ -13873,8 +13914,38 @@ function hfSubs(B, D, F, add, res) {
         add('sub.aber18', 'Warping Implosion', 'A', `Teleport up to 120 ft. Creatures within 30 ft of where you left: STR save DC ${dc('CHA')} or 3d10 force damage and pulled next to that space (half, not pulled, on a success). Or spend 5 Sorcery Points.`, { res: 'implode' });
       }
     }
+    const sdc = dc('CHA');
+    if (is('Sorcerer', /Divine Soul/i)) {
+      res('favored', 'Favored by the Gods', 1, 'short');
+      add('sub.ds1', 'Favored by the Gods', 'F', 'When you fail a save or miss with an attack: add 2d4 to the roll.', { res: 'favored' });
+      if (k >= 6) add('sub.ds6', 'Empowered Healing', 'F', 'Once per turn, when you or an ally within 5 ft rolls dice to heal: spend 1 Sorcery Point to reroll any of them (use the new rolls).', { ...sp, once: 'empheal' });
+      if (k >= 14) add('sub.ds14', 'Otherworldly Wings', 'B', 'Spectral wings: a flying speed of 30 ft until you dismiss them.', { status: 'Flying 30 ft' });
+      if (k >= 18) {
+        res('unearthly', 'Unearthly Recovery', 1, 'long');
+        add('sub.ds18', 'Unearthly Recovery', 'B', 'When you have fewer than half your HP: regain half your hit point maximum.', { res: 'unearthly' });
+      }
+    }
+    if (is('Sorcerer', /Shadow/i)) {
+      pas('sub.sh1', 'Eyes of the Dark', 'Darkvision 120 ft.');
+      if (k >= 3) add('sub.sh3', 'Eyes of the Dark: Darkness (2 SP)', 'A', 'Cast Darkness without a slot. You can see through it.', { ...sp, step: 2 });
+      res('grave', 'Strength of the Grave', 1, 'long');
+      add('sub.sh1b', 'Strength of the Grave', 'F', 'When damage drops you to 0 HP (not radiant damage or a critical hit): CHA save, DC 5 + the damage taken. On a success you drop to 1 HP instead.', { res: 'grave' });
+      if (k >= 6) add('sub.sh6', 'Hound of Ill Omen (3 SP)', 'B', `A creature within 120 ft: a shadowy dire wolf appears within 30 ft of it for 5 minutes (${Math.floor(k / 2)} temporary HP, hunts only that target). While the hound is within 5 ft of it, the target has Disadvantage on saves against your spells.`, { ...sp, step: 3 });
+      if (k >= 14) add('sub.sh14', 'Shadow Walk', 'B', 'In dim light or darkness: teleport up to 120 ft to another space in dim light or darkness.');
+      if (k >= 18) add('sub.sh18', 'Umbral Form (6 SP)', 'B', 'For 1 minute: resistance to all damage except force and radiant, and you can move through creatures and objects (difficult terrain; 1d10 force if you end a turn inside one).', { ...sp, step: 6, status: 'Umbral Form' });
+    }
+    if (is('Sorcerer', /Storm/i)) {
+      add('sub.sst1', 'Tempestuous Magic', 'B', 'Right before or after you cast a level 1+ spell: fly up to 10 ft without provoking Opportunity Attacks.');
+      if (k >= 6) pas('sub.sst6', 'Heart of the Storm', `Resistance to lightning and thunder damage. When you start casting a level 1+ spell that deals lightning or thunder damage: creatures of your choice within 10 ft take ${Math.floor(k / 2)} lightning or thunder damage.`);
+      if (k >= 14) add('sub.sst14', "Storm's Fury", 'R', `When a creature hits you with a melee attack: it takes ${k} lightning damage, and makes a STR save DC ${sdc} or is pushed up to 20 ft away.`);
+      if (k >= 18) {
+        pas('sub.sst18', 'Wind Soul', 'Immunity to lightning and thunder damage, and a flying speed of 60 ft.');
+        res('windsoul', 'Wind Soul: share flight', 1, 'short');
+        add('sub.sst18b', 'Wind Soul: share flight', 'A', `For 1 hour: your flying speed drops to 30 ft, and up to ${3 + m.CHA} creatures within 30 ft get a flying speed of 30 ft.`, { res: 'windsoul' });
+      }
+    }
     if (is('Sorcerer', /Clockwork/i)) {
-      res('balance', 'Restore Balance', mx(m.CHA), 'long');
+      res('balance', 'Restore Balance', o ? p : mx(m.CHA), 'long');
       add('sub.clock1', 'Restore Balance', 'R', 'When a creature within 60 ft is about to roll a d20 with advantage or disadvantage: cancel it.', { res: 'balance' });
       if (k >= 6) add('sub.clock6', 'Bastion of Law', 'A', 'Spend 1–5 Sorcery Points: a creature within 30 ft gets that many d6 as a ward. When it takes damage, it spends dice to reduce the damage by their roll.', { ...sp, step: 1 });
       if (k >= 14) {
@@ -14635,7 +14706,7 @@ function hbFeatures() {
                   : f.id.startsWith('el.')
                   ? (k => `Elemental disciplines you know (pick ${k >= 17 ? 4 : k >= 11 ? 3 : k >= 6 ? 2 : 1})`)(+((B.cls.find(c => c.n === 'Monk') || {}).lvl || 0))
                   : f.id.startsWith('mm.')
-                  ? 'Metamagic options you know'
+                  ? (k => `Metamagic options you know (pick ${B.ed === '2014' ? (k >= 17 ? 4 : k >= 10 ? 3 : 2) : k >= 17 ? 6 : k >= 10 ? 4 : 2})`)(+((B.cls.find(c => c.n === 'Sorcerer') || {}).lvl || 0))
                   : 'Optional, if your table uses it'
               : 'From your class';
   const groups = [...new Set(shown.map(grp))];
