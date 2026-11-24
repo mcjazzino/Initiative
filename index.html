@@ -11865,14 +11865,11 @@ function hfGen(B) {
       'B',
       'When the marked target drops to 0 HP, move the mark to a new creature.'
     );
-    if (k >= 3 && /Hunter/i.test(sub('Ranger')))
-      add(
-        'rng.colossus',
-        'Colossus Slayer',
-        'F',
-        'Once per turn: +1d8 damage to a creature below its max HP.',
-        { once: 'colossus' }
-      );
+    // Tasha's optional Favored Foe (5e), instead of Favored Enemy
+    if (o) {
+      res('ffoe', 'Favored Foe', p, 'long');
+      add('rng.ffoe', 'Favored Foe', 'F', `When you hit a creature: mark it for 1 minute (Concentration). Once per turn, your hits against it deal +1d${k >= 14 ? 8 : k >= 6 ? 6 : 4} damage.`, { res: 'ffoe', status: 'Favored Foe' }, true);
+    }
   }
   if ((k = lv('Rogue'))) {
     add(
@@ -12383,7 +12380,7 @@ function hbBuild(B) {
       .forEach(x => {
         x.d = x.d.replace(/for 1d10 force\..*$/, `for 1d10+${m.CHA} force (Agonizing Blast).`);
       });
-  const sv = [...new Set([...(B.saves || HC[main.n].sv), ...(B.feats || []).filter(f => f.n === 'Resilient' && f.ab).map(f => ABN.indexOf(f.ab)), ...(D.lv('Fighter') >= 7 && /Samurai/i.test(D.sub('Fighter')) ? [4] : []), ...(D.lv('Monk') >= 14 ? [0, 1, 2, 3, 4, 5] : [])])],
+  const sv = [...new Set([...(B.saves || HC[main.n].sv), ...(B.feats || []).filter(f => f.n === 'Resilient' && f.ab).map(f => ABN.indexOf(f.ab)), ...(D.lv('Fighter') >= 7 && /Samurai/i.test(D.sub('Fighter')) ? [4] : []), ...(D.lv('Monk') >= 14 ? [0, 1, 2, 3, 4, 5] : []), ...(D.lv('Ranger') >= 7 && /Gloom Stalker/i.test(D.sub('Ranger')) ? [(B.saves || HC[main.n].sv).includes(4) ? 3 : 4] : [])])],
     aura = D.lv('Paladin') >= 6 ? mx1(m.CHA) : 0;
   const saves = ABN.map((a, i) => m[a] + (sv.includes(i) ? p : 0) + aura);
   const joat = D.lv('Bard') >= 2,
@@ -12407,6 +12404,8 @@ function hbBuild(B) {
   const initParts = [{ n: 'Dexterity', v: m.DEX }];
   if (joat) initParts.push({ n: 'Jack of All Trades', v: half, jo: true });
   if (B.alert || featOn(B, 'Alert')) initParts.push(E === '2014' ? { n: 'Alert', v: 5 } : { n: 'Alert', v: p });
+  if (D.lv('Ranger') >= 3 && /Gloom Stalker/i.test(D.sub('Ranger')) && m.WIS) initParts.push({ n: 'Dread Ambusher', v: m.WIS });
+  if (D.lv('Paladin') >= 7 && /Watchers/i.test(D.sub('Paladin'))) initParts.push({ n: 'Aura of the Sentinel', v: p });
   const weapons = (B.wp || []).map(w => hbWeapon(B, w)).filter(Boolean);
   // Armorer (level 3+): the armour's own weapon, with Intelligence if it's higher
   if (D.lv('Artificer') >= 3 && /Armorer/i.test(D.sub('Artificer'))) {
@@ -12820,7 +12819,7 @@ function hfMore(B, D, F, add, res) {
       res('veil', "Nature's Veil", wis, 'long');
       add('rng.veil', "Nature's Veil", 'B', 'Become Invisible until the end of your next turn.', { res: 'veil', status: 'Invisible' });
     }
-    if (k >= 18) pas('rng.feral', 'Feral Senses', 'Blindsight 30 ft.');
+    if (k >= 18) pas('rng.feral', 'Feral Senses', o ? "No Disadvantage attacking creatures you can't see, and you know where invisible creatures within 30 ft are (unless hidden from you)." : 'Blindsight 30 ft.');
     if (o && k >= 20) pas('rng.foe', 'Foe Slayer', `Once per turn: add +${m.WIS} to an attack or damage roll against your favored enemy.`);
   }
 
@@ -13645,19 +13644,47 @@ function hfSubs(B, D, F, add, res) {
 
   /* ---------- Ranger ---------- */
   if ((k = lv('Ranger')) >= 3) {
+    const sdc = dc('WIS'),
+      kn = 'Hunter\'s Mark';
+    if (is('Ranger', /Hunter/i)) {
+      // Hunter's Prey and the later choices: switch on the ones you picked
+      // until you pick any, Colossus Slayer counts as picked (characters built before the choices existed had it)
+      const picked = (B.on || []).some(x => x.startsWith('hunt.')),
+        hp = (id, n, t, d, x = {}) => add('hunt.' + id, n, t, d, x, picked || id !== 'colossus');
+      if (!o) pas('sub.hunt3', "Hunter's Lore", `While a creature is marked by your ${kn}: you know whether it has any immunities, resistances or vulnerabilities, and what they are.`);
+      hp('colossus', "Colossus Slayer", 'F', 'Once per turn, when you hit a creature that is missing any HP: +1d8 damage.', { once: 'colossus' });
+      if (o) hp('giant', 'Giant Killer', 'R', 'When a Large or larger creature within 5 ft hits or misses you with an attack: make one attack against it.');
+      hp('horde', 'Horde Breaker', 'F', 'Once per turn, when you make a weapon attack: make another attack with the same weapon against a different creature within 5 ft of the first target (and within your range).', { once: 'horde' });
+      if (k >= 7) {
+        hp('escape', 'Escape the Horde', 'F', 'Opportunity Attacks against you have Disadvantage.', { passive: true });
+        hp('multi', 'Multiattack Defense', 'F', o ? 'When a creature hits you with an attack: +4 AC against its other attacks this turn.' : 'When a creature hits you with an attack: it has Disadvantage on its other attacks against you this turn.', { passive: true });
+        if (o) hp('steel', 'Steel Will', 'F', 'Advantage on saves against being Frightened.', { passive: true });
+      }
+      if (k >= 11) {
+        if (o) {
+          hp('volley', 'Volley', 'A', 'A ranged weapon attack against any number of creatures within 10 ft of a point you can see within range (one attack roll each, ammunition for each).');
+          hp('whirl', 'Whirlwind Attack', 'A', 'A melee weapon attack against any number of creatures within 5 ft of you (one attack roll each).');
+        } else pas('sub.hunt11', "Superior Hunter's Prey", `Once per turn, when you deal damage to your ${kn} target: deal the mark's extra damage to another creature you can see within 30 ft of it too.`);
+      }
+      if (k >= 15) {
+        if (o) {
+          hp('evasion', 'Evasion', 'F', 'A DEX save for half damage: no damage on a success, half on a failure.', { passive: true });
+          hp('tide', 'Stand Against the Tide', 'R', 'When a creature misses you with a melee attack: it repeats the attack against another creature of your choice (not itself).');
+          hp('dodge', 'Uncanny Dodge', 'R', 'When an attacker you can see hits you: halve the damage.');
+        } else add('sub.hunt15', "Superior Hunter's Defense", 'R', 'When you take damage: resistance to that damage, and to the same type for the rest of the turn.');
+      }
+    }
     if (is('Ranger', /Beast Master/i)) {
-      add(
-        'sub.bm3',
-        'Primal Companion',
-        'B',
-        `Command your beast (Land, Sea or Sky; AC ${13 + m.WIS}, ${5 + 5 * k} HP) to take an action. Its Beast's Strike: +${p + m.WIS} to hit, 1d8+2+${m.WIS} damage. If you don't command it, it takes the Dodge action.${k >= 11 ? ' Bestial Fury: it makes two Beast\'s Strikes, and the first hit each turn on your Hunter\'s Mark target adds the mark\'s damage.' : ''}`
-      );
-      if (k >= 7) pas('sub.bm7', 'Exceptional Training', "Your beast can Dash, Disengage, Dodge or Help as a Bonus Action, and its attacks can deal force damage.");
+      if (o)
+        add('sub.bm3', 'Primal Companion', 'B', `Command your beast (Land, Sea or Sky; AC ${13 + p}, ${5 + 5 * k} HP, or ${4 * k} as Sky) to Attack: ${'+' + (p + m.WIS)} to hit, 1d8+${p} damage (1d4+${p} as Sky). Otherwise it takes the Dodge action.${k >= 5 ? ' From level 5 you can also command it with your Action, giving up one of your attacks.' : ''}${k >= 11 ? ' Bestial Fury: when commanded, it makes two attacks.' : ''}`);
+      else
+        add('sub.bm3', 'Primal Companion', 'B', `Command your beast (Land, Sea or Sky; AC ${13 + m.WIS}, ${5 + 5 * k} HP, or ${4 * k} as Sky) to take an action. Its Beast's Strike: +${p + m.WIS} to hit, 1d8+2+${m.WIS} damage (1d4+3+${m.WIS} as Sky). If you don't command it, it takes the Dodge action.${k >= 5 ? ' When you take the Attack action, you can give up one attack to command a Beast\'s Strike.' : ''}${k >= 11 ? ' Bestial Fury: it makes two Beast\'s Strikes, and the first hit each turn on your Hunter\'s Mark target adds the mark\'s damage.' : ''}`);
+      if (k >= 7) pas('sub.bm7', 'Exceptional Training', o ? "When you command your beast, it can also Dash, Disengage, Dodge or Help as a Bonus Action. Its attacks count as magical." : "When you don't command your beast, it can Dash, Disengage, Dodge or Help as a Bonus Action instead, and its attacks can deal force damage.");
       if (k >= 15) pas('sub.bm15', 'Share Spells', 'A spell you cast on yourself also affects your beast if it\'s within 30 ft.');
     }
     if (is('Ranger', /Fey Wanderer/i)) {
-      pas('sub.fey3', 'Dreadful Strikes', `Once per turn, a weapon hit deals +1d${k >= 11 ? 6 : 4} psychic damage.`);
-      if (k >= 7) add('sub.fey7', 'Beguiling Twist', 'R', `When a creature within 120 ft succeeds on a save against Charmed or Frightened: another creature within 120 ft makes a WIS save DC ${dc('WIS')} or is Charmed or Frightened (your choice) for 1 minute.`);
+      pas('sub.fey3', 'Dreadful Strikes', `When you hit a creature with a weapon: +1d${k >= 11 ? 6 : 4} psychic damage (once per turn for each creature). You also add +${mx(m.WIS)} to your CHA checks.`);
+      if (k >= 7) add('sub.fey7', 'Beguiling Twist', 'R', `You have Advantage on saves against Charmed and Frightened. When you or a creature within 120 ft succeeds on a save against Charmed or Frightened: another creature within 120 ft makes a WIS save DC ${sdc} or is Charmed or Frightened (your choice) for 1 minute.`);
       if (k >= 11) {
         res('feyrein', 'Fey Reinforcements', 1, 'long');
         add('sub.fey11', 'Fey Reinforcements', 'A', 'Cast Summon Fey without a slot or material component (and without concentration if you limit it to 1 minute).', { res: 'feyrein' });
@@ -13668,11 +13695,37 @@ function hfSubs(B, D, F, add, res) {
       }
     }
     if (is('Ranger', /Gloom Stalker/i)) {
-      add('sub.gs3', 'Dread Ambusher', 'F', `On your first turn of combat: +10 ft speed. Once per turn on a hit (WIS-mod times per long rest in 5.5e): +2d6 psychic damage${o ? ' (5e: one extra attack on your first turn that adds 1d8)' : ''}.`, { once: 'ambush' });
-      pas('sub.gs3b', 'Umbral Sight', 'Darkvision 60 ft (or +60 ft). Creatures relying on darkvision can\'t see you in darkness.');
-      if (k >= 7) pas('sub.gs7', 'Iron Mind', 'Proficiency in WIS saves (or INT/CHA if you already have it).');
-      if (k >= 11) pas('sub.gs11', "Stalker's Flurry", o ? 'Once per turn when you miss with a weapon attack: make another weapon attack.' : 'Dread Ambusher\'s extra damage can also make the target Frightened, or hit a second creature within 5 ft.');
-      if (k >= 15) add('sub.gs15', 'Shadowy Dodge', 'R', 'When a creature attacks you without advantage: it has disadvantage. In 5.5e, you can also teleport 30 ft afterwards.');
+      if (o) add('sub.gs3', 'Dread Ambusher', 'F', `Your first turn of combat: +10 ft speed, and when you take the Attack action, one extra weapon attack; if it hits, +1d8 damage of the weapon's type. You add +${m.WIS} to initiative (already in your bonus).`, { once: 'ambush' });
+      else {
+        res('dread', 'Dreadful Strike', mx(m.WIS), 'long');
+        add('sub.gs3', 'Dreadful Strike', 'F', `Once per turn, when you hit with a weapon: +2d${k >= 11 ? 8 : 6} psychic damage.${k >= 11 ? ` Stalker's Flurry: also choose Sudden Strike (another attack against a creature within 5 ft of the target) or Mass Fear (the target and creatures within 10 ft of it: WIS save DC ${sdc} or Frightened until the start of your next turn).` : ''}`, { res: 'dread', once: 'dreadful' });
+        pas('sub.gs3a', 'Dread Ambusher', `Ambusher's Leap: at the start of your first turn of combat: +10 ft speed until the end of that turn. You add +${m.WIS} to initiative (already in your bonus).`);
+      }
+      pas('sub.gs3b', 'Umbral Sight', "Darkvision 60 ft (or +60 ft). In darkness you're Invisible to creatures relying on darkvision to see you.");
+      if (k >= 7) pas('sub.gs7', 'Iron Mind', 'Proficiency in WIS saves, or INT if you already had it (already in your save bonuses).');
+      if (o && k >= 11) pas('sub.gs11', "Stalker's Flurry", 'Once per turn, when you miss with a weapon attack: make another weapon attack as part of the same action.');
+      if (k >= 15) add('sub.gs15', 'Shadowy Dodge', 'R', o ? "When a creature attacks you without Advantage: it has Disadvantage on that attack." : 'When a creature makes an attack roll against you: it has Disadvantage. Hit or miss, you can then teleport up to 30 ft to a space you can see.');
+    }
+    if (is('Ranger', /Horizon Walker/i)) {
+      add('sub.hw3', 'Planar Warrior', 'B', `A creature within 30 ft: the next time you hit it with a weapon this turn, all the damage is force and it takes +${k >= 11 ? 2 : 1}d8 force.`, { status: 'Planar Warrior' });
+      if (k >= 7) {
+        res('ethereal', 'Ethereal Step', 1, 'short');
+        add('sub.hw7', 'Ethereal Step', 'B', 'Cast Etherealness without a slot, but it ends at the end of this turn.', { res: 'ethereal' });
+      }
+      if (k >= 11) pas('sub.hw11', 'Distant Strike', 'When you take the Attack action: teleport up to 10 ft before each attack. If you attack at least two different creatures, make one more attack against a third.');
+      if (k >= 15) add('sub.hw15', 'Spectral Defense', 'R', 'When you take damage from an attack: resistance to that damage.');
+    }
+    if (is('Ranger', /Swarmkeeper/i)) {
+      add('sub.sk3', 'Gathered Swarm', 'F', `Once per turn, after you hit a creature: it takes +1d${k >= 11 ? 8 : 6} piercing; or it makes a STR save DC ${sdc} or is moved up to 15 ft${k >= 11 ? ' (and knocked Prone on a failure)' : ''}; or you move 5 ft without provoking.`, { once: 'swarm' });
+      if (k >= 7) {
+        res('writhing', 'Writhing Tide', p, 'long');
+        add('sub.sk7', 'Writhing Tide', 'B', 'For 1 minute: a flying speed of 10 ft, and you can hover.', { res: 'writhing', status: 'Flying 10 ft (swarm)' });
+      }
+      if (k >= 11) pas('sub.sk11', 'Mighty Swarm', 'Gathered Swarm deals 1d8, can knock a creature Prone, and when it moves you, you have Half Cover until your next turn.');
+      if (k >= 15) {
+        res('dispersal', 'Swarming Dispersal', p, 'long');
+        add('sub.sk15', 'Swarming Dispersal', 'R', 'When you take damage: resistance to it, then teleport up to 30 ft to a space you can see.', { res: 'dispersal' });
+      }
     }
   }
 
@@ -14503,7 +14556,9 @@ function hbFeatures() {
             : f.opt
               ? f.id.startsWith('bm.')
                 ? 'Maneuvers you know'
-                : f.id.startsWith('el.')
+                : f.id.startsWith('hunt.')
+                  ? 'Your Hunter choices: switch on the ones you picked'
+                  : f.id.startsWith('el.')
                   ? (k => `Elemental disciplines you know (pick ${k >= 17 ? 4 : k >= 11 ? 3 : k >= 6 ? 2 : 1})`)(+((B.cls.find(c => c.n === 'Monk') || {}).lvl || 0))
                   : f.id.startsWith('mm.')
                   ? 'Metamagic options you know'
@@ -16018,10 +16073,10 @@ function featurePets() {
       n: 'Primal Companion',
       kind: 'turn',
       cmd: 'B',
-      ac: 13 + mods[4],
+      ac: 13 + (is14('ranger') ? prof : mods[4]),
       max: 5 + 5 * rng,
       speed: '40 ft (climb 40 ft as Beast of the Land)',
-      atk: [{ n: "Beast's Strike", hit: prof + mods[4], dmg: `1d8+${2 + mods[4]}`, type: 'piercing or slashing', range: '5 ft' }],
+      atk: [{ n: is14('ranger') ? 'Maul' : "Beast's Strike", hit: prof + mods[4], dmg: is14('ranger') ? `1d8+${prof}` : `1d8+${2 + mods[4]}`, type: 'piercing or slashing', range: '5 ft' }],
       notes: [
         'Land, Sea or Sky beast: pick the form on your sheet.',
         "If you don't command it, it takes the Dodge action."
@@ -16395,15 +16450,16 @@ function rollCard(m) {
     const m = f.once === 'blades' ? (f.d || '').match(/\+(\d+d6) psychic/) : (f.d || '').match(/roll the (d\d+)/);
     if (m) RC.notes.push({ html: '', ex: { label: f.once === 'blades' ? `Psychic Blades: +${m[1]} psychic (a Bardic Inspiration)` : `Blade Flourish: +1${m[1]} (a Bardic Inspiration; pick the flourish)`, expr: f.once === 'blades' ? m[1] : '1' + m[1], once: f.once, res: f.res } });
   });
-  // monk on-hit options that spend Focus/ki once per turn: Deft Strike (kensei weapons), Hand of Harm (unarmed strikes)
+  // once-per-turn on-hit options: Deft Strike (kensei weapons), Hand of Harm (unarmed), Colossus Slayer, Dreadful Strike, Gathered Swarm (weapons)
   {
     const w = (CH().weapons || []).find(x => x.n === RC.name),
       unarmed = /unarmed/i.test(RC.name) || (w && w.unarmed);
     feats().forEach(f => {
-      if (!/^(deft|harm)$/.test(f.once || '') || c.flags[f.once] || !f.res || !resOK(f.res)) return;
-      if (f.once === 'harm' ? !unarmed : unarmed) return;
-      const m = (f.d || '').match(/\+(1d\d+(?:\+\d+)?)/);
-      if (m) RC.notes.push({ html: '', ex: { label: `${f.n}: +${m[1]}${f.once === 'harm' ? ' necrotic' : ''} (1 ${resName(f.res).replace(/s$/, "")})`, expr: m[1], once: f.once, res: f.res } });
+      const key = f.once || '';
+      if (!/^(deft|harm|colossus|dreadful|swarm)$/.test(key) || c.flags[key] || (f.res && !resOK(f.res))) return;
+      if (key === 'harm' ? !unarmed : key === 'deft' ? unarmed : !w || w.unarmed) return;
+      const m = (f.d || '').match(/\+(\d*d\d+(?:\+\d+)?)( [a-z]+)?/);
+      if (m) RC.notes.push({ html: '', ex: { label: `${f.n}: +${m[1]}${m[2] && m[2] !== ' damage' ? m[2] : key === 'harm' ? ' necrotic' : ''}${f.res ? (resName(f.res) === f.n ? ' (uses 1)' : ` (1 ${resName(f.res).replace(/s$/, '')})`) : ''}`, expr: m[1], once: key, res: f.res } });
     });
     if (w && (w.ranged || /^Dart/.test(w.n)) && c.status.some(x => /^Kensei's Shot/.test(x))) auto("Kensei's Shot: +1d4", '1d4');
   }
