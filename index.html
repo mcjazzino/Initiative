@@ -431,6 +431,27 @@ body.hasroll #rollbg{opacity:1;pointer-events:auto}
 :root[data-theme="light"] .btn.pri{box-shadow:0 8px 20px -10px var(--acc)}
 .dock .startbtn.dockgo{font-family:Cinzel,serif;font-weight:600;letter-spacing:.04em;border:1.5px solid var(--trim)}
 .startbtn{border:1.5px solid var(--trim)}
+
+/* ---------- the menu: grouped by when you need it ---------- */
+.mhead{font-size:11.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin:20px 4px 8px}
+.mhead:first-child{margin-top:4px}
+.mgrp{background:var(--card);border:1px solid var(--edge);border-radius:16px;overflow:hidden}
+.mgrp + .mgrp,.stepper + .mgrp,.mgrp + .xs + .mgrp{margin-top:10px}
+.mres{padding:4px 14px}
+.mres .wpn{padding:10px 0}
+.mrow{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:10px 14px;background:none;border:0;border-top:1px solid var(--edge);color:var(--txt);font:inherit;font-weight:700;font-size:15px;text-align:left;cursor:pointer}
+.mrow:first-child{border-top:0}
+.mrow:active{background:var(--wash)}
+.mrow .mi{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:var(--soft);color:var(--acct);flex:none}
+.mrow .mi svg{width:18px;height:18px}
+.mrow .mi .cdot{margin:0}
+.mrow .ml{flex:1;min-width:0}
+.mrow .mv{color:var(--mut);font-weight:600;font-size:13px;text-align:right}
+.mrow .chev{color:var(--dim);font-size:20px;line-height:1;margin-left:2px}
+.mrow.bad{color:var(--bad)}
+.mrow.bad .mi{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad)}
+.mrest button{display:flex;align-items:center;justify-content:center;gap:8px}
+.mrest svg{width:18px;height:18px}
 </style>
 </head>
 <body>
@@ -6380,25 +6401,55 @@ function notesSheet() {
     .map(([t, d]) => `<div class="item"><div class="t">${esc(t)}</div><div class="d">${esc(d)}</div></div>`)
     .join('')}`;
 }
+// the menu, ordered by when you need it: this fight (or between fights), your character, the app
+const MI = {
+  moon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>',
+  paw: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="10" r="2"/><circle cx="10" cy="5.5" r="2"/><circle cx="14" cy="5.5" r="2"/><circle cx="18" cy="10" r="2"/><path d="M12 11c-3 0-5.5 3.5-5.5 6 0 2 1.5 3 3 3 1 0 1.6-.6 2.5-.6s1.5.6 2.5.6c1.5 0 3-1 3-3 0-2.5-2.5-6-5.5-6z"/></svg>',
+  pen: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z M13.5 6.5l4 4"/></svg>',
+  flag: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4 M5 4h11l-2 4 2 4H5"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+  info: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5 M12 8h.01"/></svg>',
+  note: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z M14 3v5h5 M9 13h7 M9 17h5"/></svg>'
+};
+const CHEV = '<span class="chev" aria-hidden="true">›</span>';
+// one row of the menu: icon, words, its current value, and where it goes
+function mrow(act, icon, label, value = '', o = {}) {
+  return `<button class="mrow${o.bad ? ' bad' : ''}" data-act="${act}"${o.arg ? ` data-arg="${o.arg}"` : ''}><span class="mi">${icon}</span><span class="ml">${label}</span>${value ? `<span class="mv">${value}</span>` : ''}${o.bad ? '' : CHEV}</button>`;
+}
+function mcSheet() {
+  const m = mcCheck() || [];
+  return `<button class="backlink" data-act="back">‹ Back</button>${m.map(x => `<div class="wpn"><div style="flex:1"><b>${esc(x.c.n)} ${x.c.lvl}</b><div class="sm mut">Needs ${esc(x.txt)}</div>${x.ok ? '' : `<div class="sm" style="color:var(--warn)">Not met: ${esc(x.miss.join(', '))}</div>`}</div><span class="tag ${x.ok ? 'ok' : 'warn'}">${x.ok ? '✓ Met' : 'Check with DM'}</span></div>`).join('')}<div class="sm mut" style="margin-top:8px">Based on your current scores. You need these to take a level in a class, and to leave your current one.</div>`;
+}
 function menuSheet() {
   const ch = CH(),
-    r = Object.values(ch.res);
-  return `${r.length ? `<div class="card"><div class="xs mut" style="margin-bottom:8px">Resources · match these to your sheet</div>${r.map(x => `<div class="wpn"><b>${esc(resName(x.k))}</b><div class="row"><button class="iconbtn" style="width:32px;height:32px" data-act="resAdj" data-arg="${x.k}|-1">−</button><span class="num" style="min-width:48px;text-align:center">${x.cur}/${x.max}</span><button class="iconbtn" style="width:32px;height:32px" data-act="resAdj" data-arg="${x.k}|1">+</button></div></div>`).join('')}</div>` : ''}
-  ${(() => {
-    const m = mcCheck();
-    if (!m) return '';
-    return `<div class="card" style="margin-top:10px"><div class="xs mut" style="margin-bottom:8px">Multiclass</div>${m.map(x => `<div class="wpn"><div style="flex:1"><b>${esc(x.c.n)} ${x.c.lvl}</b><div class="sm mut">Needs ${esc(x.txt)}</div>${x.ok ? '' : `<div class="sm" style="color:var(--warn)">Not met: ${esc(x.miss.join(', '))}</div>`}</div><span class="tag ${x.ok ? 'ok' : 'warn'}">${x.ok ? '✓ Met' : 'Check with DM'}</span></div>`).join('')}<div class="sm mut" style="margin-top:8px">Based on your current scores. You need these to take a level in a class, and to leave your current one.</div></div>`;
-  })()}
-  <div class="stepper" style="grid-template-columns:1fr 1fr"><button data-act="restSheet">Short Rest</button><button data-act="rest" data-arg="long">Long Rest</button></div>
-  ${ch.bh ? `<button class="btn" style="margin-top:10px;border-color:var(--line)" data-act="bhSetup">${I.heart} Blood Hunter setup</button>` : ''}
-  <button class="btn" style="margin-top:10px" data-act="pets">Companions${pets().length ? ` <span class="tag">${pets().length}</span>` : ''}</button>
-  ${sheetNotes().length ? `<button class="btn" style="margin-top:10px" data-act="notes">Rules notes from your sheet <span class="tag warn">${sheetNotes().length}</span></button>` : ''}
-  ${ch.source === 'ddb' && checkNeeds().any ? `<button class="btn" style="margin-top:10px" data-act="importCheck">Quick check <span class="tag warn">needs you</span></button>` : ''}
-  <button class="btn" style="margin-top:10px" data-act="${ch.source === 'hand' ? 'hbEdit' : 'hbStart'}">${ch.source === 'hand' ? 'Edit your character' : 'Build a character by hand'}</button>
-  <button class="btn" style="margin-top:10px" data-act="colOpen"><i class="cdot"></i> Appearance: ${LOOKS[myLook]} · ${esc(myCol ? (COLS.find(x => x[1] === myCol) || ['Class colour'])[0] : 'class colour')}</button>
-  <button class="btn" style="margin-top:10px" data-act="rules">${I.book} Ruleset: ${ED[ch.edition]}${customCount() ? ` + ${customCount()} house rules` : ''}</button>
-  ${C().phase !== 'idle' ? `<button class="btn" style="margin-top:10px;color:var(--bad)" data-act="endCombatAsk">End Combat</button>` : ''}
-  <div class="row" style="gap:8px;margin-top:10px"><button class="btn" style="flex:1" data-act="fbOpen">Send feedback</button><button class="btn" style="flex:1" data-act="aboutOpen">About this beta</button></div>
+    r = Object.values(ch.res),
+    fight = C().phase !== 'idle',
+    n = pets().length,
+    mc = mcCheck(),
+    notes = sheetNotes().length;
+  const resources = r.length
+    ? `<div class="mgrp mres">${r.map(x => `<div class="wpn"><b>${esc(resName(x.k))}</b><div class="row"><button class="iconbtn" style="width:32px;height:32px" data-act="resAdj" data-arg="${x.k}|-1" aria-label="One less">−</button><span class="num" style="min-width:48px;text-align:center">${x.cur}/${x.max}</span><button class="iconbtn" style="width:32px;height:32px" data-act="resAdj" data-arg="${x.k}|1" aria-label="One more">+</button></div></div>`).join('')}</div><div class="sm mut" style="margin:6px 4px 0">Match these to your sheet.</div>`
+    : '';
+  const companions = mrow('pets', MI.paw, 'Companions', n ? `${n}` : '');
+  const top = fight
+    ? `<div class="mhead">This fight</div>${resources}<div class="mgrp">${companions}${mrow('endCombatAsk', MI.flag, 'End combat', '', { bad: true })}</div>`
+    : `<div class="mhead">Between fights</div><div class="stepper mrest" style="grid-template-columns:1fr 1fr"><button data-act="restSheet">${I.hour} Short Rest</button><button data-act="rest" data-arg="long">${MI.moon} Long Rest</button></div>${resources}<div class="mgrp">${companions}</div>`;
+  const character = [
+    mrow(ch.source === 'hand' ? 'hbEdit' : 'hbStart', MI.pen, ch.source === 'hand' ? 'Edit your character' : 'Build a character by hand'),
+    mrow('rules', I.book, 'Ruleset', `${ED[ch.edition]}${customCount() ? ` · ${customCount()} house rules` : ''}`),
+    ch.bh ? mrow('bhSetup', I.heart, 'Blood Hunter setup') : '',
+    mc ? mrow('mcOpen', I.swap, 'Multiclass requirements', mc.every(x => x.ok) ? 'All met' : '<span class="tag warn">Check</span>') : '',
+    notes ? mrow('notes', MI.note, 'Rules notes from your sheet', `<span class="tag warn">${notes}</span>`) : '',
+    ch.source === 'ddb' && checkNeeds().any ? mrow('importCheck', MI.note, 'Quick check', '<span class="tag warn">needs you</span>') : ''
+  ].join('');
+  const app = [
+    mrow('colOpen', '<i class="cdot"></i>', 'Appearance', `${LOOKS[myLook]} · ${esc(myCol ? (COLS.find(x => x[1] === myCol) || ['Class colour'])[0] : 'class colour')}`),
+    mrow('fbOpen', MI.chat, 'Send feedback'),
+    mrow('aboutOpen', MI.info, 'About this beta')
+  ].join('');
+  return `${top}
+  <div class="mhead">Your character</div><div class="mgrp">${character}</div>
+  <div class="mhead">The app</div><div class="mgrp">${app}</div>
   <p class="sm mut" style="margin-top:16px;text-align:center">Initiative · beta ${APP_VERSION} · ${APP_BUILT}<br>Your character is kept on this device.</p>`;
 }
 const APP_VERSION = '0.9',
@@ -8886,6 +8937,9 @@ const ACT = {
   },
   notes() {
     pushSheet('Rules notes', notesSheet);
+  },
+  mcOpen() {
+    pushSheet('Multiclass requirements', mcSheet);
   },
   colOpen() {
     pushSheet('Appearance', colSheet);
