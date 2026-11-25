@@ -787,6 +787,27 @@ const masteryOf = n => {
     .sort((a, b) => b.length - a.length)[0];
   return k ? MASTERY[k] : null;
 };
+// a class that grants Weapon Mastery, in any slot of a multiclass
+const hasMasteryClass = ch =>
+  MASTERY_CLASSES.includes(ch.cls) ||
+  (ch.classes || []).some(c => MASTERY_CLASSES.includes(String(c.n || '').toLowerCase()));
+// the mastery this character can use with a weapon, or null. An imported character
+// records the weapon kinds it picked (ch.mastered: kind -> property); otherwise any
+// weapon counts for a class with Weapon Mastery.
+function wMastery(w, ch = CH()) {
+  if (!w || w.beast || is14('mastery')) return null;
+  const nm = String(w.base || w.n).toLowerCase(),
+    n2 = String(w.n).toLowerCase(),
+    M = ch.mastered;
+  if (M) {
+    const k = Object.keys(M).find(k => {
+      const x = k.toLowerCase();
+      return x === nm || x === n2 || nm.includes(x) || n2.includes(x);
+    });
+    return k ? M[k] : null;
+  }
+  return hasMasteryClass(ch) ? masteryOf(w.base || w.n) : null;
+}
 
 const W = (n, hit, dmg, type, range = 'Melee 5 ft', light = false) => ({ n, hit, dmg, type, range, light });
 const SP = (n, lvl, t, d, conc = false, x = {}) => ({ n, lvl, t, d, conc, ...x });
@@ -2865,7 +2886,6 @@ function clsLine(ch) {
 function clsBar() {
   const L = clsList();
   if (!L) return '';
-  const tot = L.reduce((t, c) => t + c.lvl, 0);
   return `<div class="clsbar" aria-label="Class levels">${L.map(c => `<i style="flex:${c.lvl};background:${CLS[c.k].c}" title="${esc(c.n)} ${c.lvl}"></i>`).join('')}</div>`;
 }
 function clsTag(n) {
@@ -5202,6 +5222,12 @@ function castSpell(s, slotKey) {
     toast(esc(why));
     return;
   }
+  // a levelled spell needs a slot to spend (the buttons only offer ones you have; this is the safety net)
+  const needSlot = s.lvl > 0 && (!s.noslot || (s.slotFallback && s.res && !resOK(s.res)));
+  if (needSlot && !(CH().slots || {})[slotKey]) {
+    toast(`No spell slot left for <b>${esc(s.n)}</b>`);
+    return;
+  }
   let t = effT(s),
     quick = false;
   if (c.flags.quicken && s.t === 'A' && t === 'B') {
@@ -5506,9 +5532,10 @@ const offDmg = w => {
   return add ? m[1] + (add > 0 ? '+' : '') + add : m[1];
 };
 function offNick(w) {
-  if (is14('twf') || is14('mastery') || !MASTERY_CLASSES.includes(CH().cls)) return false;
+  // RAW doesn't say which of the two Light weapons needs Nick, so either counts
+  if (is14('twf')) return false;
   const first = CH().weapons.find(x => x.n === C().flags.lightAtk);
-  return masteryOf(w.n) === 'Nick' || !!(first && masteryOf(first.n) === 'Nick');
+  return wMastery(w) === 'Nick' || wMastery(first) === 'Nick';
 }
 function offState() {
   const c = C(),
@@ -5561,7 +5588,7 @@ function offhandBlock(onlyBonus) {
       <div class="row" style="gap:5px;margin-top:5px;flex-wrap:wrap">${nick ? `<span class="tag a">Nick mastery · free</span>` : costTag('B')}${!ok ? '<span class="tag">Bonus used</span>' : ''}</div></div>
       <div style="text-align:right;flex:none;padding-left:10px"><div class="num" style="color:var(--acct)">+${w.hit}</div><div class="sm mut">${esc(dmg)} ${esc(w.type)}</div></div>
       <button class="use ${ok ? '' : 'sec2'}" style="margin-left:12px" data-act="offhand" data-arg="${CH().weapons.indexOf(w)}">Attack</button></div>
-      <div class="sm mut" style="margin-top:8px">You attacked with your ${esc(c.flags.lightAtk)}, so you can strike once with your ${esc(w.n)}. Damage is <b style="color:var(--txt)">${esc(dmg)}</b> — no ability bonus on this extra hit. ${nick ? `Your ${esc(masteryOf(w.n) === 'Nick' ? w.n : c.flags.lightAtk)}'s <b style="color:var(--txt)">Nick</b> weapon mastery makes this part of your Attack action, so your Bonus Action stays free.` : old ? 'This costs your Bonus Action.' : 'This costs your Bonus Action — a weapon with the Nick mastery would make it free.'}</div></div>`;
+      <div class="sm mut" style="margin-top:8px">You attacked with your ${esc(c.flags.lightAtk)}, so you can strike once with your ${esc(w.n)}. Damage is <b style="color:var(--txt)">${esc(dmg)}</b> — no ability bonus on this extra hit. ${nick ? `Your ${esc(wMastery(w) === 'Nick' ? w.n : c.flags.lightAtk)}'s <b style="color:var(--txt)">Nick</b> weapon mastery makes this part of your Attack action, so your Bonus Action stays free.` : old ? 'This costs your Bonus Action.' : 'This costs your Bonus Action — a weapon with the Nick mastery would make it free.'}</div></div>`;
       })
       .join('')
   );
@@ -5583,11 +5610,10 @@ function weaponRows(btn) {
   return riteLine + weaponRowsInner(btn);
 }
 function weaponRowsInner(btn) {
-  const ch = CH(),
-    showM = !is14('mastery') && MASTERY_CLASSES.includes(ch.cls);
+  const ch = CH();
   return ch.weapons
     .map((w, wi) => {
-      const m = showM && masteryOf(w.base || w.n);
+      const m = wMastery(w, ch);
       return `<div class="wpn tap" data-act="wdetails" data-arg="w${wi}"><div style="flex:1"><b>${esc(w.n)} <span class="more">›</span></b><div class="sm mut">${esc(w.range)}${w.light ? ' · Light' : ''}${w.shil ? ` · <span style="color:var(--acct)">Shillelagh (${w.shil})</span>` : ''}${w.noProf ? ' · <span style="color:var(--warn)">not proficient</span>' : ''}${(w.condDmg || []).map(x => ' · ' + esc(x)).join('')}</div></div><div style="text-align:right;flex:none;padding-left:10px"><div class="num" style="color:var(--acct)">+${w.hit}</div><div class="sm mut">${esc(w.dmg)} ${esc(w.type)}</div></div>${btn ? atkBtn(ch.weapons.indexOf(w)) : ''}${m ? `<div class="sm" style="flex-basis:100%;margin-top:8px;display:flex;gap:8px;align-items:flex-start;line-height:1.45"><span class="tag a" style="flex:none">${m}</span><span class="mut" style="padding-top:2px">${MDESC[m]}</span></div>` : ''}</div>`;
     })
     .join('');
@@ -6222,7 +6248,7 @@ function weaponSheet() {
     props = w.props || [];
   const ranged = w.ranged || /^Ranged/.test(w.range || ''),
     finesse = props.includes('Finesse') || FINESSE.test(w.base || w.n);
-  const m = !w.beast && !is14('mastery') && MASTERY_CLASSES.includes(ch.cls) && masteryOf(w.base || w.n);
+  const m = wMastery(w, ch);
   const facts = [
     ['To hit', '+' + w.hit + (w.noProf ? " (no proficiency bonus: you aren't proficient with it)" : '')],
     ['Damage', `${w.dmg} ${w.type || ''}`.trim()],
@@ -7400,7 +7426,6 @@ function parseDDB(raw) {
   const nonItemMods = Object.entries(d.modifiers || {})
     .filter(([k]) => k !== 'item')
     .flatMap(([k, v]) => (v || []).filter(Boolean).map(m => ({ ...m, _src: CAT[k] || 'Feature' })));
-  const isOn = i => i.equipped && (!i.definition?.canAttune || i.isAttuned);
   const att = i => !!i.definition?.canAttune;
   const itemMods = inv
     .filter(i => i.equipped || (att(i) && i.isAttuned))
@@ -7438,7 +7463,6 @@ function parseDDB(raw) {
         ? m.friendlySubtypeName
         : m._src;
   const ABN = ['Strength', 'Dexterity', 'Constitution', 'Intelligence', 'Wisdom', 'Charisma'];
-  const sgn = v => (v >= 0 ? '+' + v : String(v));
   let armor = inv.filter(i => i.equipped && i.definition?.armorTypeId),
     ac,
     parts = [];
@@ -7905,15 +7929,8 @@ function parseDDB(raw) {
         x.d;
     });
   }
-  let cl = 0,
-    wl = 0;
-  classes.forEach(c => {
-    const sub = c.sub || '';
-    if (['Bard', 'Cleric', 'Druid', 'Sorcerer', 'Wizard'].includes(c.n)) cl += c.lvl;
-    else if (['Paladin', 'Ranger', 'Artificer'].includes(c.n)) cl += Math.ceil(c.lvl / 2);
-    else if (/Eldritch Knight|Arcane Trickster/.test(sub)) cl += Math.floor(c.lvl / 3);
-    else if (c.n === 'Warlock') wl = c.lvl;
-  });
+  // Pact Magic is counted on its own (the shared slots come from casterLevel)
+  const wl = (classes.find(c => c.n === 'Warlock') || {}).lvl || 0;
   const slots = {};
   (FULL[Math.min(casterLevel(classes, guessEdition(d) || '2024'), 20)] || []).forEach(
     (n, i) => (slots[i + 1] = { max: n, used: 0 })
@@ -8163,8 +8180,17 @@ function parseDDB(raw) {
     sp.push(...autoSpells);
   }
   const guess = guessEdition(d);
+  // the weapon kinds picked for Weapon Mastery: DDB lists them as actions, e.g. "Graze (Greatsword)"
+  const mastered = {};
+  Object.values(d.actions || {}).forEach(arr =>
+    (arr || []).filter(Boolean).forEach(a => {
+      const m = /^(Graze|Cleave|Nick|Push|Sap|Slow|Topple|Vex) \((.+)\)$/.exec(a.name || '');
+      if (m) mastered[m[2]] = m[1];
+    })
+  );
   return {
     source: 'ddb',
+    mastered: Object.keys(mastered).length ? mastered : undefined,
     cls,
     name: d.name || 'Adventurer',
     sub: main.sub || '',
@@ -10646,7 +10672,6 @@ const ACT = {
       if (S.shil) applyShil();
       /* same character: keep the fight going */ if (pendingGuess) ch.editionSet = true;
       render();
-      const same = old && old.ddbId === ch.ddbId;
       if (checkNeeds().any) openSheet('Quick check', importCheckSheet);
       else closeSheet();
       toast(
@@ -10665,7 +10690,18 @@ document.addEventListener('click', async e => {
   if (!f) return;
   e.preventDefault();
   const before = UNDOABLE.has(a) ? JSON.stringify(S) : null;
-  await f(el.dataset.arg, el);
+  try {
+    await f(el.dataset.arg, el);
+  } catch (err) {
+    // a bug in one button shouldn't leave the turn half-changed: put it back and say so
+    console.error(err);
+    if (before) S = JSON.parse(before);
+    try {
+      render();
+    } catch (_) {}
+    toast(before ? 'Something went wrong with that button, so nothing changed.' : 'Something went wrong with that button.');
+    return;
+  }
   const fromDetails = (sheetFn === detailsSheet || sheetFn === weaponSheet) && before;
   if (before && JSON.stringify(S) !== before) {
     const b = JSON.parse(before).c,
@@ -12518,8 +12554,7 @@ function hfGen(B) {
   }
   if ((k = lv('Warlock'))) {
     // Eldritch Invocations: switch on the ones you know (5.5e: from level 1, and the Pact Boons are invocations)
-    const wdc = dc('CHA'),
-      inv = (id, n, t, d, x = {}, min = 2, ed = '') => {
+    const inv = (id, n, t, d, x = {}, min = 2, ed = '') => {
         if (k >= (o ? Math.max(2, min) : min) && (!ed || ed === (o ? '2014' : '2024'))) add('wl.' + id, n, t, d, x, true);
       },
       pas_ = { passive: true };
@@ -16470,8 +16505,7 @@ function pregen(k, L, name, ed) {
   B.potions = L >= 11 ? 2 : 1;
   if (p.sp) {
     const lib = spLib(ed, L),
-      top = Math.max(0, hbMaxSp(B)),
-      have = new Set(lib.map(s => s.n + '|' + s.lvl));
+      top = Math.max(0, hbMaxSp(B));
     B.sp = p.sp.filter(n => {
       const s = lib.find(x => x.n === n);
       return s && (s.lvl === 0 || s.lvl <= top);
@@ -17589,7 +17623,7 @@ function spellCard(s, lv, o) {
   (o.lines || []).forEach(h => notes.push({ html: h }));
   RC = {
     sp: true,
-    name: esc(o.title || s.n),
+    name: o.title || s.n,
     sub: o.sub != null ? o.sub : s.lvl ? `level ${sp.lv}` : 'cantrip',
     k: sp.k,
     hit: atk || 0,
@@ -17736,7 +17770,7 @@ function spellShow(enter) {
           : ''
       : '';
   r.innerHTML = `<button class="rx" onclick="event.stopPropagation();rollClose()" aria-label="Close">✕</button>
-  <div class="rn">${R.name}${R.sub ? ` <span class="mut">(${esc(R.sub)})</span>` : ''}</div>
+  <div class="rn">${esc(R.name)}${R.sub ? ` <span class="mut">(${esc(R.sub)})</span>` : ''}</div>
   <div class="rstats">${box1 ? `<div>${box1}</div>` : ''}<div>${dmgBox}</div></div>
   ${DICE ? rows : ''}
   ${DICE && modes.length ? `<div class="rmode" onclick="event.stopPropagation()">${modes.join('')}</div>` : ''}
@@ -17760,7 +17794,7 @@ function featCard(name, expr, k, lines, o) {
   o = o || {};
   RC = {
     sp: true,
-    name: esc(name),
+    name,
     sub: '',
     k,
     hit: o.hit || 0,
@@ -17917,7 +17951,6 @@ function rollCard(m) {
     if (n.ex && /\(Rage\)|\(Great Weapon Master\)|Radiant Strikes|Improved Divine Smite|\(Riposte\)/.test(plain(n.html)) && !/not when thrown|when you attack in melee/i.test(plain(n.html))) n.ex.auto = true;
   });
   // a few extras that only matter when you hit, so they can be rolled from here too
-  const add = (label, expr) => RC.notes.push({ html: `<span class="mut">${esc(label)}</span>`, ex: { label, expr } });
   const auto = (label, expr, x) => RC.notes.push({ html: '', ex: { label, expr, auto: true, ...(x || {}) } });
   if (S.conc === 'Hex') auto('Hex: +1d6 necrotic', '1d6');
   // Crimson Rite: the rite die rides on every weapon hit
@@ -17947,7 +17980,7 @@ function rollCard(m) {
   });
   // once-per-turn on-hit options: Deft Strike (kensei weapons), Hand of Harm (unarmed), Colossus Slayer, Dreadful Strike, Gathered Swarm (weapons)
   {
-    const w = (CH().weapons || []).find(x => x.n === RC.name),
+    const w = (CH().weapons || []).find(x => esc(x.n) === RC.name),
       unarmed = /unarmed/i.test(RC.name) || (w && w.unarmed);
     feats().forEach(f => {
       const key = f.once || '';
@@ -17974,8 +18007,8 @@ function rollCard(m) {
     });
   // the weapon's mastery, as a reminder
   {
-    const w = (CH().weapons || []).find(x => x.n === RC.name || x.n === RC.sub),
-      mk = w && !is14('mastery') && MASTERY_CLASSES.includes(CH().cls) && masteryOf(w.base || w.n);
+    const w = (CH().weapons || []).find(x => esc(x.n) === RC.name || esc(x.n) === RC.sub),
+      mk = wMastery(w);
     if (mk && MDESC[mk]) RC.notes.push({ html: `<span class="mut"><b>${esc(mk)}</b> · ${esc(MDESC[mk])}</span>`, ex: null });
   }
   // a crit's extra weapon dice (not doubled)
@@ -18163,8 +18196,37 @@ Object.assign(ACT, {
 });
 
 // everything is defined: draw the first screen
-acMigrate(S && S.char);
-render();
+// if a saved fight can't be drawn by this version, offer a clean start instead of a blank page
+// (the broken save is kept under its own key; characters on the shelf are untouched)
+try {
+  acMigrate(S && S.char);
+  render();
+} catch (e) {
+  console.error(e);
+  try {
+    localStorage.setItem(KEY + '-broken', localStorage.getItem(KEY) || '');
+  } catch (_) {}
+  document.body.innerHTML = `<div style="padding:28px 22px;max-width:420px;margin:0 auto;font:16px/1.5 system-ui,sans-serif;color:#e8e6f0;background:#121018;min-height:100vh;box-sizing:border-box">
+  <h2 style="margin:0 0 10px;font-size:20px">Initiative couldn't open your last fight</h2>
+  <p style="margin:0 0 18px;opacity:.8">This version of the app couldn't read what was saved. Your characters stay under Change character → Your characters.</p>
+  <button id="bootFresh" style="width:100%;padding:14px;border:0;border-radius:12px;background:#4A62E8;color:#fff;font:600 16px system-ui,sans-serif">Start fresh</button>
+  <p style="margin:16px 0 0;font-size:12px;opacity:.5">${esc(String((e && e.message) || e).slice(0, 160))}</p></div>`;
+  document.getElementById('bootFresh').onclick = () => {
+    try {
+      // the character you were playing goes on the shelf first, so it isn't lost
+      const old = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (old && old.char && keepable(old.char)) {
+        const L = shelf().filter(x => x.id !== charId(old.char));
+        L.unshift({ id: charId(old.char), n: old.char.name || 'Your character', line: 'Kept when the app restarted', at: Date.now(), S: old });
+        shelfSave(L);
+      }
+    } catch (_) {}
+    try {
+      localStorage.removeItem(KEY);
+    } catch (_) {}
+    location.reload();
+  };
+}
 
 // with a mouse, scrolling over a focused number box would change its number (CHA 30, speed 120):
 // let go of the box instead, so the wheel scrolls the page as meant
