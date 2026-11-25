@@ -2649,7 +2649,10 @@ const SP_TXT = {
   'greater restoration': ['Touch: end one level of exhaustion, a charm, petrification, a curse, or a reduction to an ability score or HP maximum.'],
   'guardian of faith': ['A guardian stands within 30 ft for 8 hours: an enemy that comes within 10 ft of it makes a DEX save or takes 20 radiant (half on a success). It vanishes after dealing 60.'],
   'gust of wind': ['60-ft line from you for 1 minute: STR save or pushed 15 ft away; moving toward you costs double.'],
-  haste: ['Touch a willing creature: double speed, +2 AC, advantage on DEX saves, and one extra action each turn (one weapon attack, Dash, Disengage, Hide or Use an Object). When it ends, the target loses its next turn.'],
+  haste: [
+    'Touch a willing creature: double speed, +2 AC, advantage on DEX saves, and one extra action each turn (one weapon attack, Dash, Disengage, Hide or Use an Object). When it ends, the target loses its next turn.',
+    'Touch a willing creature: double speed, +2 AC, advantage on DEX saves, and one extra action each turn (one weapon attack, Dash, Disengage, Hide or Utilize). When it ends, the target can\'t move or act until after its next turn.'
+  ],
   heroism: ['Touch: immune to Frightened, and it gains temporary HP equal to your casting modifier at the start of each of its turns.'],
   'hold monster': ['A creature within 90 ft: WIS save or Paralyzed for 1 minute. It repeats the save at the end of each of its turns.'],
   identify: ['Ritual. Learn a magic item\'s properties and how to use it, or the spells affecting a creature or object.'],
@@ -4181,7 +4184,7 @@ const CONDS = [
     src: 'Haste',
     ac: 2,
     sv: 'Advantage on DEX saves.',
-    d: "Double speed, and an extra action each turn: one weapon attack, Dash, Disengage, Hide or Utilize. When it ends, you can't move or act until after your next turn."
+    d: "Double speed, and an extra action each turn: one weapon attack, Dash, Disengage, Hide or Utilize (5e: Use an Object). When it ends, you can't move or act until after your next turn."
   },
   {
     k: 'blessed',
@@ -4512,7 +4515,8 @@ const pLine = t => `<br><span class="mut">${t}</span>`;
 function hitHints(w) {
   const L = [],
     c = C();
-  if ((hasP('Savage Attacker') && !w.ranged && !w.unarmed) || (hasP('Savage Attacker') && w.ranged))
+  // 2014: melee weapon attacks; 2024: any weapon
+  if (hasP('Savage Attacker') && !w.unarmed && (!w.ranged || CH().edition !== '2014'))
     L.push('Savage Attacker (once per turn): on a hit, roll the damage dice twice and keep either');
   if (hasP('Brutal Critical') && !w.ranged) {
     const b = clsLvl('Barbarian');
@@ -4882,7 +4886,7 @@ function leftSummary() {
       );
   }
   if (c.flags.hasteAct)
-    l.push('your <b>Haste action</b> (one weapon attack, Dash, Disengage, Hide or Utilize)');
+    l.push(`your <b>Haste action</b> (one weapon attack, Dash, Disengage, Hide or ${is14('demo') ? 'Use an Object' : 'Utilize'})`);
   const nb = bonusOpts().filter(usableNow).length;
   const once = feats()
     .filter(f => f.t === 'F' && f.once && !c.flags[f.once])
@@ -5490,7 +5494,10 @@ const noMod = d => {
   return m && +m[2] > 0 ? m[1] : d;
 };
 // Off-hand damage: drop the ability modifier (unless negative) but keep magic and other flat item bonuses
+const twfStyle = () => hasP('Two-Weapon Fighting') || (CH().feats || []).some(f => /^Two-Weapon Fighting/i.test(f.n));
 const offDmg = w => {
+  // the Two-Weapon Fighting style keeps your ability modifier
+  if (twfStyle()) return w.dmg;
   const m = String(w.dmg).match(/^(.*?)([+-]\d+)$/);
   if (!m) return w.dmg;
   const flat = (w.magic || 0) + (w.extraDmg || 0),
@@ -9731,7 +9738,7 @@ const ACT = {
     c.lastAtk = w.n;
     const sneak = sneakWeapon(w) && feats().find(f => f.once === 'sneak' && !c.flags.sneak);
     toast(
-      `<b>${esc(w.n)}</b>: +${w.hit} to hit · ${esc(offDmg(w))} ${esc(w.type)}<br><span class="mut">No ability bonus to damage${w.magic ? ` (the +${w.magic} magic bonus still counts)` : ''}</span>${sneak ? `<br><span style="color:var(--warn)">Hit? Sneak Attack (+${sneakDice()}d6) is still available</span>` : ''}`
+      `<b>${esc(w.n)}</b>: +${w.hit} to hit · ${esc(offDmg(w))} ${esc(w.type)}<br><span class="mut">${twfStyle() ? 'Two-Weapon Fighting: your ability modifier counts' : `No ability bonus to damage${w.magic ? ` (the +${w.magic} magic bonus still counts)` : ''}`}</span>${sneak ? `<br><span style="color:var(--warn)">Hit? Sneak Attack (+${sneakDice()}d6) is still available</span>` : ''}`
     );
     render();
   },
@@ -10357,6 +10364,18 @@ const ACT = {
       }
     }
     if (k === 'dmg' && hp.cur === 0 && S.dying && !S.dying.dead) {
+      // temporary HP still soak damage at 0 HP
+      if (hp.temp > 0) {
+        const t = Math.min(hp.temp, v);
+        hp.temp -= t;
+        v -= t;
+        if (!v) {
+          toast(`Your temporary HP absorb it (${hp.temp} left): no death save failure`);
+          closeSheet();
+          render();
+          return;
+        }
+      }
       if (v >= hp.max) {
         S.dying = { dead: true, why: 'Massive damage: a single hit at least your HP maximum.' };
         toast('Massive damage: you die instantly');
@@ -11890,7 +11909,9 @@ function hfGen(B) {
       'bard.insp',
       'Bardic Inspiration',
       'B',
-      `Give an ally within 60 ft a d${die} they can add to one d20 roll (attack, check or save) in the next ${o ? '10 minutes' : 'hour'}.`,
+      o
+        ? `Give an ally within 60 ft a d${die} they can add to one attack roll, ability check or save in the next 10 minutes.`
+        : `Give an ally within 60 ft a d${die}: once in the next hour, when it fails a d20 roll (attack, check or save), it can add the die.`,
       { res: 'insp' }
     );
     if (k >= 3 && /Lore/i.test(sub('Bard')))
@@ -11898,7 +11919,9 @@ function hfGen(B) {
         'bard.cut',
         'Cutting Words',
         'R',
-        `When a creature within 60 ft makes an attack roll, ability check or damage roll: subtract a d${die} from it.`,
+        o
+          ? `When a creature within 60 ft makes an attack roll, ability check or damage roll: subtract a d${die} from it.`
+          : `When a creature within 60 ft makes a damage roll, or succeeds on an ability check or attack roll: subtract a d${die} from it.`,
         { res: 'insp' }
       );
     if (k >= 3 && /Valor/i.test(sub('Bard')))
@@ -11994,7 +12017,7 @@ function hfGen(B) {
           'cle.life',
           'Channel Divinity: Preserve Life',
           'A',
-          `Divide ${5 * k} HP of healing among creatures within 30 ft (up to half their max HP).`,
+          o ? `Divide ${5 * k} HP of healing among creatures within 30 ft (up to half their max HP; not undead or constructs).` : `Divide ${5 * k} HP of healing among Bloodied creatures within 30 ft (up to half their max HP).`,
           { res: 'cd' }
         );
       if (/\bLight\b/i.test(s) && k >= (o ? 2 : 3))
@@ -12057,7 +12080,7 @@ function hfGen(B) {
         sd = 8 + p + Math.max(m.STR, m.DEX),
         bm = (id, n, t, txt) => add('bm.' + id, n, t, txt, { res: 'sd' }, true);
       res('sd', 'Superiority Dice', k >= 15 ? 6 : k >= 7 ? 5 : 4, 'short');
-      bm('prec', 'Precision Attack', 'F', `When you roll to hit: add 1d${d} to the attack roll.`);
+      bm('prec', 'Precision Attack', 'F', o ? `When you make a weapon attack roll: add 1d${d} to it, before or after rolling (before the result is known).` : `When you miss with an attack roll: add 1d${d} to it, which might turn it into a hit.`);
       bm(
         'trip',
         'Trip Attack',
@@ -13151,8 +13174,8 @@ function hfMore(B, D, F, add, res) {
         'Divine Intervention',
         'A',
         k >= 20
-          ? 'Cast any cleric spell of level 5 or lower without a slot or components. Or cast Wish (once per 2d4 long rests).'
-          : 'Cast any cleric spell of level 5 or lower without a slot or components (not a Reaction spell).',
+          ? 'Cast any cleric spell of level 5 or lower without a slot or Material components. Or cast Wish (once per 2d4 long rests).'
+          : 'Cast any cleric spell of level 5 or lower without a slot or Material components (not a Reaction spell).',
         {
           res: 'di',
           d14:
@@ -13203,7 +13226,7 @@ function hfMore(B, D, F, add, res) {
         'dru.companion',
         'Wild Companion',
         'A',
-        `Spend a Wild Shape use (or a spell slot) to cast Find Familiar without components. The familiar is a Fey and disappears when you finish a Long Rest.`,
+        `Spend a Wild Shape use (or a spell slot) to cast Find Familiar without Material components. The familiar is a Fey and disappears when you finish a Long Rest.`,
         { res: 'ws' }
       );
       if (k >= 5)
@@ -13671,12 +13694,14 @@ function hfSubs(B, D, F, add, res) {
   }
 
   /* ---------- Druid ---------- */
-  /* ---------- Artificer specialists: the 2020 (Tasha's) versions; the 2025 revisions aren't published in full ---------- */
+  /* ---------- Artificer specialists: the 2020 (Tasha's) versions, with what's confirmed from the 2025 Forge of the Artificer revision for 5.5e ---------- */
   if ((k = lv('Artificer')) >= 3) {
     const im = mx(m.INT);
     if (is('Artificer', /Alchemist/i)) {
-      res('elixir', 'Experimental Elixir', k >= 15 ? 3 : k >= 6 ? 2 : 1, 'long');
-      add('sub.alc3', 'Experimental Elixir', 'A', `Drink or give an elixir (roll d6 when made, or choose when you spend a slot to make more): 1 Healing 2d4+${im}${k >= 9 ? ` and 2d6+${im} temporary HP` : ''} · 2 Swiftness +10 ft speed for 1 hour · 3 Resilience +1 AC for 10 minutes · 4 Boldness +1d4 to attack rolls and saves for 1 minute · 5 Flight 10 ft for 10 minutes · 6 Transformation (Alter Self).`, { res: 'elixir' });
+      res('elixir', 'Experimental Elixir', o ? (k >= 15 ? 3 : k >= 6 ? 2 : 1) : k >= 15 ? 5 : k >= 9 ? 4 : k >= 5 ? 3 : 2, 'long');
+      if (!o)
+        add('sub.alc3', 'Experimental Elixir', 'B', `Drink an elixir, or give it to a creature within 5 ft. Healing: ${k >= 15 ? 4 : k >= 9 ? 3 : 2}d8+${im} HP. The other effects changed in Eberron: Forge of the Artificer: check your sheet for them.`, { res: 'elixir' });
+      else add('sub.alc3', 'Experimental Elixir', 'A', `Drink or give an elixir (roll d6 when made, or choose when you spend a slot to make more): 1 Healing 2d4+${im}${k >= 9 ? ` and 2d6+${im} temporary HP` : ''} · 2 Swiftness +10 ft speed for 1 hour · 3 Resilience +1 AC for 10 minutes · 4 Boldness +1d4 to attack rolls and saves for 1 minute · 5 Flight 10 ft for 10 minutes · 6 Transformation (Alter Self).`, { res: 'elixir' });
       if (k >= 5) pas('sub.alc5', 'Alchemical Savant', `Once per spell cast through alchemist's supplies: ${sgn(im)} to one roll of healing, or of acid, fire, necrotic or poison damage.`);
       if (k >= 9) {
         res('reagent', 'Restorative Reagents', im, 'long');
@@ -14013,7 +14038,7 @@ function hfSubs(B, D, F, add, res) {
     const md = o ? (k >= 17 ? 'd10' : k >= 11 ? 'd8' : k >= 5 ? 'd6' : 'd4') : k >= 17 ? 'd12' : k >= 11 ? 'd10' : k >= 5 ? 'd8' : 'd6',
       fk = { res: 'focus', rk: 'monk' };
     if (is('Monk', /Shadow/i)) {
-      add('sub.shadow3', 'Shadow Arts: Darkness', 'A', o ? 'Spend 2 ki: cast Darkness, Darkvision, Pass without Trace or Silence (no components). You also know Minor Illusion.' : 'Spend 1 Focus: cast Darkness. You can see through it, and move it 30 ft at the start of each of your turns.', { ...fk, step: o ? 2 : 1 });
+      add('sub.shadow3', 'Shadow Arts: Darkness', 'A', o ? 'Spend 2 ki: cast Darkness, Darkvision, Pass without Trace or Silence (no components). You also know Minor Illusion.' : 'Spend 1 Focus: cast Darkness. You can see through it, and at the start of each of your turns you can move it to a space within 60 ft of you.', { ...fk, step: o ? 2 : 1 });
       if (k >= 6) add('sub.shadow6', 'Shadow Step', 'B', 'In dim light or darkness: teleport up to 60 ft to another dim or dark space. Advantage on your next melee attack this turn.');
       if (!o && k >= 11) pas('sub.shadow11', 'Improved Shadow Step', 'Shadow Step costs 1 Focus and works from any space, and you can make an unarmed strike right after it.');
       if (o && k >= 11) add('sub.shadow11c', 'Cloak of Shadows', 'A', 'In dim light or darkness: become Invisible until you attack, cast a spell or are in bright light.', { status: 'Invisible' });
