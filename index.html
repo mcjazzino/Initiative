@@ -8972,13 +8972,13 @@ const ACT = {
     theme();
     render();
   },
-  colSet(c, live) {
+  colSet(c) {
     myCol = c || '';
     try {
       localStorage.setItem('initiative-color', myCol);
     } catch (e) {}
     theme();
-    if (!live) render();
+    render();
   },
   initInfo() {
     openSheet('Initiative', initSheet);
