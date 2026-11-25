@@ -987,7 +987,9 @@ const DEMO = {
       SP('Moonbeam', 2, 'A', 'Cylinder of moonlight, CON save, 2d10 radiant.', true),
       SP('Spike Growth', 2, 'A', '20-ft radius: 2d4 piercing per 5 ft moved.', true),
       SP('Call Lightning', 3, 'A', 'Call a 3d10 lightning bolt each turn.', true),
-      SP('Conjure Animals', 3, 'A', 'Summon animals that fight for you.', true)
+      SP('Conjure Animals', 3, 'A', 'A Large pack of spirit animals within 60 ft for 10 minutes. When the pack moves within 10 ft of a creature, or a creature enters or ends its turn within 10 ft of it: DEX save or 3d10 slashing (once a turn).', true, {
+        v14: { d: 'Summon fey spirits as beasts: one of CR 2, two of CR 1, four of CR 1/2 or eight of CR 1/4. They act on their own initiative and obey your commands.' }
+      })
     ],
     slots: { 1: 4, 2: 3, 3: 2 },
     res: [{ k: 'ws', n: 'Wild Shape', max: 2, rest: 'short' }]
@@ -2589,6 +2591,137 @@ const SUB_SP_DESC = {
   'stone shape': 'Shape a piece of stone: a weapon, a door, a passage.'
 };
 
+/* ---------- one-line spell summaries for spells the library had no text for ----------
+   [2014 text, 2024 text when it differs]. Shown only where a spell has no summary of its own. */
+const SP_TXT = {
+  alarm: ['Ritual. For 8 hours, a 20-ft cube warns you (mentally or with a bell) when a creature enters it.'],
+  'animal friendship': ['A Beast within 30 ft: WIS save or it is Charmed by you for 24 hours.'],
+  'animate dead': ['Takes 1 minute. Raise a skeleton or zombie from bones or a corpse. Bonus Action: command it within 60 ft. It obeys you for 24 hours; recast to keep control.'],
+  augury: ['Ritual. Ask about a plan within the next 30 minutes: you learn weal, woe, both, or nothing.'],
+  'aura of vitality': ['30-ft aura for 1 minute: as a Bonus Action, one creature in it (you included) regains 2d6 HP.'],
+  banishment: ['A creature you can see: CHA save or banished for up to 1 minute. One native to another plane that stays banished the full minute doesn\'t return.'],
+  barkskin: [
+    'Touch a willing creature: its AC can\'t be lower than 16 for 1 hour.',
+    'Bonus Action. Touch a willing creature: its AC can\'t be lower than 17 for 1 hour.'
+  ],
+  'beacon of hope': ['Creatures you choose within 30 ft: advantage on WIS saves and death saves, and they regain the maximum from healing.'],
+  'bestow curse': ['Touch: WIS save or cursed for 1 minute — your choice of disadvantage on one ability\'s checks and saves, disadvantage attacking you, a WIS save each turn or lose its action, or +1d8 necrotic from your hits.'],
+  'blindness/deafness': ['A creature you can see: CON save or Blinded or Deafened (your choice) for 1 minute. It repeats the save at the end of each of its turns.'],
+  blink: ['For 1 minute, roll a d20 at the end of each of your turns: on 11+ you vanish to the Ethereal Plane until your next turn starts.'],
+  blur: ['For 1 minute, attacks against you have disadvantage (not from attackers with blindsight or truesight).'],
+  'branding smite': [
+    'Bonus Action: your next weapon hit deals +2d6 radiant, and the target sheds light and can\'t be invisible.',
+    'Bonus Action right after a weapon hit: +2d6 radiant. For 1 minute the target sheds light, can\'t be invisible, and attacks against it have advantage.'
+  ],
+  'burning hands': ['15-ft cone: DEX save or 3d6 fire (half on a success).'],
+  'calm emotions': ['20-ft sphere within 60 ft: CHA save or (your choice) charm and fear on it are suppressed, or it stops being hostile.'],
+  'charm person': ['A humanoid within 30 ft: WIS save (advantage if you\'re fighting it) or Charmed by you for 1 hour.'],
+  'color spray': [
+    'Roll 6d10: creatures in a 15-ft cone, lowest HP first, are Blinded until your next turn, as long as the total covers their HP.',
+    '15-ft cone: CON save or Blinded until the end of your next turn.'
+  ],
+  'compelled duel': ['Bonus Action. A creature within 30 ft: WIS save or it has disadvantage attacking anyone but you and can\'t willingly move more than 30 ft away from you.'],
+  'crown of madness': ['A humanoid within 120 ft: WIS save or Charmed: before moving on its turn, it attacks a creature you choose. Your Action each turn keeps it going.'],
+  "crusader's mantle": ['30-ft aura for 1 minute: you and allies in it deal +1d4 radiant with weapon hits.'],
+  darkness: ['A 15-ft sphere of magical darkness for 10 minutes. Darkvision can\'t see through it.'],
+  'death ward': ['Touch: the first time it would drop to 0 HP within 8 hours, it drops to 1 HP instead.'],
+  'detect magic': ['Ritual. For 10 minutes, sense magic within 30 ft and see its aura and school.'],
+  'detect thoughts': ['Read the surface thoughts of a creature within 30 ft; probe deeper with a WIS save.'],
+  'dimension door': ['Teleport up to 500 ft to a spot you can see or describe, with one willing creature next to you.'],
+  'disguise self': ['Change how you look for 1 hour. An Investigation check against your spell DC sees through it.'],
+  'dispel magic': ['End spells of level 3 or lower on a creature, object or effect. Higher ones need a check: DC 10 + the spell\'s level.'],
+  'divine favor': ['Bonus Action: your weapon hits deal +1d4 radiant for 1 minute.'],
+  'dominate beast': ['A Beast within 60 ft: WIS save (advantage if you\'re fighting it) or Charmed and under your command for 1 minute.'],
+  'elemental weapon': ['A nonmagical weapon becomes +1 to hit and deals +1d4 of a damage type you choose (acid, cold, fire, lightning or thunder) for 1 hour.'],
+  'enhance ability': ['Touch: advantage on checks with one ability you choose for 1 hour.'],
+  'false life': ['Gain 1d4+4 temporary HP for 1 hour.', 'Gain 2d4+4 temporary HP.'],
+  fear: ['30-ft cone: WIS save or it drops what it holds and is Frightened, Dashing away from you. It repeats the save only when it can\'t see you.'],
+  'feather fall': ['Reaction, when you or others fall: up to five creatures within 60 ft fall slowly (60 ft a round) and take no falling damage.'],
+  'flame strike': ['10-ft-radius column within 60 ft: DEX save or 4d6 fire + 4d6 radiant (half on a success).', '10-ft-radius column within 60 ft: DEX save or 5d6 fire + 5d6 radiant (half on a success).'],
+  'flaming sphere': ['A 5-ft burning sphere within 60 ft: a creature ending its turn next to it makes a DEX save or takes 2d6 fire (half on a success). Bonus Action: move it 30 ft and ram.'],
+  fly: ['Touch a willing creature: Fly Speed 60 ft for 10 minutes.'],
+  'fog cloud': ['A 20-ft-radius sphere of heavy fog within 120 ft for 1 hour.'],
+  'freedom of movement': ['Touch: for 1 hour, difficult terrain and magic can\'t slow, paralyse or restrain it, and it can escape a grapple with 5 ft of movement.'],
+  'gentle repose': ['Ritual. A corpse is protected from decay and can\'t become undead for 10 days.'],
+  'grasping vine': ['A vine sprouts within 30 ft for 1 minute. Bonus Action: it lashes at a creature within 30 ft of it, which must make a save or be pulled toward it.'],
+  'greater restoration': ['Touch: end one level of exhaustion, a charm, petrification, a curse, or a reduction to an ability score or HP maximum.'],
+  'guardian of faith': ['A guardian stands within 30 ft for 8 hours: an enemy that comes within 10 ft of it makes a DEX save or takes 20 radiant (half on a success). It vanishes after dealing 60.'],
+  'gust of wind': ['60-ft line from you for 1 minute: STR save or pushed 15 ft away; moving toward you costs double.'],
+  haste: ['Touch a willing creature: double speed, +2 AC, advantage on DEX saves, and one extra action each turn (one weapon attack, Dash, Disengage, Hide or Use an Object). When it ends, the target loses its next turn.'],
+  heroism: ['Touch: immune to Frightened, and it gains temporary HP equal to your casting modifier at the start of each of its turns.'],
+  'hold monster': ['A creature within 90 ft: WIS save or Paralyzed for 1 minute. It repeats the save at the end of each of its turns.'],
+  identify: ['Ritual. Learn a magic item\'s properties and how to use it, or the spells affecting a creature or object.'],
+  'ice storm': [
+    '20-ft-radius cylinder within 300 ft: DEX save or 2d8 bludgeoning + 4d6 cold (half on a success). Difficult terrain until your next turn ends.',
+    '20-ft-radius cylinder within 300 ft: DEX save or 2d10 bludgeoning + 4d6 cold (half on a success). Difficult terrain until your next turn ends.'
+  ],
+  invisibility: [
+    'Touch: Invisible for 1 hour, until it attacks or casts a spell.',
+    'Touch: Invisible for 1 hour, until it attacks, deals damage or casts a spell.'
+  ],
+  jump: ['Touch: its jump distance triples for 1 minute.', 'Bonus Action. Touch: for 1 minute, once a turn it can jump up to 30 ft by spending 10 ft of movement.'],
+  'lesser restoration': ['Touch: end one disease or the Blinded, Deafened, Paralyzed or Poisoned condition.'],
+  'lightning bolt': ['100-ft line, 5 ft wide: DEX save or 8d6 lightning (half on a success).'],
+  longstrider: ['Touch: +10 ft speed for 1 hour.'],
+  'magic weapon': ['Bonus Action. A nonmagical weapon becomes a +1 weapon for 1 hour.'],
+  'mass cure wounds': ['Up to six creatures in a 30-ft sphere within 60 ft regain 3d8 + your casting modifier HP.', 'Up to six creatures in a 30-ft sphere within 60 ft regain 5d8 + your casting modifier HP.'],
+  'mass healing word': ['Up to six creatures within 60 ft regain 1d4 + your casting modifier HP.', 'Up to six creatures within 60 ft regain 2d4 + your casting modifier HP.'],
+  'mirror image': [
+    'Three illusory copies for 1 minute. When you\'re attacked, roll a d20 to see if a copy is hit instead (6+ with three, 8+ with two, 11+ with one); a copy hit is destroyed.',
+    'Three illusory copies for 1 minute. When you\'re attacked, roll a d6 for each copy: on a 3+ a copy is hit instead and destroyed.'
+  ],
+  nondetection: ['Touch: hidden from divination magic for 8 hours.'],
+  'phantom steed': ['Ritual. A Large quasi-real horse appears for 1 hour, with a speed of 100 ft.'],
+  'plant growth': ['Plants within 100 ft of a point become overgrown: moving through costs 4 ft for every 1 ft. (Or, over 8 hours, enrich crops.)'],
+  'protection from energy': ['Touch: resistance to acid, cold, fire, lightning or thunder (your choice) for 1 hour.'],
+  'ray of enfeeblement': [
+    'Ranged spell attack: its STR-based weapon attacks deal half damage for 1 minute. It makes a CON save at the end of each of its turns to end it.',
+    'A creature within 60 ft: CON save or disadvantage on STR tests and −1d8 on its damage rolls for 1 minute; on a success, disadvantage on its next attack roll.'
+  ],
+  'ray of sickness': ['Ranged spell attack: 2d8 poison, and CON save or Poisoned until your next turn ends.', 'Ranged spell attack: 2d8 poison, and it is Poisoned until the end of your next turn.'],
+  scrying: ['Takes 10 minutes. See and hear a creature you choose on the same plane, through an invisible sensor, for 10 minutes. WIS save to resist.'],
+  'searing smite': [
+    'Bonus Action: your next melee weapon hit deals +1d6 fire, and it burns for 1d6 fire at the start of each of its turns until it makes a CON save.',
+    'Bonus Action right after a melee hit: +1d6 fire, and 1d6 fire at the start of each of its turns until it makes a CON save.'
+  ],
+  'see invisibility': ['For 1 hour, see invisible creatures and objects, and into the Ethereal Plane.'],
+  sending: ['Send a message of 25 words to a creature you know; it can answer at once.'],
+  sleep: [
+    'Roll 5d8: creatures within 20 ft of a point fall asleep for 1 minute, lowest HP first, as long as the total covers their HP.',
+    'Creatures in a 5-ft-radius sphere within 60 ft: WIS save or Incapacitated until the end of their next turn, then the save again or Unconscious for 1 minute.'
+  ],
+  'sleet storm': ['40-ft-radius cylinder for 1 minute: difficult terrain and heavily obscured. A creature entering or starting there makes a DEX save or falls Prone, and concentration is hard inside.'],
+  slow: ['Up to six creatures in a 40-ft cube: WIS save or −2 AC and DEX saves, half speed, no reactions, and an action or a bonus action (not both) each turn. They repeat the save each turn.'],
+  'speak with animals': ['Ritual. Talk with Beasts for 10 minutes.'],
+  'speak with dead': ['Ask a corpse within 10 ft up to five questions within 10 minutes.'],
+  stoneskin: [
+    'Touch: resistance to nonmagical bludgeoning, piercing and slashing damage for 1 hour.',
+    'Touch: resistance to bludgeoning, piercing and slashing damage for 1 hour.'
+  ],
+  suggestion: ['A creature within 30 ft: WIS save or it follows a reasonable course of action you describe, for up to 8 hours.'],
+  'thunderous smite': [
+    'Bonus Action: your next melee weapon hit deals +2d6 thunder; STR save or pushed 10 ft and Prone.',
+    'Bonus Action right after a melee hit: +2d6 thunder; STR save or pushed 10 ft and Prone.'
+  ],
+  'vampiric touch': ['Melee spell attack: 3d6 necrotic, and you regain half the damage. Repeat it as an action each turn for 1 minute.'],
+  'warding bond': ['Touch a willing creature: +1 AC and saves and resistance to all damage for 1 hour, but you take the same damage it takes.'],
+  'wind wall': ['A wall of wind up to 50 ft long for 1 minute: STR save or 3d8 bludgeoning when it appears (half on a success). It blocks small flyers, arrows and gas.'],
+  'wrathful smite': [
+    'Bonus Action: your next melee weapon hit deals +1d6 psychic; WIS save or Frightened (it can use its action to try again).',
+    'Bonus Action right after a melee hit: +1d6 necrotic; WIS save or Frightened for 1 minute (it repeats the save each turn).'
+  ],
+  'zone of truth': ['15-ft-radius sphere for 10 minutes: CHA save or it can\'t knowingly lie.']
+};
+// a spell's own summary, or the library's when it has none
+function spTxt(s) {
+  const rest = String(s.d || '').replace(/^Always prepared[^.]*\.\s*/, '').trim();
+  if (rest) return s.d;
+  const t = SP_TXT[spBase(s.base || s.n).toLowerCase().replace(/\s*\(.*\)\s*$/, '')];
+  if (!t) return s.d;
+  const txt = is14('demo') || !t[1] ? t[0] : t[1];
+  return (s.d ? s.d + ' ' : '') + txt;
+}
+
 /* ---------- state ---------- */
 const KEY = 'initiative-dnd-v2';
 let S;
@@ -2874,7 +3007,7 @@ function withNums(d, own) {
   if (!own && sc && S.c && (S.c.status || []).includes('Innate Sorcery')) sc = { ...sc, dc: sc.dc + 1 };
   if (!sc || !d) return d;
   return String(d)
-    .replace(/\b(STR|DEX|CON|INT|WIS|CHA) save(?! DC)/g, `$1 save DC ${sc.dc}`)
+    .replace(/\b(STR|DEX|CON|INT|WIS|CHA) save(?![\w-]| DC)/g, `$1 save DC ${sc.dc}`)
     .replace(/\b(Ranged|Melee|ranged|melee) spell attacks?(?! \()/g, m => `${m} (+${sc.atk})`)
     .replace(
       /\b(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw(?! \(DC)/g,
@@ -3621,8 +3754,13 @@ const feats = () => [
 function rs(s, i) {
   // spell
   let x = { ...s, _id: 's' + i };
-  if (s.v14 && is14('demo')) Object.assign(x, s.v14);
-  x.d = withNums(x.d, s.dc != null ? { dc: s.dc, atk: s.atk } : null);
+  if (s.v14 && is14('demo')) {
+    Object.assign(x, s.v14);
+    // keep "Always prepared · …" in front of the 2014 text
+    const pre = s.v14.d && (String(s.d || '').match(/^Always prepared[^.]*\.\s*/) || [])[0];
+    if (pre && !s.v14.d.startsWith('Always prepared')) x.d = pre + s.v14.d;
+  }
+  x.d = withNums(spTxt(x), s.dc != null ? { dc: s.dc, atk: s.atk } : null);
   if (s.smite) {
     x.t = is14('smite') ? 'F' : 'B';
     if (is14('smite') && s.d14) x.d = s.d14;
@@ -4674,7 +4812,7 @@ function homeView() {
         : 'Demo character';
   return `<div class="topbar"><div class="appname">Initiative</div><button class="iconbtn" data-act="menu">${I.menu}</button></div>
   <div class="hero"><div class="badge">${esc(ch.name[0])}</div>
-   <button class="display" style="font-size:26px;font-weight:700;background:none;border:0;color:inherit;padding:0" data-act="rename" title="Rename">${esc(ch.name)} <span class="mut" style="font-size:13px">✎</span></button>
+   <button class="display" style="font-size:26px;font-weight:700;background:none;border:0;color:inherit;padding:0" data-act="rename" title="Rename">${esc(ch.name)}${ch.build ? '' : ' <span class="mut" style="font-size:13px">✎</span>'}</button>
    <div class="mut" style="margin-top:4px">${ch.species ? esc(ch.species) + ' · ' : ''}${clsList() ? `Level ${ch.level} · ${clsLine(ch)}` : ch.multi ? `Level ${ch.level} · ${esc(ch.multi)}` : `Level ${ch.level} ${CLS[ch.cls].n}`}${ch.sub ? ' · ' + esc(ch.sub) : ''}</div>${clsBar()}
    <div class="row" style="justify-content:center;margin-top:10px;gap:6px">${edBadge()}${ch.build ? `<button class="pill" data-act="hbEdit">✎ Edit character</button>` : ''}</div>
    <div class="row" style="justify-content:center;margin-top:12px">${vitals()}</div>
@@ -4748,7 +4886,7 @@ function leftSummary() {
   if (done)
     return `<div class="card"><div style="font-weight:800">Nothing left — end your turn</div>${warn.map(w => `<div class="sm" style="color:var(--warn);margin-top:6px">${w}</div>`).join('')}</div>`;
   if (!l.length && !warn.length) return '';
-  return `<div class="card">${l.length ? `<div class="xs mut" style="margin-bottom:8px">Also this turn</div><div style="font-size:14px;line-height:1.7">${l.join(' · ')}</div>` : ''}${warn.map(w => `<div class="sm" style="color:var(--warn);margin-top:${l.length ? 6 : 0}px">${w}</div>`).join('')}</div>`;
+  return `<div class="card">${l.length ? `<div class="xs mut" style="margin-bottom:8px">Also this turn</div><div style="font-size:14px;line-height:1.7">${l.join(' · ').replace(/^(<[^>]+>)*([a-z])/, (m, t, c) => (t || '') + c.toUpperCase())}</div>` : ''}${warn.map(w => `<div class="sm" style="color:var(--warn);margin-top:${l.length ? 6 : 0}px">${w}</div>`).join('')}</div>`;
 }
 /* ---------- Dying ---------- */
 function dyingPanel() {
@@ -4871,7 +5009,7 @@ function offView() {
   }
   ${c.held.length ? reactList : ''}
   ${petStrip('off')}
-  <div class="dock"><div class="row">${hist.length ? `<button class="btn" style="width:auto;padding:19px 18px" data-act="undo" aria-label="Undo">↺</button>` : ''}<button class="btn endc tall" data-act="endCombatAsk">End combat</button><button class="startbtn dockgo" data-act="startTurn">Start Combat Turn</button></div></div>`
+  <div class="dock"><div class="row">${hist.length ? `<button class="btn" style="width:auto;padding:19px 18px" data-act="undo" aria-label="Undo">↺</button>` : ''}<button class="btn endc tall" data-act="endCombatAsk">End combat</button><button class="startbtn dockgo" data-act="startTurn">Start Turn</button></div></div>`
   );
 }
 function allReactions() {
@@ -4886,7 +5024,8 @@ function allReactions() {
       _id: 'oa',
       n: 'Opportunity Attack',
       t: 'R',
-      d: `When an enemy you can see leaves your reach: one melee attack${w ? ` — ${w.n} +${w.hit}, ${(w.dmg + ' ' + w.type).trim()}` : ''}.`
+      d: `When an enemy you can see leaves your reach: one melee attack${w ? ` — ${w.n} +${w.hit}, ${(w.dmg + ' ' + w.type).trim()}` : ''}.`,
+      atk: w ? { hit: w.hit, dmg: w.dmg, type: w.type || '', w: w.n } : null
     },
     ...feats().filter(f => f.t === 'R'),
     ...spells().filter(s => s.t === 'R')
@@ -5572,7 +5711,7 @@ function spellsSheet() {
       : '<div class="empty">No spells in this filter.</div>')
   }
   <button class="btn" style="margin-top:14px" data-act="addSpell">+ Add a missing spell</button>
-  <p class="sm mut" style="margin-top:8px">D&amp;D Beyond doesn't always export spells a subclass always has prepared (domain, circle or oath spells). Add them here.</p>`;
+  <p class="sm mut" style="margin-top:8px">${CH().source === 'ddb' ? "D&amp;D Beyond doesn't always export spells a subclass always has prepared (domain, circle or oath spells). Add them here." : 'Learned a spell from a scroll, a feat or your DM? Add it here.'}</p>`;
 }
 function invSheet() {
   const old = is14('draw');
@@ -9894,12 +10033,24 @@ const ACT = {
     doEffect(o);
     if (o.curse && bh() && bh().patron === 'hexblade' && isProfane())
       addStatus(`Hexblade: +${CH().prof || 3} on your next hit vs the cursed target`);
-    if (!o.effect && !o.refill && !o.gain && !o.regainPact)
+    // a reaction that is a weapon attack (Riposte) rolls with your melee weapon
+    let atk = o.atk;
+    const rip = !atk && /^Riposte$/i.test(o.n) && allReactions()[0].atk;
+    if (rip) atk = { ...rip, extra: ((o.d || '').match(/\+(\d*d\d+) damage/) || [])[1] };
+    // dice the feature tells you to roll: healing (Second Wind, a potion) or damage you prevent (Parry)
+    const heal = !atk && (o.d || '').match(/^Regain (\d*d\d+(?:\s*\+\s*\d+)?) HP/i),
+      dr = !atk && (o.d || '').match(/reduce the damage by (\d*d\d+(?:\s*\+\s*\d+)?)/i);
+    if (!o.effect && !o.refill && !o.gain && !o.regainPact) {
+      if ((heal || dr) && featCard(o.n, (heal || dr)[1], heal ? 'heal' : 'dr', why ? [`<span style="color:var(--warn)">House rule: ${esc(why)}</span>`] : [])) {
+        render();
+        return;
+      }
       toast(
-        o.atk
-          ? `<b>${esc(o.n)}</b>: +${o.atk.hit} to hit · ${esc(o.atk.dmg)} ${esc(o.atk.type)}`
+        atk
+          ? `<b>${esc(o.n)}</b>${atk.w ? ` (${esc(atk.w)})` : ''}: +${atk.hit} to hit · ${esc(atk.dmg)} ${esc(atk.type)}${atk.extra ? `<br>+${atk.extra} (${esc(o.n)})` : ''}`
           : `Used <b>${esc(o.n)}</b>${why ? `<br><span style="color:var(--warn)">House rule: ${esc(why)}</span>` : ''}`
       );
+    }
     render();
   },
   fbOpen() {
@@ -11907,7 +12058,7 @@ function hfGen(B) {
         'rally',
         'Rally',
         'B',
-        `An ally who can see or hear you gains 1d${d}+${Math.max(0, m.CHA)} temporary HP.`
+        `An ally who can see or hear you gains 1d${d}${m.CHA > 0 ? '+' + m.CHA : ''} temporary HP.`
       );
       bm(
         'cmd',
@@ -17170,6 +17321,7 @@ const SPDICE = {
     e24: { k: 'save', ab: 'DEX', half: 1, d: [['5d6', 'fire', '1d6'], ['5d6', 'radiant', '1d6']] }
   },
   "yolande's regal presence": { e24: { k: 'save', ab: 'WIS', half: 1, d: [['4d6', 'psychic']] } },
+  'wind wall': { k: 'save', ab: 'STR', half: 1, d: [['3d8', 'bludgeoning']] },
   'insect plague': { k: 'save', ab: 'CON', half: 1, d: [['4d10', 'piercing', '1d10']] },
   'mass cure wounds': { e14: { k: 'heal', mod: 1, d: [['3d8', '', '1d8']] }, e24: { k: 'heal', mod: 1, d: [['5d8', '', '1d8']] } },
   'steel wind strike': { k: 'atk', n: 5, d: [['6d10', 'force']], each: 'Target' },
@@ -17435,7 +17587,7 @@ function spellShow(enter) {
   const main = R.rows ? R.rows.reduce((t, x) => t + (x.dmg && !x.miss ? x.dmg.total : 0), 0) : R.dmg ? R.dmg.total : 0;
   const total = main + exTotal,
     rolled = R.dmg || rowsDone;
-  const what = { heal: 'healing', temp: 'temporary HP', pool: 'HP of creatures affected', rider: (type ? type + ' ' : '') + 'on the hit' }[R.k] || type || 'damage';
+  const what = { heal: 'healing', dr: 'damage prevented', temp: 'temporary HP', pool: 'HP of creatures affected', rider: (type ? type + ' ' : '') + 'on the hit' }[R.k] || type || 'damage';
   // the first box: how it lands
   let box1 = '';
   if (R.k === 'atk' && !R.rows)
@@ -17468,13 +17620,13 @@ function spellShow(enter) {
     );
   if (parts.length && ((R.k === 'atk' && !R.rows) || R.k === 'rider')) modes.push(`<button class="${R.crit ? 'on crit' : ''}" onclick="rollCrit()">Critical</button>`);
   if (R.alt) modes.push(`<button class="${R.altOn ? 'on' : ''}" onclick="spAlt()">${esc(R.alt.label)}</button>`);
-  const rollWord = { heal: 'Roll healing', temp: 'Roll temporary HP', pool: 'Roll HP affected' }[R.k] || 'Roll damage';
+  const rollWord = { heal: 'Roll healing', dr: 'Roll the reduction', temp: 'Roll temporary HP', pool: 'Roll HP affected' }[R.k] || 'Roll damage';
   const btns = !DICE
     ? ''
     : R.k === 'atk'
-      ? `<button class="btn" onclick="spHit()">${I.dice || ''} ${R.toHit || (R.rows && R.rows[0].toHit) ? 'Roll again' : 'Roll to hit'}</button><button class="btn pri" onclick="spDmg()">${I.dice || ''} ${rolled ? 'Roll again' : 'Roll damage'}</button>`
+      ? `<button class="btn" onclick="spHit()">${I.dice || ''} ${R.toHit || (R.rows && R.rows[0].toHit) ? 'Reroll hit' : 'Roll to hit'}</button><button class="btn pri" onclick="spDmg()">${I.dice || ''} ${rolled ? 'Reroll damage' : 'Roll damage'}</button>`
       : parts.length
-        ? `<button class="btn pri" onclick="spDmg()">${I.dice || ''} ${rolled ? 'Roll again' : rollWord}</button>`
+        ? `<button class="btn ${rolled && (R.k === 'heal' || R.k === 'temp') ? '' : 'pri'}" onclick="spDmg()">${I.dice || ''} ${rolled ? 'Roll again' : rollWord}</button>${rolled && (R.k === 'heal' || R.k === 'temp') ? `<button class="btn pri" ${R.applied ? 'disabled' : ''} onclick="spApplyHp()">${R.applied ? '✓ Added' : R.self ? 'Add to my HP' : 'It\'s me: add to HP'}</button>` : ''}`
         : '';
   const notes = R.notes
     .map((n, i) => {
@@ -17510,6 +17662,52 @@ function spellShow(enter) {
   }
   r.classList.add('on');
   document.body.classList.add('hasroll');
+}
+
+// a feature's own dice on the same card: healing (Second Wind, potions) or damage you prevent (Parry)
+function featCard(name, expr, k, lines) {
+  RC = {
+    sp: true,
+    name: esc(name),
+    sub: '',
+    k,
+    hit: 0,
+    dc: null,
+    ab: '',
+    half: false,
+    parts: [{ expr: expr.replace(/\s/g, ''), type: '' }],
+    alt: null,
+    altOn: false,
+    n: 1,
+    each: '',
+    per: [],
+    burst: null,
+    rows: null,
+    notes: (lines || []).map(h => ({ html: h })),
+    mode: 'normal',
+    crit: false,
+    toHit: null,
+    dmg: null,
+    extras: {},
+    off: {},
+    self: k === 'heal'
+  };
+  rollShow(true);
+  return true;
+}
+// healing you rolled for yourself goes straight onto your HP
+function spApplyHp() {
+  const hp = CH().hp,
+    v = RC.dmg ? RC.dmg.total : 0;
+  if (!v || RC.applied) return;
+  if (RC.k === 'temp') hp.temp = Math.max(hp.temp || 0, v);
+  else {
+    hp.cur = Math.min(hp.max, hp.cur + v);
+    if (S.dying && hp.cur > 0) S.dying = null;
+  }
+  RC.applied = true;
+  render();
+  rollShow();
 }
 
 /* ---------- the roll card: an attack's numbers, and (if you want) digital dice ----------
@@ -17616,7 +17814,7 @@ function rollCard(m) {
   });
   // which lines from the attack always apply on a hit (rolled by "Roll all damage")
   RC.notes.forEach(n => {
-    if (n.ex && /\(Rage\)|\(Great Weapon Master\)|Radiant Strikes|Improved Divine Smite/.test(plain(n.html)) && !/not when thrown|when you attack in melee/i.test(plain(n.html))) n.ex.auto = true;
+    if (n.ex && /\(Rage\)|\(Great Weapon Master\)|Radiant Strikes|Improved Divine Smite|\(Riposte\)/.test(plain(n.html)) && !/not when thrown|when you attack in melee/i.test(plain(n.html))) n.ex.auto = true;
   });
   // a few extras that only matter when you hit, so they can be rolled from here too
   const add = (label, expr) => RC.notes.push({ html: `<span class="mut">${esc(label)}</span>`, ex: { label, expr } });
@@ -17656,6 +17854,18 @@ function rollCard(m) {
       if (m) RC.notes.push({ html: '', ex: { label: `${f.n}: +${m[1]}${m[2] && m[2] !== ' damage' ? m[2] : key === 'harm' ? ' necrotic' : ''}${f.res ? (resName(f.res) === f.n ? ' (uses 1)' : ` (1 ${resName(f.res).replace(/s$/, '')})`) : ''}`, expr: m[1], once: key, res: f.res } });
     });
     if (w && (w.ranged || /^Dart/.test(w.n)) && c.status.some(x => /^Kensei's Shot/.test(x))) auto("Kensei's Shot: +1d4", '1d4');
+  }
+  // maneuvers and other on-hit dice that spend a use: Trip Attack, Menacing Attack…
+  feats().forEach(f => {
+      if (f.once || !f.res || !resOK(f.res) || f.t === 'R') return;
+      const m = (f.d || '').match(/^On a hit: \+(\d*d\d+) damage/i);
+      if (m) RC.notes.push({ html: '', ex: { label: `${f.n}: +${m[1]} (1 ${resName(f.res).replace(/s$/, '').replace(/ Dice$/, ' Die')})`, expr: m[1], res: f.res, grp: 'maneuver' } });
+    });
+  // the weapon's mastery, as a reminder
+  {
+    const w = (CH().weapons || []).find(x => x.n === RC.name || x.n === RC.sub),
+      mk = w && !is14('mastery') && MASTERY_CLASSES.includes(CH().cls) && masteryOf(w.base || w.n);
+    if (mk && MDESC[mk]) RC.notes.push({ html: `<span class="mut"><b>${esc(mk)}</b> · ${esc(MDESC[mk])}</span>`, ex: null });
   }
   // a crit's extra weapon dice (not doubled)
   {
@@ -17712,13 +17922,13 @@ function rollShow(enter) {
         ]
           .map(([k, l]) => `<button class="${R.mode === k ? 'on' : ''}" onclick="rollMode('${k}')">${l}</button>`)
           .join('')}<button class="${R.crit ? 'on crit' : ''}" onclick="rollCrit()">Critical</button></div>
-  <div class="rbtns" onclick="event.stopPropagation()"><button class="btn" onclick="rollHit()">${I.dice || ''} ${R.toHit ? 'Roll again' : 'Roll to hit'}</button><button class="btn pri" onclick="rollDmg()">${I.dice || ''} ${R.dmg ? 'Roll again' : R.notes.some(n => n.ex && n.ex.auto && !n.ex.critOnly) ? 'Roll all damage' : 'Roll damage'}</button></div>`
+  <div class="rbtns" onclick="event.stopPropagation()"><button class="btn" onclick="rollHit()">${I.dice || ''} ${R.toHit ? 'Reroll hit' : 'Roll to hit'}</button><button class="btn pri" onclick="rollDmg()">${I.dice || ''} ${R.dmg ? 'Reroll damage' : R.notes.some(n => n.ex && n.ex.auto && !n.ex.critOnly) ? 'Roll all damage' : 'Roll damage'}</button></div>`
       : ''
   }
   ${notes ? `<div class="rnotes">${notes}</div>` : ''}
   ${
     DICE && (R.dmg || exTotal)
-      ? `<div class="rtotal">Total damage <b>${(R.dmg ? R.dmg.total : 0) + exTotal}</b><small>${[R.dmg ? `${esc(R.name)} ${R.dmg.total}` : '', ...Object.keys(R.extras).map(i => `${esc(R.notes[i].ex.label.split(':')[0])} ${R.extras[i].total}`)].filter(Boolean).join(' · ')}</small></div>`
+      ? !exTotal ? '' : `<div class="rtotal">Total damage <b>${(R.dmg ? R.dmg.total : 0) + exTotal}</b><small>${[R.dmg ? `${esc(R.name)} ${R.dmg.total}` : '', ...Object.keys(R.extras).map(i => `${esc(R.notes[i].ex.label.split(':')[0])} ${R.extras[i].total}`)].filter(Boolean).join(' · ')}</small></div>`
       : (() => {
           // rolling physical dice: everything that applies, as one formula
           const L = R.notes.filter((n, i) => n.ex && n.ex.auto && !n.ex.critOnly && !R.off[i]);
@@ -17797,6 +18007,11 @@ function rollExtra(i) {
       save();
     }
   } else {
+    // one maneuver per attack: picking another swaps it
+    if (e.grp)
+      RC.notes.forEach((n, j) => {
+        if (j != i && n.ex && n.ex.grp === e.grp && RC.extras[j]) rollExtra(j);
+      });
     if (e.res && !e.spent) {
       if (!resOK(e.res)) return toast('No uses left');
       spendRes(e.res);
