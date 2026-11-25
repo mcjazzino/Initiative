@@ -2643,7 +2643,10 @@ const SP_TXT = {
   'fog cloud': ['A 20-ft-radius sphere of heavy fog within 120 ft for 1 hour.'],
   'freedom of movement': ['Touch: for 1 hour, difficult terrain and magic can\'t slow, paralyse or restrain it, and it can escape a grapple with 5 ft of movement.'],
   'gentle repose': ['Ritual. A corpse is protected from decay and can\'t become undead for 10 days.'],
-  'grasping vine': ['A vine sprouts within 30 ft for 1 minute. Bonus Action: it lashes at a creature within 30 ft of it, which must make a save or be pulled toward it.'],
+  'grasping vine': [
+    'A vine sprouts within 30 ft for 1 minute. It lashes at a creature within 30 ft of it: DEX save or pulled 20 ft toward the vine. Bonus Action: lash again on later turns.',
+    'A vine sprouts within 60 ft for 1 minute. Melee spell attack against a creature within 30 ft of it: 4d8 bludgeoning, pulled up to 30 ft toward the vine and Grappled if Huge or smaller (escape DC = your spell DC; one creature at a time). Bonus Action: attack again on later turns.'
+  ],
   'greater restoration': ['Touch: end one level of exhaustion, a charm, petrification, a curse, or a reduction to an ability score or HP maximum.'],
   'guardian of faith': ['A guardian stands within 30 ft for 8 hours: an enemy that comes within 10 ft of it makes a DEX save or takes 20 radiant (half on a success). It vanishes after dealing 60.'],
   'gust of wind': ['60-ft line from you for 1 minute: STR save or pushed 15 ft away; moving toward you costs double.'],
@@ -17304,6 +17307,7 @@ const SPDICE = {
   // 4th level
   blight: { k: 'save', ab: 'CON', half: 1, d: [['8d8', 'necrotic', '1d8']] },
   "evard's black tentacles": { e14: { k: 'save', ab: 'DEX', d: [['3d6', 'bludgeoning']] }, e24: { k: 'save', ab: 'STR', d: [['3d6', 'bludgeoning']] } },
+  'grasping vine': { e24: { k: 'atk', d: [['4d8', 'bludgeoning']], upNote: 'The vine can grapple one more creature per slot level above 4th.' } },
   'gravity sinkhole': { k: 'save', ab: 'CON', half: 1, d: [['5d10', 'force', '1d10']] },
   'ice storm': {
     e14: { k: 'save', ab: 'DEX', half: 1, d: [['2d8', 'bludgeoning', '1d8'], ['4d6', 'cold']] },
