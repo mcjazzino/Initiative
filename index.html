@@ -772,13 +772,13 @@ const MASTERY = {
 };
 const MDESC = {
   Cleave:
-    'Hit with a melee attack: make one more attack against a second creature within 5 ft of the first (once per turn).',
+    'Hit with a melee attack: make one more attack against a second creature within 5 ft of the first (once per turn). Its damage doesn\'t add your ability modifier unless it\'s negative.',
   Graze: 'Miss: still deal damage equal to your ability modifier.',
   Nick: 'The extra Light-weapon attack is part of your Attack action (once per turn).',
   Push: 'Hit: push a Large or smaller target up to 10 ft away.',
   Sap: 'Hit: the target has disadvantage on its next attack before your next turn.',
   Slow: "Hit and damage: the target's speed drops by 10 ft until your next turn.",
-  Topple: 'Hit: the target makes a CON save or falls prone.',
+  Topple: 'Hit: the target makes a CON save (DC 8 + the attack\'s ability modifier + your Proficiency Bonus) or falls prone.',
   Vex: 'Hit and damage: advantage on your next attack against that target before the end of your next turn.'
 };
 const masteryOf = n => {
@@ -871,7 +871,7 @@ const DEMO = {
       )
     ],
     spells: [
-      SP('Vicious Mockery', 0, 'A', 'WIS save or 2d4 psychic and disadvantage on its next attack.'),
+      SP('Vicious Mockery', 0, 'A', 'WIS save or 2d6 psychic and disadvantage on its next attack.', false, { v14: { d: 'WIS save or 2d4 psychic and disadvantage on its next attack.' } }),
       SP('Minor Illusion', 0, 'A', 'Create a sound or small image.'),
       SP('Healing Word', 1, 'B', 'Heal a creature you can see within 60 ft for 2d4 + CHA.', false, {
         v14: { d: 'Heal a creature you can see within 60 ft for 1d4 + CHA.' }
@@ -1204,7 +1204,7 @@ const DEMO = {
       })
     ],
     spells: [
-      SP("Hunter's Mark", 1, 'B', '+1d6 force damage on your hits against the marked target.', true),
+      SP("Hunter's Mark", 1, 'B', '+1d6 force damage on your hits against the marked target.', true, { v14: { d: '+1d6 damage on your weapon hits against the marked target.' } }),
       SP('Ensnaring Strike', 1, 'B', 'Your next hit: STR save or restrained by vines.', true),
       SP('Cure Wounds', 1, 'A', 'Touch: heal 2d8 + WIS.', false, { v14: { d: 'Touch: heal 1d8 + WIS.' } }),
       SP('Goodberry', 1, 'A', 'Ten berries that each heal 1 HP.'),
@@ -2484,9 +2484,9 @@ const SUB_SP_META = {
   'locate creature': 'Ac', 'mirror image': 'A', identify: 'A', augury: 'A', 'speak with dead': 'A', 'animal friendship': 'A', 'wind wall': 'Ac', 'grasping vine': 'Bc',
   'destructive wave': 'A', 'divine favor': 'B', 'searing smite': 'B', 'heat metal': 'Ac', 'elemental weapon': 'Ac', fabricate: 'A', 'animate objects': 'Ac', creation: 'A',
   'false life': 'A', 'ray of enfeeblement': 'Ac', 'vampiric touch': 'Ac', 'antilife shell': 'Ac', 'raise dead': 'A', sanctuary: 'B', 'warding bond': 'A',
-  "otiluke's resilient sphere": 'Ac', 'aura of vitality': 'Bc', "leomund's tiny hut": 'A', 'circle of power': 'Ac', 'detect magic': 'Ac', 'magic missile': 'A', "nystul's magic aura": 'A',
+  "otiluke's resilient sphere": 'Ac', 'aura of vitality': 'Ac', "leomund's tiny hut": 'A', 'circle of power': 'Ac', 'detect magic': 'Ac', 'magic missile': 'A', "nystul's magic aura": 'A',
   'magic circle': 'A', "leomund's secret chest": 'A', 'planar binding': 'A', 'teleportation circle': 'A', 'armor of agathys': 'A', 'bestow curse': 'Ac',
-  'counterspell': 'R', 'aura of purity': 'Ac', 'compelled duel': 'Bc', 'shield': 'R', 'conjure barrage': 'A', 'branding smite': 'B', 'banishing smite': 'B', 'healing word': 'B'
+  'counterspell': 'R', 'aura of purity': 'Ac', 'compelled duel': 'Bc', 'shield': 'R', 'conjure barrage': 'A', 'branding smite': 'Bc', 'banishing smite': 'Bc', 'healing word': 'B'
 };
 const spTitle = n => n.replace(/(^|[\s\/-])(\w)/g, (m, a, c) => a + c.toUpperCase()).replace(/ (Of|The|And|With|From|To)\b/g, w => w.toLowerCase());
 // the always-prepared spells a subclass gives at class level `lvl`: [{ n, lvl, at }]
@@ -2565,8 +2565,6 @@ const SUB_SP_DESC = {
   'fire shield': 'Flames wreathe you for 10 minutes: resist cold or fire, and melee attackers take 2d8 damage.',
   "melf's acid arrow": 'Ranged spell attack: 4d4 acid now and 2d4 at the end of its next turn (half and none on a miss).',
   passwall: 'Open a passage through wood, plaster or stone for 1 hour.',
-  'conjure barrage': '60-ft cone: DEX save or 5d8 damage of your weapon\'s type (half on a success).',
-  'banishing smite': 'Your next weapon hit deals +5d10 force; if it drops below 50 HP it is banished.',
   'steel wind strike': 'Flash between up to five creatures within 30 ft: melee spell attacks, 6d10 force each; then teleport.',
   'fount of moonlight': 'Resist radiant, +2d6 radiant on your melee hits, and a reaction to blind an attacker (CON save).',
   'water breathing': 'Up to ten creatures can breathe underwater for 24 hours.',
@@ -2579,7 +2577,6 @@ const SUB_SP_DESC = {
   'summon dragon': 'Summon a draconic spirit that fights for you; it acts right after you.',
   'phantasmal force': 'A creature makes an INT save or perceives an illusion that deals 2d8 psychic each turn.',
   'summon celestial': 'Summon a celestial spirit that fights for you; it acts right after you.',
-  'stinking cloud': '20-ft sphere of gas: creatures that start there make a CON save or can\'t act or react that turn.',
   "tasha's hideous laughter": 'A creature makes a WIS save or falls prone, laughing, and is incapacitated.',
   clairvoyance: 'Create an invisible sensor to see or hear a place you know. Out of combat.',
   'water walk': 'Up to ten creatures can walk on liquid for 1 hour.',
@@ -2673,7 +2670,7 @@ const SP_TXT = {
   'mass healing word': ['Up to six creatures within 60 ft regain 1d4 + your casting modifier HP.', 'Up to six creatures within 60 ft regain 2d4 + your casting modifier HP.'],
   'mirror image': [
     'Three illusory copies for 1 minute. When you\'re attacked, roll a d20 to see if a copy is hit instead (6+ with three, 8+ with two, 11+ with one); a copy hit is destroyed.',
-    'Three illusory copies for 1 minute. When you\'re attacked, roll a d6 for each copy: on a 3+ a copy is hit instead and destroyed.'
+    'Three illusory copies for 1 minute. When a creature hits you with an attack roll, roll a d6 for each copy: on any 3+, a copy is hit instead and destroyed.'
   ],
   nondetection: ['Touch: hidden from divination magic for 8 hours.'],
   'phantom steed': ['Ritual. A Large quasi-real horse appears for 1 hour, with a speed of 100 ft.'],
@@ -2712,9 +2709,22 @@ const SP_TXT = {
   'warding bond': ['Touch a willing creature: +1 AC and saves and resistance to all damage for 1 hour, but you take the same damage it takes.'],
   'wind wall': ['A wall of wind up to 50 ft long for 1 minute: STR save or 3d8 bludgeoning when it appears (half on a success). It blocks small flyers, arrows and gas.'],
   'wrathful smite': [
-    'Bonus Action: your next melee weapon hit deals +1d6 psychic; WIS save or Frightened (it can use its action to try again).',
+    'Bonus Action: your next melee weapon hit deals +1d6 psychic; WIS save or Frightened (it can use its action for a WIS check to end it).',
     'Bonus Action right after a melee hit: +1d6 necrotic; WIS save or Frightened for 1 minute (it repeats the save each turn).'
   ],
+  'conjure barrage': [
+    '60-ft cone of weapons: DEX save or 3d8 damage of your weapon\'s type (half on a success).',
+    '60-ft cone: DEX save or 5d8 force (half on a success).'
+  ],
+  'banishing smite': [
+    'Bonus Action: your next weapon hit deals +5d10 force; if that leaves it at 50 HP or fewer, it is banished.',
+    'Bonus Action right after a weapon hit: +5d10 force; if that leaves it at 50 HP or fewer, it makes a CHA save or is banished.'
+  ],
+  'stinking cloud': [
+    '20-ft sphere of gas: a creature that starts its turn in it makes a CON save or spends its action retching.',
+    '20-ft sphere of gas: a creature that starts its turn in it makes a CON save or is Poisoned and can\'t take actions or bonus actions that turn.'
+  ],
+  'shining smite': ['Bonus Action right after a weapon hit: +2d6 radiant. For 1 minute the target sheds light, can\'t be invisible, and attacks against it have advantage.'],
   'zone of truth': ['15-ft-radius sphere for 10 minutes: CHA save or it can\'t knowingly lie.']
 };
 // a spell's own summary, or the library's when it has none
@@ -3022,7 +3032,8 @@ function withNums(d, own) {
 const grappleDC = () => 8 + (CH().prof || 2) + (CH().str || 0);
 function rf(o, i) {
   // feature
-  const old = o.rk && is14(o.rk);
+  // a feature with its own house-rule key follows that rule; otherwise its 2014 text goes with a 2014 character
+  const old = o.rk ? is14(o.rk) : CH().edition === '2014';
   const r = {
     ...o,
     _id: 'f' + i,
@@ -3810,15 +3821,16 @@ function effSpeed() {
     base = b ? b.sp[S.ws.mode] || 0 : CH().speed,
     cd = S.cond;
   if (condFx().sp0.length) return 0;
-  if (cd.hasted && !b && !cd.slowed) return 2 * base;
-  if (cd.slowed && !cd.hasted) return Math.floor(base / 2);
+  let sp = base + (S.blade ? 10 : 0);
+  if (cd.hasted && !b && !cd.slowed) sp *= 2;
+  else if (cd.slowed && !cd.hasted) sp = Math.floor(sp / 2);
   if (cd.exhaust) {
     if (is14('exhaust')) {
       if (cd.exhaust >= 5) return 0;
-      if (cd.exhaust >= 2) return Math.floor(base / 2);
-    } else return Math.max(0, base - 5 * cd.exhaust);
+      if (cd.exhaust >= 2) sp = Math.floor(sp / 2);
+    } else sp = Math.max(0, sp - 5 * cd.exhaust);
   }
-  return base + (S.blade ? 10 : 0);
+  return sp;
 }
 function speedNote() {
   const cd = S.cond,
@@ -4205,7 +4217,7 @@ const CONDS = [
     src: 'Slow',
     ac: -2,
     half: 1,
-    sv: 'Disadvantage on DEX saves (5e: −2).',
+    sv: '−2 on DEX saves.',
     d: 'Half speed, no Reactions. On your turn: an Action or a Bonus Action, not both, and only one attack.',
     noR: 1,
     end: 'save'
@@ -4261,7 +4273,7 @@ function condFx() {
     f.atkDis.push('Exhaustion 3+');
     f.sv.push('Exhaustion 3+: disadvantage on saves');
   }
-  if (C().status && C().status.includes('Dodging')) f.vsDis.push('Dodging');
+  if (C().status && C().status.includes('Dodging') && !f.inc.length && !f.sp0.length) f.vsDis.push('Dodging');
   return f;
 }
 const incName = () => {
@@ -4537,7 +4549,7 @@ function damageHints() {
   }
   if ((CH().attn || []).some(a => a.on && /holy avenger/i.test(a.n)))
     L.push(`<b>Holy Avenger</b>: while it's drawn, you and allies within ${clsLvl('Paladin') >= 17 ? 30 : 10} ft have advantage on saves against spells and other magical effects.`);
-  if (hasP('Gnomish Cunning') || hasP('Gnome Cunning')) L.push('<b>Gnomish Cunning</b>: advantage on INT, WIS and CHA saves.');
+  if (hasP('Gnomish Cunning') || hasP('Gnome Cunning')) L.push(`<b>Gnomish Cunning</b>: advantage on INT, WIS and CHA saves${is14('demo') ? ' against magic' : ''}.`);
   if (hasP('Dark Augmentation')) L.push(`<b>Dark Augmentation</b>: +${Math.max(1, hemoMod())} to STR, DEX and CON saves.`);
   return L.length
     ? `<div class="card" style="margin-top:12px">${L.map(x => `<div class="sm" style="line-height:1.45;margin-top:3px">${x}</div>`).join('')}</div>`
@@ -4550,7 +4562,7 @@ function condSaveNote(k) {
   if (k === 'poisoned' && hasP('Dwarven Resilience')) L.push('Dwarven Resilience: you had advantage on that save');
   if (k === 'frightened' && hasP('Brave')) L.push('Brave: you had advantage on that save');
   if (k === 'frightened' && hasP('Aura of Courage')) L.push("Aura of Courage: you can't be Frightened while you're conscious");
-  if ((k === 'charmed' || k === 'frightened') && hasP('Gnomish Cunning')) L.push('Gnomish Cunning: you had advantage on that save');
+  if ((k === 'charmed' || k === 'frightened') && hasP('Gnomish Cunning')) L.push(`Gnomish Cunning: you had advantage on that save${is14('demo') ? ' if it came from magic' : ''}`);
   if ((k === 'charmed' || k === 'frightened') && hasP('Hardened Soul')) L.push('Hardened Soul: you had advantage on that save');
   return L.length ? '<br>' + L.join('<br>') : '';
 }
@@ -5994,7 +6006,7 @@ const GLOSS = {
   ],
   stunned: [
     'Stunned',
-    "Incapacitated, can't move, and you fail STR and DEX saves. Attacks against you have advantage."
+    "Incapacitated, you fail STR and DEX saves, and attacks against you have advantage. 5e (2014): you also can't move."
   ],
   unconscious: [
     'Unconscious',
@@ -6954,7 +6966,9 @@ const KNOWN_SP = {
   "hunter's mark": [
     'B',
     1,
-    'Mark a creature: +1d6 damage on your weapon hits against it; move the mark when it drops.'
+    'Mark a creature: +1d6 damage when you hit it (5e: weapon hits only; 5.5e: any attack roll, force damage). Move the mark when it drops to 0 HP.',
+    'B',
+    1
   ],
   bane: ['A', 1, 'Up to 3 creatures (CHA save) subtract 1d4 from attacks and saves.'],
   bless: ['A', 1, 'Up to 3 creatures add 1d4 to attacks and saves.'],
@@ -6997,12 +7011,12 @@ const KNOWN_SP = {
   suggestion: ['A', 1],
   'enhance ability': ['A', 1],
   'zone of truth': ['A', 0],
-  'magic weapon': ['B', 1, '', 'A', 0],
+  'magic weapon': ['B', 1, '', 'B', 0],
   'calm emotions': ['A', 1],
   'branding smite': ['B', 1],
   'searing smite': ['B', 1, '', 'B', 0],
   'thunderous smite': ['B', 1, '', 'B', 0],
-  'wrathful smite': ['B', 1, '', 'A', 0],
+  'wrathful smite': ['B', 1, '', 'B', 0],
   'divine favor': ['B', 1, '', 'B', 0],
   'compelled duel': ['B', 1],
   heroism: ['A', 1],
@@ -7054,7 +7068,7 @@ const KNOWN_SP = {
   'disguise self': ['A', 0],
   identify: ['O', 0],
   augury: ['O', 0],
-  nondetection: ['O', 0],
+  nondetection: ['A', 0],
   'speak with dead': ['A', 0],
   'beacon of hope': ['A', 1],
   'false life': ['A', 0],
@@ -8120,7 +8134,8 @@ function parseDDB(raw) {
         const n = s0.n;
         if (have.has(n.toLowerCase())) return;
         have.add(n.toLowerCase());
-        const k = KNOWN_SP[n.toLowerCase()],
+        const k0 = KNOWN_SP[n.toLowerCase()],
+          k = k0 && (guessEdition(d) === '2014' || k0.length < 4 ? k0 : [k0[3], k0[4], k0[2]]),
           meta = SUB_SP_META[n.toLowerCase()];
         const cv = (d.characterValues || []).find(
           v => v.typeId === 8 && typeof v.value === 'string' && v.value.toLowerCase().startsWith(n.toLowerCase() + ' [')
@@ -10283,36 +10298,46 @@ const ACT = {
       return;
     }
     const hp = CH().hp;
+    if (k === 'half' && S.ws && is14('ws')) {
+      v = Math.floor(v / 2);
+      k = 'dmg';
+    }
+    // 2014 Wild Shape: the beast takes the hit; damage past its HP carries over to you
+    let wsBack = '',
+      dcFrom = 0;
     if (k === 'dmg' && S.ws && is14('ws')) {
       S.ws.hp -= v;
-      let dc = Math.max(10, Math.floor(v / 2));
-      if (S.ws.hp <= 0) {
-        const over = -S.ws.hp,
-          n = S.ws.n;
-        S.ws = null;
-        let r = over;
-        const t = Math.min(hp.temp, r);
-        hp.temp -= t;
-        r -= t;
-        hp.cur = Math.max(0, hp.cur - r);
-        toast(
-          `Your ${esc(n)} form drops to 0 HP — you change back${over ? ` and take <b>${over}</b> leftover damage` : ''}`
-        );
-      } else if (S.conc) toast(`Concentration check: <b>CON save DC ${dc}</b>`);
-      render();
-      return;
+      const dc = Math.max(10, Math.floor(v / 2));
+      if (S.ws.hp > 0) {
+        if (S.conc) toast(`Concentration check: <b>CON save DC ${dc}</b>`);
+        render();
+        return;
+      }
+      const over = -S.ws.hp,
+        n = S.ws.n;
+      S.ws = null;
+      wsBack = `Your ${esc(n)} form drops to 0 HP — you change back${over ? ` and take <b>${over}</b> leftover damage` : ''}`;
+      if (!over) {
+        toast(wsBack + (S.conc ? `<br>Concentration check: <b>CON save DC ${dc}</b>` : ''));
+        render();
+        return;
+      }
+      dcFrom = v;
+      v = over;
     }
     if (k === 'heal' && S.ws && is14('ws')) {
       S.ws.hp = Math.min(S.ws.max, S.ws.hp + v);
       render();
       return;
     }
+    let resisted = false;
     if (k === 'half') {
       v = Math.floor(v / 2);
       k = 'dmg';
+      resisted = true;
     }
     let petMsg = '';
-    if (k === 'dmg' && S.cond.petrified) {
+    if (k === 'dmg' && S.cond.petrified && !resisted) {
       const o = v;
       v = Math.floor(v / 2);
       petMsg = `Petrified: ${o} halved to ${v}<br>`;
@@ -10403,8 +10428,9 @@ const ACT = {
         render();
         return;
       }
-      let dc = Math.max(10, Math.floor(v / 2));
+      let dc = Math.max(10, Math.floor((dcFrom || v) / 2));
       if (!is14('conc')) dc = Math.min(30, dc);
+      if (wsBack) wardMsg = wardMsg ? wsBack + '<br>' + wardMsg : wsBack;
       const fc =
         wizSub(/Conjur/i) &&
         wizLvl() >= (is14('evoker') ? 10 : 10) &&
@@ -10421,7 +10447,7 @@ const ACT = {
         toast(
           S.dying && S.dying.dead
             ? 'Massive damage: you die instantly'
-            : `You drop to 0 HP: <b>Unconscious</b>, death saves begin${lostConc ? `<br>Your concentration on ${esc(lostConc)} ends` : ''}`
+            : `${wsBack ? wsBack + '<br>' : ''}You drop to 0 HP: <b>Unconscious</b>, death saves begin${lostConc ? `<br>Your concentration on ${esc(lostConc)} ends` : ''}`
         );
       else toast(`${petMsg}${wardMsg ? wardMsg + '<br>' : ''}You take ${v} damage · HP ${hp.cur}/${hp.max}`);
     }
@@ -11067,7 +11093,7 @@ const CANT = {
   'Shocking Grasp': [
     'A',
     0,
-    n => `Melee spell attack: ${n}d8 lightning, and it can't take Reactions until its next turn.`
+    (n, o) => `Melee spell attack: ${n}d8 lightning, and it can't ${o ? 'take Reactions' : 'make Opportunity Attacks'} until the start of its next turn.`
   ],
   'Chill Touch': [
     'A',
@@ -11104,7 +11130,7 @@ const CANT = {
         ? `A creature within 10 ft: CON save or ${n}d12 poison.`
         : `Ranged spell attack, 30 ft: ${n}d12 poison.`
   ],
-  'Acid Splash': ['A', 0, n => `One creature, or two next to each other: DEX save or ${n}d6 acid.`],
+  'Acid Splash': ['A', 0, (n, o) => `${o ? 'One creature, or two within 5 ft of each other' : 'A 5-ft-radius sphere within 60 ft'}: DEX save or ${n}d6 acid.`],
   Frostbite: [
     'A',
     0,
@@ -11161,8 +11187,8 @@ const CANT = {
         ? 'Until the end of your next turn: resistance to bludgeoning, piercing and slashing damage from weapon attacks.'
         : 'For 1 minute: attackers subtract 1d4 from their attack rolls against you.'
   ],
-  Guidance: ['A', 1, () => 'Touch a creature: +1d4 to one ability check of its choice.'],
-  Resistance: ['A', 1, () => 'Touch a creature: +1d4 to one saving throw.'],
+  Guidance: ['A', 1, (n, o) => (o ? 'Touch a creature: +1d4 to one ability check of its choice.' : 'Touch a creature and choose a skill: for 1 minute it adds 1d4 to checks with that skill.')],
+  Resistance: ['A', 1, (n, o) => (o ? 'Touch a creature: +1d4 to one saving throw.' : 'Touch a creature and choose a damage type: once a turn, it reduces damage of that type by 1d4.')],
   'Spare the Dying': ['A', 0, () => 'A creature at 0 HP becomes stable.'],
   Shillelagh: [
     'B',
@@ -11215,7 +11241,7 @@ const EXTRA_SP = {
     4,
     'A',
     1,
-    'A wall of fire up to 60 ft long: a creature in it or entering it makes a DEX save or takes 5d8 fire (half on a success).'
+    'A wall of fire up to 60 ft long for 1 minute: creatures in it when it appears make a DEX save or take 5d8 fire (half on a success). A creature entering it, or ending its turn in it or within 10 ft of your chosen side, takes 5d8 fire.'
   ],
   Polymorph: [
     4,
@@ -11241,6 +11267,7 @@ const EXTRA_SP = {
     6,
     'A',
     0,
+    'A creature within 60 ft regains 70 HP (+10 per slot level above 6th), and its Blinded, Deafened and Poisoned conditions end.',
     'A creature within 60 ft regains 70 HP (+10 per slot level above 6th) and is cured of blindness, deafness and disease.'
   ],
   Harm: [
@@ -12083,7 +12110,9 @@ function hfGen(B) {
         'rally',
         'Rally',
         'B',
-        `An ally who can see or hear you gains 1d${d}${m.CHA > 0 ? '+' + m.CHA : ''} temporary HP.`
+        o
+          ? `An ally who can see or hear you gains 1d${d}${m.CHA > 0 ? '+' + m.CHA : ''} temporary HP.`
+          : `An ally within 30 ft who can see or hear you gains 1d${d}+${Math.floor(k / 2)} temporary HP.`
       );
       bm(
         'cmd',
@@ -12100,8 +12129,10 @@ function hfGen(B) {
       bm(
         'lunge',
         'Lunging Attack',
-        'F',
-        `One melee attack with 5 ft more reach, with +1d${d} damage on a hit.`
+        o ? 'F' : 'B',
+        o
+          ? `One melee attack with 5 ft more reach, with +1d${d} damage on a hit.`
+          : `Take the Dash action. If you move at least 5 ft in a straight line right before hitting with a melee attack this turn: +1d${d} damage.`
       );
       bm(
         'sweep',
@@ -12109,7 +12140,7 @@ function hfGen(B) {
         'F',
         `On a melee hit: if the roll would also hit another creature within 5 ft, it takes 1d${d} damage of the same type.`
       );
-      bm('foot', 'Evasive Footwork', 'F', `As you move: add 1d${d} to your AC until you stop moving.`);
+      bm('foot', 'Evasive Footwork', o ? 'F' : 'B', o ? `As you move: add 1d${d} to your AC until you stop moving.` : `Take the Disengage action, and add 1d${d} to your AC until the start of your next turn.`);
       bm(
         'mvr',
         'Maneuvering Attack',
@@ -12344,6 +12375,8 @@ function hfGen(B) {
         d: `Free cast ${k >= 17 ? 6 : k >= 13 ? 5 : k >= 9 ? 4 : k >= 5 ? 3 : 2}× per long rest, or spend a slot. +1d6 force damage on your hits against the marked target.`
       };
     }
+    // a 2014 ranger has no spells until level 2
+    if (!o || k >= 2)
     add(
       'rng.move',
       "Move Hunter's Mark",
@@ -12863,8 +12896,10 @@ function hbBuild(B) {
         return;
       }
       const l = lib.find(x => x.n.toLowerCase() === s0.n.toLowerCase()),
+        k0 = KNOWN_SP[s0.n.toLowerCase()],
+        k = k0 && (E === '2014' || k0.length < 4 ? k0 : [k0[3], k0[4], k0[2]]),
         meta = SUB_SP_META[s0.n.toLowerCase()] || 'A';
-      const s = l ? JSON.parse(JSON.stringify(l)) : { n: s0.n, lvl: s0.lvl, t: meta[0], conc: meta.includes('c'), d: SUB_SP_DESC[s0.n.toLowerCase()] || '' };
+      const s = l ? JSON.parse(JSON.stringify(l)) : { n: s0.n, lvl: s0.lvl, t: k ? k[0] : meta[0], conc: k ? !!k[1] : meta.includes('c'), d: SUB_SP_DESC[s0.n.toLowerCase()] || '' };
       s.cls = c.n;
       s.auto = c.sub.trim() + ' spells';
       s.d = `Always prepared · ${c.sub.trim()} (${c.n} level ${s0.at}).` + (s.d ? ' ' + s.d : '');
@@ -13231,7 +13266,7 @@ function hfMore(B, D, F, add, res) {
     if (!o && k >= 9) note('monk.sw', 'Acrobatic Movement: you can move along walls and across liquids on your turn.');
     if (!o && k >= 10) {
       note('monk.flurry', 'Heightened Focus: three strikes instead of two.');
-      note('monk.pdf', `Heightened Focus: also gain ${2 * (k >= 17 ? 12 : k >= 11 ? 10 : 8)} temporary HP (two Martial Arts dice).`);
+      note('monk.pdf', `Heightened Focus: also gain 2d${k >= 17 ? 12 : k >= 11 ? 10 : 8} temporary HP (roll two Martial Arts dice).`);
       note('monk.swf', 'Heightened Focus: you can carry a willing Large-or-smaller creature along.');
     }
     if (!o && k >= 13) note('monk.deflect', 'Deflect Energy: works against any damage type, not only bludgeoning, piercing and slashing.');
@@ -14228,9 +14263,9 @@ function hfSubs(B, D, F, add, res) {
     }
     if (is('Ranger', /Beast Master/i)) {
       if (o)
-        add('sub.bm3', 'Primal Companion', 'B', `Command your beast (Land, Sea or Sky; AC ${13 + p}, ${5 + 5 * k} HP, or ${4 * k} as Sky) to Attack: ${'+' + (p + m.WIS)} to hit, 1d8+${p} damage (1d4+${p} as Sky). Otherwise it takes the Dodge action.${k >= 5 ? ' From level 5 you can also command it with your Action, giving up one of your attacks.' : ''}${k >= 11 ? ' Bestial Fury: when commanded, it makes two attacks.' : ''}`);
+        add('sub.bm3', 'Primal Companion', 'B', `Command your beast (Land, Sea or Sky; AC ${13 + p}, ${5 + 5 * k} HP, or ${4 + 4 * k} as Sky) to Attack: ${'+' + (p + m.WIS)} to hit, 1d8+${2 + p} damage (1d4+${3 + p} as Sky). Otherwise it takes the Dodge action.${k >= 5 ? ' From level 5 you can also command it with your Action, giving up one of your attacks.' : ''}${k >= 11 ? ' Bestial Fury: when commanded, it makes two attacks.' : ''}`);
       else
-        add('sub.bm3', 'Primal Companion', 'B', `Command your beast (Land, Sea or Sky; AC ${13 + m.WIS}, ${5 + 5 * k} HP, or ${4 * k} as Sky) to take an action. Its Beast's Strike: +${p + m.WIS} to hit, 1d8+2+${m.WIS} damage (1d4+3+${m.WIS} as Sky). If you don't command it, it takes the Dodge action.${k >= 5 ? ' When you take the Attack action, you can give up one attack to command a Beast\'s Strike.' : ''}${k >= 11 ? ' Bestial Fury: it makes two Beast\'s Strikes, and the first hit each turn on your Hunter\'s Mark target adds the mark\'s damage.' : ''}`);
+        add('sub.bm3', 'Primal Companion', 'B', `Command your beast (Land, Sea or Sky; AC ${13 + m.WIS}, ${5 + 5 * k} HP, or ${4 + 4 * k} as Sky) to take an action. Its Beast's Strike: +${p + m.WIS} to hit, 1d8+2+${m.WIS} damage (1d4+3+${m.WIS} as Sky). If you don't command it, it takes the Dodge action.${k >= 5 ? ' When you take the Attack action, you can give up one attack to command a Beast\'s Strike.' : ''}${k >= 11 ? ' Bestial Fury: it makes two Beast\'s Strikes, and the first hit each turn on your Hunter\'s Mark target adds the mark\'s damage.' : ''}`);
       if (k >= 7) pas('sub.bm7', 'Exceptional Training', o ? "When you command your beast, it can also Dash, Disengage, Dodge or Help as a Bonus Action. Its attacks count as magical." : "When you don't command your beast, it can Dash, Disengage, Dodge or Help as a Bonus Action instead, and its attacks can deal force damage.");
       if (k >= 15) pas('sub.bm15', 'Share Spells', 'A spell you cast on yourself also affects your beast if it\'s within 30 ft.');
     }
@@ -14366,10 +14401,10 @@ function hfSubs(B, D, F, add, res) {
     if (is('Rogue', /Arcane Trickster/i)) {
       add('sub.at3', 'Mage Hand Legerdemain', 'B', 'Control your invisible Mage Hand: stow or retrieve objects, pick locks or disarm traps with it.');
       if (k >= 9) pas('sub.at9', 'Magical Ambush', 'If you are hidden when you cast a spell, the target has disadvantage on its save.');
-      if (k >= 13) add('sub.at13', 'Versatile Trickster', 'B', o ? 'Use Mage Hand to distract a creature within 5 ft of it: advantage on your attacks against it this turn.' : 'When you use Cunning Strike\'s Trip, you can apply it to a creature within 5 ft of your Mage Hand too.');
+      if (k >= 13) add('sub.at13', 'Versatile Trickster', o ? 'B' : 'F', o ? 'Use Mage Hand to distract a creature within 5 ft of it: advantage on your attacks against it this turn.' : 'When you use Cunning Strike\'s Trip, you can apply it to a creature within 5 ft of your Mage Hand too.');
       if (k >= 17) {
         res('spthief', 'Spell Thief', 1, 'long');
-        add('sub.at17', 'Spell Thief', 'R', `When a creature casts a spell targeting you or including you: INT save mod vs DC ${dc('INT')}. On a failure you negate it and can cast it yourself for 8 hours.`, { res: 'spthief' });
+        add('sub.at17', 'Spell Thief', 'R', `When a creature casts a spell targeting you or including you: it ${o ? 'makes a save with its spellcasting ability modifier' : 'makes an INT save'} against DC ${dc('INT')}. On a failure you negate it and can cast it yourself for 8 hours.`, { res: 'spthief' });
       }
     }
     if (is('Rogue', /Soulknife/i)) {
@@ -17303,6 +17338,7 @@ const SPDICE = {
   'wrathful smite': { e14: { k: 'rider', d: [['1d6', 'psychic']] }, e24: { k: 'rider', d: [['1d6', 'necrotic', '1d6']] } },
   // 2nd level
   "aganazzar's scorcher": { k: 'save', ab: 'DEX', half: 1, d: [['3d8', 'fire', '1d8']] },
+  'shining smite': { k: 'rider', d: [['2d6', 'radiant', '1d6']] },
   'branding smite': { k: 'rider', d: [['2d6', 'radiant', '1d6']] },
   'cloud of daggers': { k: 'auto', d: [['4d4', 'slashing', '2d4']] },
   "dragon's breath": { k: 'save', ab: 'DEX', half: 1, d: [['3d6', 'of the type you chose', '1d6']] },
