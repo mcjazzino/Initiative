@@ -469,6 +469,9 @@ body.hasroll #rollbg{opacity:1;pointer-events:auto}
 .tiles{gap:10px;margin-top:12px;grid-auto-rows:1fr}
 .sec,.mhead{margin:18px 4px 8px}
 .mhead:first-child{margin-top:4px}
+/* the resources card carries its own footnote */
+.mres .wpn + .wpn{border-top:1px solid var(--edge)}
+.mnote{border-top:1px solid var(--edge);padding:10px 0 9px;font-size:13px;font-weight:600;color:var(--mut)}
 </style>
 </head>
 <body>
@@ -6445,7 +6448,7 @@ function menuSheet() {
     mc = mcCheck(),
     notes = sheetNotes().length;
   const resources = r.length
-    ? `<div class="mgrp mres">${r.map(x => `<div class="wpn"><b>${esc(resName(x.k))}</b><div class="row"><button class="iconbtn" style="width:32px;height:32px" data-act="resAdj" data-arg="${x.k}|-1" aria-label="One less">−</button><span class="num" style="min-width:48px;text-align:center">${x.cur}/${x.max}</span><button class="iconbtn" style="width:32px;height:32px" data-act="resAdj" data-arg="${x.k}|1" aria-label="One more">+</button></div></div>`).join('')}</div><div class="sm mut" style="margin:6px 4px 0">Match these to your sheet.</div>`
+    ? `<div class="mgrp mres">${r.map(x => `<div class="wpn"><b>${esc(resName(x.k))}</b><div class="row"><button class="iconbtn" style="width:32px;height:32px" data-act="resAdj" data-arg="${x.k}|-1" aria-label="One less">−</button><span class="num" style="min-width:48px;text-align:center">${x.cur}/${x.max}</span><button class="iconbtn" style="width:32px;height:32px" data-act="resAdj" data-arg="${x.k}|1" aria-label="One more">+</button></div></div>`).join('')}<div class="mnote">Match these to your sheet.</div></div>`
     : '';
   const companions = mrow('pets', MI.paw, 'Companions', n ? `${n}` : '');
   const top = fight
@@ -6470,7 +6473,7 @@ function menuSheet() {
   <p class="sm mut" style="margin-top:16px;text-align:center">Initiative · beta ${APP_VERSION} · ${APP_BUILT}<br>Your character is kept on this device.</p>`;
 }
 const APP_VERSION = '0.9',
-  APP_BUILT = '24 Nov 2026';
+  APP_BUILT = '25 Nov 2026';
 const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 // feedback leaves through the phone's own share menu (text, mail, group chat): nothing about anyone is stored in the app
 let FB = '';
