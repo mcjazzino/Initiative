@@ -472,6 +472,13 @@ body.hasroll #rollbg{opacity:1;pointer-events:auto}
 /* the resources card carries its own footnote */
 .mres .wpn + .wpn{border-top:1px solid var(--edge)}
 .mnote{border-top:1px solid var(--edge);padding:10px 0 9px;font-size:13px;font-weight:600;color:var(--mut)}
+#roll{max-height:88vh;overflow-y:auto}
+#roll .rrows{margin-top:10px;display:flex;flex-direction:column;gap:5px}
+#roll .rrow{display:grid;grid-template-columns:1fr 1fr 56px;align-items:center;min-height:38px;padding:0 12px;border-radius:10px;background:var(--soft);font-size:14px;font-weight:700;text-align:left}
+#roll .rrow b{text-align:right;font-size:18px;color:var(--acct);font-variant-numeric:tabular-nums}
+#roll .rrow span:nth-child(2){color:var(--mut);font-weight:600}
+#roll .rrow .crit{color:var(--crit)!important}#roll .rrow .fumble{color:var(--warn)!important}
+#roll .rrow.miss{opacity:.45}#roll .rrow.miss b{color:var(--mut);font-size:14px}
 </style>
 </head>
 <body>
@@ -3059,6 +3066,8 @@ function repExtras() {
       t: !is14('demo') && D.t24 ? D.t24 : D.t,
       kind: 'rep',
       repK: e.k,
+      repN: e.n,
+      repLvl: e.lvl,
       wl: D.atk ? { ...D.atk(e, nums), n: spBase(e.n), lvl: e.lvl } : null,
       d:
         D.f(e, { atk, dc, mod: atk - (ch.prof || 2) }) +
@@ -5124,6 +5133,18 @@ function castSpell(s, slotKey) {
       `<br>Roll <b>${n}d8 radiant</b> (+1d8 against a fiend or undead · double the dice on a critical hit)` +
       extra;
   }
+  // spells that roll open the roll card, carrying the rest of the message
+  {
+    const lv = slotKey === 'P' ? (CH().slots.P || {}).lvl || s.lvl : slotKey ? +slotKey : s.lvl,
+      lines = [
+        quick ? '<span class="mut">Quickened</span>' : '',
+        why ? `<span style="color:var(--warn)">House rule: ${esc(why)}</span>` : '',
+        ...extra.split('<br>').filter(h => h && !/^<b>Attack now<\/b>/.test(h) && !/^Roll <b>\d+d8 radiant/.test(h)),
+        ...(/spell attack|weapon attack/i.test(s.d || '') || /attack/i.test((s.facts && s.facts.attack) || '') ? condAtkNote() : '').split('<br>'),
+        S.cond.ginvis ? '<span class="mut">Invisibility (not Greater) ends when you cast a spell</span>' : ''
+      ].filter(Boolean);
+    if (spellCard(s, lv, { lines })) return;
+  }
   toast(
     `${s.smite && is14('smite') ? 'Smite' : 'Cast'} <b>${esc(s.n)}</b>${s.lvl && slotKey ? ` (${slotKey === 'P' ? 'pact slot' : 'level ' + slotKey})` : ''}${quick ? ' — quickened' : ''}${why ? `<br><span style="color:var(--warn)">House rule: ${esc(why)}</span>` : ''}${extra}${/spell attack|weapon attack/i.test(s.d || '') || /attack/i.test((s.facts && s.facts.attack) || '') ? condAtkNote() : ''}${S.cond.ginvis ? '<br><span class="mut">Invisibility (not Greater) ends when you cast a spell</span>' : ''}`
   );
@@ -6718,12 +6739,44 @@ function spellFacts(df, s, L) {
         ? `${dice[0]} ${[...new Set(parts.map(p => p[1]))].join(' / ')}`
         : [...new Set(parts.map(p => (p[0] + ' ' + p[1]).trim()))].join(' + ');
   }
+  // what casting with a higher slot adds (D&D Beyond's "spellscale"), and healing dice
+  let up = '',
+    upEvery = 1,
+    upAll = false,
+    heal = '';
+  if (df.scaleType === 'spellscale') {
+    const ups = (df.modifiers || [])
+      .filter(m => m.type === 'damage' && m.die && m.die.diceString)
+      .map(m => ((m.atHigherLevels || {}).higherLevelDefinitions || []).find(h => h.dice && h.dice.diceString))
+      .filter(Boolean);
+    if (ups.length) {
+      up = ups[0].dice.diceString;
+      upEvery = ups[0].level || 1;
+      upAll = ups.length > 1;
+    }
+  }
+  {
+    const hm = (df.modifiers || []).find(m => m.type === 'bonus' && m.subType === 'hit-points' && m.die && m.die.diceString);
+    if (hm) {
+      heal = hm.die.diceString + (hm.usePrimaryStat ? '+MOD' : '');
+      const h = ((hm.atHigherLevels || {}).higherLevelDefinitions || []).find(h => h.dice && h.dice.diceString);
+      if (h && df.scaleType === 'spellscale') {
+        up = h.dice.diceString;
+        upEvery = h.level || 1;
+      }
+    }
+  }
   return {
     time,
     range,
     dur,
     comp,
     dmg,
+    heal,
+    up,
+    upEvery,
+    upAll,
+    legacy: df.isLegacy != null ? !!df.isLegacy : null,
     school: df.school || '',
     ritual: !!df.ritual,
     save: df.saveDcAbilityId ? ABIL3[df.saveDcAbilityId - 1] + ' save' : '',
@@ -7668,9 +7721,12 @@ function parseDDB(raw) {
   {
     const mm = mainAb != null ? M[AI[mainAb]] : null;
     sp.forEach(x => {
-      if (!x.facts || !x.facts.dmg) return;
+      if (!x.facts || !(x.facts.dmg || x.facts.heal)) return;
       const am = x.atk != null ? x.atk - prof : mm;
-      x.facts.dmg = x.facts.dmg.replace(/\+MOD/g, am != null ? (am >= 0 ? '+' + am : String(am)) : ' + mod');
+      const sub = v => (v || '').replace(/\+MOD/g, am != null ? (am >= 0 ? '+' + am : String(am)) : ' + mod');
+      x.facts.heal = sub(x.facts.heal);
+      if (!x.facts.dmg) return;
+      x.facts.dmg = sub(x.facts.dmg);
       if (x.lvl !== 0) return;
       const atk = x.atk != null ? x.atk : mm != null ? prof + mm : null,
         dc = x.dc != null ? x.dc : mm != null ? 8 + prof + mm : null;
@@ -9595,6 +9651,12 @@ const ACT = {
     }
     if (o.kind === 'rep') {
       if (!spend(o.t, o.n)) return;
+      // a later turn of a lingering spell: its dice on the card (an attack like Spiritual Weapon keeps the weapon card)
+      const rsp = !o.wl && (CH().spells || []).find(x => x.n === o.repN);
+      if (rsp && spellCard(rsp, o.repLvl, { later: true, title: o.n, sub: `level ${o.repLvl}`, lines: [esc(o.d)] })) {
+        render();
+        return;
+      }
       toast(
         o.wl
           ? `<b>${esc(o.wl.n)}</b>: +${o.wl.hit} to hit · ${esc(o.wl.dmg)} ${esc(o.wl.type)}`
@@ -16990,6 +17052,466 @@ Object.assign(ACT, {
   };
 })();
 
+/* ---------- spell dice: what a spell rolls, at the level you cast it ----------
+   One entry per spell that deals damage or heals when it is cast (or each turn after).
+   k: atk (spell attack) · save · auto (no roll to hit, no save) · heal · temp (temporary HP)
+      rider (extra damage on a weapon hit) · pool (Sleep, Color Spray: HP affected)
+   ab: the save · half: half damage on a successful save
+   d: parts [dice, type, increase per slot level above the spell's level]
+   C: a cantrip (its dice multiply at character levels 5, 11 and 17)
+   n / nUp: separate rolls (rays, darts, beams) and how many more per slot level
+   mod: add your spellcasting modifier to the first part
+   x: extra rolls, each [label, dice, type, increase, how] (how: 'sep' = a different creature, not added to the total)
+   e14 / e24: the 2014 and 2024 versions, when they differ.
+   Checked against the Player's Handbook (2014 and 2024), Xanathar's and the Explorer's Guide. */
+const SPDICE = {
+  // cantrips
+  'acid splash': { k: 'save', ab: 'DEX', C: 1, d: [['1d6', 'acid']] },
+  'chill touch': { e14: { k: 'atk', C: 1, d: [['1d8', 'necrotic']] }, e24: { k: 'atk', C: 1, d: [['1d10', 'necrotic']] } },
+  'create bonfire': { k: 'save', ab: 'DEX', C: 1, d: [['1d8', 'fire']] },
+  'eldritch blast': { k: 'atk', d: [['1d10', 'force']], beams: 1 },
+  'fire bolt': { k: 'atk', C: 1, d: [['1d10', 'fire']] },
+  frostbite: { k: 'save', ab: 'CON', C: 1, d: [['1d6', 'cold']] },
+  infestation: { k: 'save', ab: 'CON', C: 1, d: [['1d6', 'poison']] },
+  'mind sliver': { k: 'save', ab: 'INT', C: 1, d: [['1d6', 'psychic']] },
+  'poison spray': { e14: { k: 'save', ab: 'CON', C: 1, d: [['1d12', 'poison']] }, e24: { k: 'atk', C: 1, d: [['1d12', 'poison']] } },
+  'primal savagery': { k: 'atk', C: 1, d: [['1d10', 'acid']] },
+  'produce flame': { k: 'atk', C: 1, d: [['1d8', 'fire']] },
+  'ray of frost': { k: 'atk', C: 1, d: [['1d8', 'cold']] },
+  'sacred flame': { k: 'save', ab: 'DEX', C: 1, d: [['1d8', 'radiant']] },
+  'sapping sting': { k: 'save', ab: 'CON', C: 1, d: [['1d4', 'necrotic']] },
+  'shocking grasp': { k: 'atk', C: 1, d: [['1d8', 'lightning']] },
+  'sorcerous burst': { k: 'atk', C: 1, d: [['1d8', 'of the type you chose']], burst: 8 },
+  'starry wisp': { k: 'atk', C: 1, d: [['1d8', 'radiant']] },
+  'sword burst': { k: 'save', ab: 'DEX', C: 1, d: [['1d6', 'force']] },
+  'thorn whip': { k: 'atk', C: 1, d: [['1d6', 'piercing']] },
+  thunderclap: { k: 'save', ab: 'CON', C: 1, d: [['1d6', 'thunder']] },
+  'toll the dead': { k: 'save', ab: 'WIS', C: 1, d: [['1d8', 'necrotic']], alt: ['Missing any HP: d12s', [['1d12', 'necrotic']]] },
+  'vicious mockery': { e14: { k: 'save', ab: 'WIS', C: 1, d: [['1d4', 'psychic']] }, e24: { k: 'save', ab: 'WIS', C: 1, d: [['1d6', 'psychic']] } },
+  'word of radiance': { k: 'save', ab: 'CON', C: 1, d: [['1d6', 'radiant']] },
+  // blade cantrips: dice on top of the weapon's, from character level 5 (C: 2 counts one tier lower)
+  'booming blade': { k: 'rider', C: 2, d: [['1d8', 'thunder']], x: [['If it willingly moves before your next turn', '1d8', 'thunder', 0, 'later', 1]] },
+  'green-flame blade': { k: 'rider', C: 2, d: [['1d8', 'fire']], x: [['Leaps to a second creature within 5 ft', '1d8', 'fire', 0, 'sep', 0, 1]] },
+  'true strike': { e24: { k: 'rider', C: 2, d: [['1d6', 'radiant']], note: 'Radiant or your weapon\'s type. Attack with your spellcasting ability.' } },
+  // 1st level
+  'absorb elements': { k: 'rider', d: [['1d6', 'of the absorbed type', '1d6']], note: 'On your first melee hit before the end of your next turn.' },
+  'arms of hadar': { k: 'save', ab: 'STR', half: 1, d: [['2d6', 'necrotic', '1d6']] },
+  'burning hands': { k: 'save', ab: 'DEX', half: 1, d: [['3d6', 'fire', '1d6']] },
+  catapult: { k: 'save', ab: 'DEX', d: [['3d8', 'bludgeoning', '1d8']] },
+  'chromatic orb': { e14: { k: 'atk', d: [['3d8', 'of the type you chose', '1d8']] }, e24: { k: 'atk', d: [['3d8', 'of the type you chose', '1d8']], note: 'Two d8s the same? The orb leaps to another creature within 30 ft (one leap per slot level).' } },
+  'color spray': { e14: { k: 'pool', d: [['6d10', '', '2d10']] } },
+  'cure wounds': { e14: { k: 'heal', mod: 1, d: [['1d8', '', '1d8']] }, e24: { k: 'heal', mod: 1, d: [['2d8', '', '2d8']] } },
+  'dissonant whispers': { k: 'save', ab: 'WIS', half: 1, d: [['3d6', 'psychic', '1d6']] },
+  'divine smite': {
+    e14: { k: 'rider', d: [['2d8', 'radiant', '1d8']], cap: 5, x: [['Undead or fiend', '1d8', 'radiant', 0]] },
+    e24: { k: 'rider', d: [['2d8', 'radiant', '1d8']], x: [['Fiend or Undead', '1d8', 'radiant', 0]] }
+  },
+  'earth tremor': { k: 'save', ab: 'DEX', d: [['1d6', 'bludgeoning', '1d6']] },
+  'false life': { e14: { k: 'temp', d: [['1d4+4', '', '5']] }, e24: { k: 'temp', d: [['2d4+4', '', '5']] } },
+  'guiding bolt': { k: 'atk', d: [['4d6', 'radiant', '1d6']] },
+  'healing word': { e14: { k: 'heal', mod: 1, d: [['1d4', '', '1d4']] }, e24: { k: 'heal', mod: 1, d: [['2d4', '', '2d4']] } },
+  'hellish rebuke': { k: 'save', ab: 'DEX', half: 1, d: [['2d10', 'fire', '1d10']] },
+  'ice knife': { k: 'atk', d: [['1d10', 'piercing']], x: [['Explosion, hit or miss: the target and each creature within 5 ft, DEX save', '2d6', 'cold', '1d6']] },
+  'inflict wounds': { e14: { k: 'atk', d: [['3d10', 'necrotic', '1d10']] }, e24: { k: 'save', ab: 'CON', half: 1, d: [['2d10', 'necrotic', '1d10']] } },
+  'magic missile': { k: 'auto', n: 3, nUp: 1, d: [['1d4+1', 'force']], each: 'Dart' },
+  'magnify gravity': { k: 'save', ab: 'CON', half: 1, d: [['2d8', 'force', '1d8']] },
+  'ray of sickness': { k: 'atk', d: [['2d8', 'poison', '1d8']] },
+  'searing smite': {
+    e14: { k: 'rider', d: [['1d6', 'fire', '1d6']], note: 'Then 1d6 fire at the start of each of its turns until it puts out the flames (CON save).' },
+    e24: { k: 'rider', d: [['1d6', 'fire', '1d6']], x: [['Start of each of its turns, until it makes a CON save', '1d6', 'fire', '1d6', 'later']] }
+  },
+  sleep: { e14: { k: 'pool', d: [['5d8', '', '2d8']] } },
+  'thunderous smite': { e14: { k: 'rider', d: [['2d6', 'thunder']] }, e24: { k: 'rider', d: [['2d6', 'thunder', '1d6']] } },
+  thunderwave: { k: 'save', ab: 'CON', half: 1, d: [['2d8', 'thunder', '1d8']] },
+  'witch bolt': { e14: { k: 'atk', d: [['1d12', 'lightning', '1d12']] }, e24: { k: 'atk', d: [['2d12', 'lightning', '1d12']] } },
+  'wrathful smite': { e14: { k: 'rider', d: [['1d6', 'psychic']] }, e24: { k: 'rider', d: [['1d6', 'necrotic', '1d6']] } },
+  // 2nd level
+  "aganazzar's scorcher": { k: 'save', ab: 'DEX', half: 1, d: [['3d8', 'fire', '1d8']] },
+  'branding smite': { k: 'rider', d: [['2d6', 'radiant', '1d6']] },
+  'cloud of daggers': { k: 'auto', d: [['4d4', 'slashing', '2d4']] },
+  "dragon's breath": { k: 'save', ab: 'DEX', half: 1, d: [['3d6', 'of the type you chose', '1d6']] },
+  'flaming sphere': { k: 'save', ab: 'DEX', half: 1, d: [['2d6', 'fire', '1d6']] },
+  'heat metal': { k: 'auto', d: [['2d8', 'fire', '1d8']] },
+  "melf's acid arrow": { k: 'atk', d: [['4d4', 'acid', '1d4']], x: [['End of its next turn (on a hit)', '2d4', 'acid', '1d4', 'later']], note: 'A miss still deals half the first damage.' },
+  moonbeam: { k: 'save', ab: 'CON', half: 1, d: [['2d10', 'radiant', '1d10']] },
+  'scorching ray': { k: 'atk', n: 3, nUp: 1, d: [['2d6', 'fire']], each: 'Ray' },
+  shatter: { k: 'save', ab: 'CON', half: 1, d: [['3d8', 'thunder', '1d8']] },
+  'spiritual weapon': { e14: { k: 'atk', mod: 1, d: [['1d8', 'force', '1d8', 2]] }, e24: { k: 'atk', mod: 1, d: [['1d8', 'force', '1d8']] } },
+  // 3rd level
+  'blinding smite': { e14: { k: 'rider', d: [['3d8', 'radiant']] }, e24: { k: 'rider', d: [['3d8', 'radiant', '1d8']] } },
+  'call lightning': { k: 'save', ab: 'DEX', half: 1, d: [['3d10', 'lightning', '1d10']] },
+  'conjure animals': { e24: { k: 'save', ab: 'DEX', d: [['3d10', 'slashing', '1d10']] } },
+  'conjure barrage': { e14: { k: 'save', ab: 'DEX', half: 1, d: [['3d8', "of your weapon's type"]] }, e24: { k: 'save', ab: 'DEX', half: 1, d: [['5d8', 'force', '1d8']] } },
+  'erupting earth': { k: 'save', ab: 'DEX', half: 1, d: [['3d12', 'bludgeoning', '1d12']] },
+  fireball: { k: 'save', ab: 'DEX', half: 1, d: [['8d6', 'fire', '1d6']] },
+  'lightning bolt': { k: 'save', ab: 'DEX', half: 1, d: [['8d6', 'lightning', '1d6']] },
+  'mass healing word': { e14: { k: 'heal', mod: 1, d: [['1d4', '', '1d4']] }, e24: { k: 'heal', mod: 1, d: [['2d4', '', '1d4']] } },
+  'pulse wave': { k: 'save', ab: 'CON', half: 1, d: [['6d6', 'force', '1d6']] },
+  'spirit guardians': { k: 'save', ab: 'WIS', half: 1, d: [['3d8', 'radiant or necrotic', '1d8']] },
+  'tidal wave': { k: 'save', ab: 'DEX', half: 1, d: [['4d8', 'bludgeoning']] },
+  'vampiric touch': { k: 'atk', d: [['3d6', 'necrotic', '1d6']], note: 'You regain HP equal to half the necrotic damage.' },
+  // 4th level
+  blight: { k: 'save', ab: 'CON', half: 1, d: [['8d8', 'necrotic', '1d8']] },
+  "evard's black tentacles": { e14: { k: 'save', ab: 'DEX', d: [['3d6', 'bludgeoning']] }, e24: { k: 'save', ab: 'STR', d: [['3d6', 'bludgeoning']] } },
+  'gravity sinkhole': { k: 'save', ab: 'CON', half: 1, d: [['5d10', 'force', '1d10']] },
+  'ice storm': {
+    e14: { k: 'save', ab: 'DEX', half: 1, d: [['2d8', 'bludgeoning', '1d8'], ['4d6', 'cold']] },
+    e24: { k: 'save', ab: 'DEX', half: 1, d: [['2d10', 'bludgeoning', '1d10'], ['4d6', 'cold']] }
+  },
+  'staggering smite': { e14: { k: 'rider', d: [['4d6', 'psychic']] }, e24: { k: 'rider', d: [['4d6', 'psychic', '1d6']] } },
+  'wall of fire': { k: 'save', ab: 'DEX', half: 1, d: [['5d8', 'fire', '1d8']] },
+  // 5th level
+  'banishing smite': { k: 'rider', d: [['5d10', 'force']] },
+  cloudkill: { k: 'save', ab: 'CON', half: 1, d: [['5d8', 'poison', '1d8']] },
+  'cone of cold': { k: 'save', ab: 'CON', half: 1, d: [['8d8', 'cold', '1d8']] },
+  'destructive wave': { k: 'save', ab: 'CON', half: 1, d: [['5d6', 'thunder'], ['5d6', 'radiant or necrotic']] },
+  'flame strike': {
+    e14: { k: 'save', ab: 'DEX', half: 1, d: [['4d6', 'fire', '1d6'], ['4d6', 'radiant']], upNote: 'The extra dice can go to the fire or the radiant damage: your choice.' },
+    e24: { k: 'save', ab: 'DEX', half: 1, d: [['5d6', 'fire', '1d6'], ['5d6', 'radiant', '1d6']] }
+  },
+  "yolande's regal presence": { e24: { k: 'save', ab: 'WIS', half: 1, d: [['4d6', 'psychic']] } },
+  'insect plague': { k: 'save', ab: 'CON', half: 1, d: [['4d10', 'piercing', '1d10']] },
+  'mass cure wounds': { e14: { k: 'heal', mod: 1, d: [['3d8', '', '1d8']] }, e24: { k: 'heal', mod: 1, d: [['5d8', '', '1d8']] } },
+  'steel wind strike': { k: 'atk', n: 5, d: [['6d10', 'force']], each: 'Target' },
+  // 6th level and up
+  'blade barrier': { k: 'save', ab: 'DEX', half: 1, d: [['6d10', 'slashing']] },
+  'chain lightning': { k: 'save', ab: 'DEX', half: 1, d: [['10d8', 'lightning']], upNote: 'One more target per slot level above 6th.' },
+  disintegrate: { k: 'save', ab: 'DEX', d: [['10d6+40', 'force', '3d6']] },
+  'gravity fissure': { k: 'save', ab: 'CON', half: 1, d: [['8d8', 'force', '1d8']] },
+  harm: { k: 'save', ab: 'CON', half: 1, d: [['14d6', 'necrotic']] },
+  heal: { k: 'heal', d: [['70', '', '10']] },
+  sunbeam: { k: 'save', ab: 'CON', half: 1, d: [['6d8', 'radiant']] },
+  'finger of death': { k: 'save', ab: 'CON', half: 1, d: [['7d8+30', 'necrotic']] },
+  'fire storm': { k: 'save', ab: 'DEX', half: 1, d: [['7d10', 'fire']] },
+  'dark star': { k: 'save', ab: 'CON', half: 1, d: [['8d10', 'force']] },
+  'ravenous void': { k: 'auto', d: [['5d10', 'force']] },
+  'time ravage': { k: 'save', ab: 'CON', half: 1, d: [['10d12', 'necrotic']] },
+  // healing over time
+  'aura of vitality': { k: 'heal', d: [['2d6', '']] },
+  'healing spirit': { e14: { k: 'heal', d: [['1d6', '', '1d6']] } },
+  'prayer of healing': { k: 'heal', mod: 1, d: [['2d8', '', '1d8']] }
+};
+// spells whose dice land later, on your attacks or someone else's rolls: no card when you cast them
+const SPDICE_NONE = new Set(['hex', "hunter's mark", 'shillelagh', 'magic stone', 'phantasmal force', 'bless', 'bane', 'guidance', 'resistance', 'blade ward', 'divine favor', 'gift of alacrity', 'spike growth', 'fire shield', 'geas', 'fount of moonlight', 'reality break', 'ensnaring strike', 'crusader\'s mantle', 'elemental weapon', 'magic weapon', 'enlarge/reduce', 'heroism', 'aid', 'armor of agathys']);
+// the later turns of a lingering spell, when they differ from the cast (Witch Bolt's arc, Searing Smite's burn)
+const SPDICE_LATER = {
+  'witch bolt': { k: 'auto', d: [['1d12', 'lightning']] }
+};
+
+const tierOf = L => 1 + (L >= 5) + (L >= 11) + (L >= 17);
+// "1d10" × 3 → "3d10"; constants stay
+const mulDice = (e, t) => String(e).replace(/(\d*)d(\d+)/g, (m, n, f) => `${(+n || 1) * t}d${f}`);
+// base dice plus the increase for each slot level above the spell's (every: per two levels, Spiritual Weapon 2014)
+function upDice(base, up, steps, every) {
+  const k = up ? Math.floor(steps / (every || 1)) : 0;
+  return k > 0 ? sumExpr([base, ...Array(k).fill(String(up))]) : base;
+}
+const castMod = s => {
+  const ch = CH(),
+    atk = s.atk != null ? s.atk : ch.sc ? ch.sc.atk : null;
+  return atk == null ? null : atk - (ch.prof || 2);
+};
+// which version of the spell: an imported spell knows; otherwise your ruleset
+function spdEntry(s) {
+  const raw = spBase(s.base || s.n).toLowerCase(),
+    key = SPDICE[raw] ? raw : raw.replace(/\s*\(.*\)\s*$/, '');
+  let e = SPDICE[key];
+  if (!e) return null;
+  if (e.e14 || e.e24) {
+    const old = s.facts && s.facts.legacy != null ? s.facts.legacy : is14('demo');
+    e = old ? e.e14 : e.e24;
+  }
+  return e ? { key, ...e } : null;
+}
+// what D&D Beyond told us, for a spell the table doesn't know
+function spdFromFacts(s) {
+  const f = s.facts || {};
+  if (SPDICE_NONE.has(spBase(s.base || s.n).toLowerCase().replace(/\s*\(.*\)\s*$/, ''))) return null;
+  const parts = String(f.heal || f.dmg || '')
+    .split(/\s*\+\s*(?=\d*d\d)/)
+    .map(p => p.match(/^(\d*d\d+(?:\s*[+−-]\s*\d+)?|\d+)\s*(.*)$/))
+    .filter(Boolean)
+    .map(m => [m[1].replace(/\s/g, '').replace('−', '-'), m[2].replace(/\s*\/\s*/g, ' or ').trim(), f.up || '', f.upEvery || 1]);
+  if (!parts.length) return null;
+  // only the first part grows with the slot, unless the export said otherwise
+  parts.slice(1).forEach(p => (p[2] = f.upAll ? p[2] : ''));
+  const txt = plain(s.full || s.d || '');
+  return {
+    key: '',
+    k: f.heal ? 'heal' : f.attack ? 'atk' : f.save ? 'save' : 'auto',
+    ab: f.save ? f.save.slice(0, 3).toUpperCase() : '',
+    half: /half as much|half damage|half on a success/i.test(txt) ? 1 : 0,
+    d: parts,
+    fromFacts: 1,
+    knownUp: !!f.up || s.lvl === 0
+  };
+}
+// everything the card needs for this spell at this slot level, or null when it rolls nothing
+function spellSpec(s, lv, later) {
+  const base = spdEntry(s),
+    own = later && base && SPDICE_LATER[base.key],
+    e = own ? { ...base, ...SPDICE_LATER[base.key], x: null, note: '' } : base || spdFromFacts(s);
+  if (!e) return null;
+  const ch = CH(),
+    L = ch.level || 1,
+    tier = tierOf(L),
+    t = e.C === 2 ? tier - 1 : e.C ? tier : 1,
+    lvl0 = s.lvl || 0,
+    steps = Math.max(0, (lv || lvl0) - lvl0),
+    mod = castMod(s);
+  if (e.C === 2 && !t && !(e.x || []).length) return null; // a blade cantrip below level 5 adds nothing on the hit
+  const fromFacts = !!e.fromFacts;
+  const scale = ([dice, type, up, every]) => {
+    let x = e.C && !fromFacts ? (t ? mulDice(dice, t) : '') : dice;
+    if (own || !up) return { expr: x, type };
+    x = upDice(x, up, steps, every);
+    // 2014 Divine Smite tops out at 5d8
+    if (e.cap) x = x.replace(new RegExp('^(\\d+)d8'), (m, k) => Math.min(+k, e.cap) + 'd8');
+    return { expr: x, type };
+  };
+  let parts = e.d.map(scale).filter(p => p.expr);
+  if (e.mod && mod != null && parts[0]) parts[0].expr = sumExpr([parts[0].expr, String(mod)]);
+  // Agonizing Blast: your Charisma on every beam
+  const agon = e.key === 'eldritch blast' && (hasP('Agonizing Blast') || feats().some(f => /^Agonizing Blast/i.test(f.n))) ? chaMod() : 0;
+  if (agon && parts[0]) parts[0].expr = sumExpr([parts[0].expr, String(agon)]);
+  const n = e.beams ? tier : (e.n || 1) + (e.nUp || 0) * steps;
+  const x = (e.x || []).map(([label, dice, type, up, how, cantrip, addMod]) => {
+    let expr = cantrip ? mulDice(dice, tier) : e.C === 2 ? (t ? mulDice(dice, t) : '') : dice;
+    if (up && !own) expr = upDice(expr, up, steps);
+    if (addMod && mod != null) expr = expr ? sumExpr([expr, String(mod)]) : String(mod);
+    return expr ? { label: `${label}: ${expr.replace(/\s/g, '')}${type ? ' ' + type : ''}`, expr, how } : null;
+  }).filter(Boolean);
+  const notes = [];
+  if (e.note && !later) notes.push(e.note);
+  if (steps && e.upNote) notes.push(e.upNote);
+  if (steps && !later && e.fromFacts && !e.knownUp) notes.push(`Cast at level ${lv}: check the spell's higher-level text for extra dice.`);
+  if (agon) notes.push(`Agonizing Blast: +${agon} on each beam`);
+  return {
+    key: e.key,
+    k: e.k,
+    ab: e.ab || '',
+    half: !!e.half,
+    parts,
+    n,
+    each: e.beams ? 'Beam' : e.each || '',
+    x,
+    alt: e.alt ? { label: e.alt[0], parts: e.alt[1].map(scale) } : null,
+    burst: e.burst || 0,
+    notes,
+    lv: lv || lvl0
+  };
+}
+
+/* ---------- the spell's roll card ---------- */
+const adeptOn = type => (CH().adept || []).some(a => new RegExp('\\b' + a + '\\b', 'i').test(type || ''));
+function rollParts(parts, crit, o) {
+  const out = { total: 0, bits: [] };
+  parts.forEach(p => {
+    const r = rollExpr(p.expr, crit, { min2: adeptOn(p.type), ...(o || {}) });
+    out.total += r.total;
+    out.bits.push(r.bits.join(' ') + (p.type && parts.length > 1 ? ' ' + p.type : ''));
+  });
+  return out;
+}
+const spParts = () => (RC.altOn && RC.alt ? RC.alt.parts : RC.parts);
+const spDice = parts => parts.map(p => p.expr.replace(/\s/g, '') + (p.type ? ' ' + p.type : '')).join(' + ');
+// open the card for a spell you just cast (or a later turn of one): false when it rolls nothing
+function spellCard(s, lv, o) {
+  o = o || {};
+  const sp = spellSpec(s, lv, o.later);
+  if (!sp || (!sp.parts.length && !sp.x.length)) return false;
+  const ch = CH(),
+    c = C(),
+    atk = s.atk != null ? s.atk : ch.sc ? ch.sc.atk : null;
+  let dc = s.dc != null ? s.dc : ch.sc ? ch.sc.dc : null;
+  const innate = (c.status || []).includes('Innate Sorcery') && s.dc == null;
+  if (innate && dc != null) dc++;
+  const f = condFx(),
+    a = f.atkAdv.length + (innate ? 1 : 0),
+    di = f.atkDis.length;
+  const notes = [];
+  const addEx = (label, expr, x) => notes.push({ html: '', ex: { label, expr, ...(x || {}) } });
+  sp.x.forEach(x => addEx(x.label, x.expr, x.how === 'sep' ? { sep: 1 } : x.how === 'later' ? { later: 1 } : {}));
+  // damage that rides on your spell attacks: Hex (both rulesets), Hunter's Mark (2024: any attack roll)
+  const per = [];
+  if (sp.k === 'atk') {
+    if (S.conc === 'Hex') per.push(['Hex', '1d6', 'necrotic']);
+    if (S.conc === "Hunter's Mark" && !is14('demo')) per.push(["Hunter's Mark", '1d6', 'force']);
+  }
+  if (sp.n === 1) per.forEach(([n, e, t]) => addEx(`${n}: +${e} ${t}`, e, { auto: true }));
+  else per.forEach(([n, e, t]) => notes.push({ html: `<span class="mut">${esc(n)}: +${e} ${t} on each ${esc((sp.each || 'ray').toLowerCase())} that hits</span>` }));
+  const dmgK = !['heal', 'temp', 'pool'].includes(sp.k);
+  if (dmgK && wizLvl() >= 10 && isEvo() && /Evocation/i.test(spSchool(s)) && sp.parts.length)
+    addEx(`Empowered Evocation: +${intMod()} (one damage roll)`, String(intMod()), { auto: true });
+  if (sp.parts.some(p => adeptOn(p.type))) notes.push({ html: '<span class="mut">Elemental Adept: 1s on the damage dice count as 2s</span>' });
+  sp.notes.forEach(n => notes.push({ html: `<span class="mut">${esc(n)}</span>` }));
+  (s.notes || []).filter(n => !/^Elemental Adept|^Empowered Evocation/.test(n)).forEach(n => notes.push({ html: `<span class="mut">${esc(n)}</span>` }));
+  (o.lines || []).forEach(h => notes.push({ html: h }));
+  RC = {
+    sp: true,
+    name: esc(o.title || s.n),
+    sub: o.sub != null ? o.sub : s.lvl ? `level ${sp.lv}` : 'cantrip',
+    k: sp.k,
+    hit: atk || 0,
+    dc,
+    ab: sp.ab,
+    half: sp.half,
+    parts: sp.parts,
+    alt: sp.alt,
+    altOn: false,
+    n: sp.n,
+    each: sp.each || 'Ray',
+    per,
+    burst: sp.burst ? { burst: sp.burst, max: Math.max(0, castMod(s) || 0) } : null,
+    rows: sp.n > 1 ? Array.from({ length: sp.n }, () => ({ toHit: null, dmg: null, miss: false })) : null,
+    notes,
+    mode: sp.k === 'atk' ? (a && !di ? 'adv' : di && !a ? 'dis' : 'normal') : 'normal',
+    crit: false,
+    toHit: null,
+    dmg: null,
+    extras: {},
+    off: {}
+  };
+  rollShow(true);
+  return true;
+}
+function d20() {
+  const a = d(20),
+    b = RC.mode === 'normal' ? null : d(20),
+    nat = b == null ? a : RC.mode === 'adv' ? Math.max(a, b) : Math.min(a, b);
+  return { dice: b == null ? [a] : [a, b], nat, total: nat + RC.hit };
+}
+function spHit() {
+  if (RC.rows)
+    RC.rows.forEach(r => {
+      r.toHit = d20();
+      r.crit = r.toHit.nat === 20;
+      r.miss = r.toHit.nat === 1;
+      if (r.dmg) r.dmg = null;
+    });
+  else {
+    RC.toHit = d20();
+    RC.crit = RC.toHit.nat === 20;
+    RC.dmg = null;
+    RC.extras = {};
+  }
+  rollShow();
+}
+function spDmg() {
+  const crit = RC.k === 'atk' || RC.k === 'rider' ? RC.crit : false,
+    o = RC.burst || {};
+  if (RC.rows) {
+    const per = RC.per.map(([, e, t]) => ({ expr: e, type: t }));
+    RC.rows.forEach(r => (r.dmg = rollParts([...spParts(), ...per], crit || !!r.crit, o)));
+  } else RC.dmg = rollParts(spParts(), crit, o);
+  RC.notes.forEach((n, i) => {
+    const e = n.ex;
+    if (!e) return;
+    if ((e.auto && !RC.off[i]) || RC.extras[i]) RC.extras[i] = rollExpr(e.expr, crit);
+  });
+  rollShow();
+}
+function spMiss(i) {
+  const r = RC.rows[i];
+  r.miss = !r.miss;
+  rollShow();
+}
+function spAlt() {
+  RC.altOn = !RC.altOn;
+  RC.dmg = null;
+  rollShow();
+}
+function spellShow(enter) {
+  const r = $('#roll'),
+    R = RC,
+    sg = n => (n < 0 ? '−' + -n : '+' + n),
+    parts = spParts(),
+    dice = parts.length === 1 ? parts[0].expr.replace(/\s/g, '') : spDice(parts),
+    type = parts.length === 1 ? parts[0].type : '',
+    each = R.each.toLowerCase();
+  const exIn = i => !R.notes[i].ex.sep && !R.notes[i].ex.later;
+  const exTotal = Object.keys(R.extras).filter(exIn).reduce((t, i) => t + R.extras[i].total, 0);
+  const rowsDone = R.rows && R.rows.some(x => x.dmg);
+  const main = R.rows ? R.rows.reduce((t, x) => t + (x.dmg && !x.miss ? x.dmg.total : 0), 0) : R.dmg ? R.dmg.total : 0;
+  const total = main + exTotal,
+    rolled = R.dmg || rowsDone;
+  const what = { heal: 'healing', temp: 'temporary HP', pool: 'HP of creatures affected', rider: (type ? type + ' ' : '') + 'on the hit' }[R.k] || type || 'damage';
+  // the first box: how it lands
+  let box1 = '';
+  if (R.k === 'atk' && !R.rows)
+    box1 = R.toHit
+      ? `<b class="${R.toHit.nat === 20 ? 'crit' : R.toHit.nat === 1 ? 'fumble' : ''}">${R.toHit.total}</b><span>${R.toHit.nat === 20 ? 'Natural 20!' : R.toHit.nat === 1 ? 'Natural 1' : 'to hit'}</span><small>d20 ${R.toHit.dice.join(' & ')} ${sg(R.hit)}</small>`
+      : `<b>${sg(R.hit)}</b><span>to hit</span><small>spell attack</small>`;
+  else if (R.k === 'atk') box1 = `<b>${sg(R.hit)}</b><span>to hit</span><small>each ${each}</small>`;
+  else if (R.k === 'save' && R.dc != null)
+    box1 = `<b>DC ${R.dc}</b><span>${R.ab} save</span><small>${R.half ? 'half damage on a success' : 'no damage on a success'}</small>`;
+  else if (R.k === 'save') box1 = `<b>${R.ab}</b><span>save</span><small>${R.half ? 'half on a success' : 'none on a success'}</small>`;
+  const dmgBox = R.rows
+    ? `<b>${rowsDone ? total : esc(dice)}</b><span>${rowsDone ? (type || 'damage') + ' · total' : `${R.n} ${each}s, each${type ? ' · ' + type : ''}`}</span>${rowsDone && exTotal ? '<small>with extras</small>' : ''}`
+    : R.dmg
+      ? `<b>${R.dmg.total + exTotal}</b><span>${esc(what)}${R.crit ? ' · critical' : ''}</span><small>${esc(R.dmg.bits.join(' + '))}${exTotal ? ' + extras' : ''}</small>`
+      : parts.length
+        ? `<b>${esc(dice)}</b><span>${esc(what)}</span>`
+        : `<b>—</b><span>nothing extra on the hit yet</span>`;
+  const rows = R.rows && (R.rows.some(x => x.toHit || x.dmg) || !DICE)
+    ? `<div class="rrows" onclick="event.stopPropagation()">${R.rows
+        .map(
+          (x, i) =>
+            `<button class="rrow ${x.miss ? 'miss' : ''}" onclick="spMiss(${i})"><span>${R.each} ${i + 1}</span>${x.toHit ? `<span class="${x.toHit.nat === 20 ? 'crit' : x.toHit.nat === 1 ? 'fumble' : ''}">${x.toHit.total} to hit</span>` : '<span></span>'}<b>${x.miss ? 'miss' : x.dmg ? x.dmg.total : ''}</b></button>`
+        )
+        .join('')}<div class="sm mut" style="margin-top:2px">Tap a ${each} that missed to leave it out of the total.</div></div>`
+    : '';
+  const modes = [];
+  if (R.k === 'atk')
+    [['normal', 'Normal'], ['adv', 'Advantage'], ['dis', 'Disadvantage']].forEach(([k, l]) =>
+      modes.push(`<button class="${R.mode === k ? 'on' : ''}" onclick="rollMode('${k}')">${l}</button>`)
+    );
+  if (parts.length && ((R.k === 'atk' && !R.rows) || R.k === 'rider')) modes.push(`<button class="${R.crit ? 'on crit' : ''}" onclick="rollCrit()">Critical</button>`);
+  if (R.alt) modes.push(`<button class="${R.altOn ? 'on' : ''}" onclick="spAlt()">${esc(R.alt.label)}</button>`);
+  const rollWord = { heal: 'Roll healing', temp: 'Roll temporary HP', pool: 'Roll HP affected' }[R.k] || 'Roll damage';
+  const btns = !DICE
+    ? ''
+    : R.k === 'atk'
+      ? `<button class="btn" onclick="spHit()">${I.dice || ''} ${R.toHit || (R.rows && R.rows[0].toHit) ? 'Roll again' : 'Roll to hit'}</button><button class="btn pri" onclick="spDmg()">${I.dice || ''} ${rolled ? 'Roll again' : 'Roll damage'}</button>`
+      : parts.length
+        ? `<button class="btn pri" onclick="spDmg()">${I.dice || ''} ${rolled ? 'Roll again' : rollWord}</button>`
+        : '';
+  const notes = R.notes
+    .map((n, i) => {
+      if (n.ex && DICE) {
+        const e = R.extras[i],
+          willAuto = n.ex.auto && !R.off[i] && !rolled;
+        return `<button class="rex ${e ? 'on' : willAuto ? 'auto' : ''}" onclick="event.stopPropagation();rollExtra(${i})">${e ? `✓ ${esc(n.ex.label)} <b>${e.total}</b> <small>${esc(e.bits.join(' '))}${n.ex.sep ? ' · not in the total' : n.ex.later ? ' · later, not in the total' : ''}</small>` : willAuto ? `✓ ${esc(n.ex.label)} <small>included</small>` : `+ ${esc(n.ex.label)}`}</button>`;
+      }
+      if (n.ex) return `<div>${esc(n.ex.label)}</div>`;
+      return n.html ? `<div>${n.html}</div>` : '';
+    })
+    .join('');
+  const tot =
+    DICE && rolled
+      ? R.k === 'save' && R.half
+        ? `<div class="rtotal">On a successful save <b>${Math.floor(total / 2)}</b><small>Half of ${total}, rounded down</small></div>`
+        : exTotal || R.rows
+          ? `<div class="rtotal">${R.k === 'heal' ? 'Total healing' : 'Total damage'} <b>${total}</b><small>${R.rows ? `${R.rows.filter(x => !x.miss).length} of ${R.n} ${each}s` : ''}</small></div>`
+          : ''
+      : '';
+  r.innerHTML = `<button class="rx" onclick="event.stopPropagation();rollClose()" aria-label="Close">✕</button>
+  <div class="rn">${R.name}${R.sub ? ` <span class="mut">(${esc(R.sub)})</span>` : ''}</div>
+  <div class="rstats">${box1 ? `<div>${box1}</div>` : ''}<div>${dmgBox}</div></div>
+  ${DICE ? rows : ''}
+  ${DICE && modes.length ? `<div class="rmode" onclick="event.stopPropagation()">${modes.join('')}</div>` : ''}
+  ${btns ? `<div class="rbtns" onclick="event.stopPropagation()">${btns}</div>` : ''}
+  ${notes ? `<div class="rnotes">${notes}</div>` : ''}
+  ${tot}`;
+  r.classList.toggle('dice', DICE);
+  if (enter) {
+    r.classList.remove('on');
+    void r.offsetWidth;
+  }
+  r.classList.add('on');
+  document.body.classList.add('hasroll');
+}
+
 /* ---------- the roll card: an attack's numbers, and (if you want) digital dice ----------
    The card stays until you close it, attack again, or end your turn.
    With Digital dice on, it rolls only what you tap: to hit, damage, or an extra. */
@@ -17012,7 +17534,9 @@ function d(n) {
   return Math.floor(Math.random() * n) + 1;
 }
 // roll "2d6+1d8+3"; a critical doubles the dice, not the numbers
-function rollExpr(expr, crit) {
+// o.min2: Elemental Adept (a 1 counts as a 2) · o.burst: Sorcerous Burst (each 8 rolls another d8, up to o.max more)
+function rollExpr(expr, crit, o) {
+  o = o || {};
   const parts = (expr || '')
       .replace(/\s/g, '')
       .replace(/−/g, '-')
@@ -17024,10 +17548,23 @@ function rollExpr(expr, crit) {
       m = q.match(/^(\d*)d(\d+)$/i);
     if (m) {
       const n = (+m[1] || 1) * (crit ? 2 : 1),
-        L = Array.from({ length: n }, () => d(+m[2])),
-        s = L.reduce((a, b) => a + b, 0);
+        f = +m[2];
+      let L = Array.from({ length: n }, () => d(f));
+      if (o.burst === f && o.max > 0) {
+        let q = L.filter(v => v === f).length,
+          more = 0;
+        while (q > 0 && more < o.max) {
+          const v = d(f);
+          L.push(v);
+          more++;
+          q--;
+          if (v === f) q++;
+        }
+      }
+      if (o.min2) L = L.map(v => (v === 1 ? 2 : v));
+      const s = L.reduce((a, b) => a + b, 0);
       out.total += sg * s;
-      out.bits.push(`${sg < 0 ? '−' : out.bits.length ? '+' : ''}${n}d${m[2]} (${L.join(', ')})`);
+      out.bits.push(`${sg < 0 ? '−' : out.bits.length ? '+' : ''}${n}d${m[2]}${L.length > n ? ` +${L.length - n}` : ''} (${L.join(', ')})`);
     } else if (+q) {
       out.total += sg * +q;
       out.bits.push(`${sg < 0 ? '−' : '+'}${q}`);
@@ -17138,6 +17675,7 @@ function rollCard(m) {
 function rollShow(enter) {
   const r = $('#roll');
   if (!RC) return;
+  if (RC.sp) return spellShow(enter);
   const R = RC,
     sg = n => (n < 0 ? '−' + -n : '+' + n);
   const hitBox = R.toHit
