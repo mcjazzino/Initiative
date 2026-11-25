@@ -479,6 +479,7 @@ body.hasroll #rollbg{opacity:1;pointer-events:auto}
 #roll .rrow span:nth-child(2){color:var(--mut);font-weight:600}
 #roll .rrow .crit{color:var(--crit)!important}#roll .rrow .fumble{color:var(--warn)!important}
 #roll .rrow.miss{opacity:.45}#roll .rrow.miss b{color:var(--mut);font-size:14px}
+#roll .rbtns .btn{white-space:nowrap;padding-left:10px;padding-right:10px;gap:6px}
 </style>
 </head>
 <body>
@@ -2335,6 +2336,7 @@ function bloodSheet() {
   ${riteChoice}
   <div class="xs sec">Pay in blood · roll 1d${d}, then tap your roll</div>
   <div class="faces">${Array.from({ length: d }, (_, i) => `<button data-act="pbFace" data-arg="${i + 1}" ${PB.kind === 'rite' && !PB.rite ? 'disabled' : ''}>${i + 1}</button>`).join('')}</div>
+  ${DICE ? `<button class="btn" style="width:100%;margin-top:8px" data-act="pbRoll" data-arg="${d}" ${PB.kind === 'rite' && !PB.rite ? 'disabled' : ''}>${I.dice || ''} Roll the 1d${d} for me</button>` : ''}
   <div class="card" style="margin-top:12px"><div class="sm" style="line-height:1.6">
    <div>• This is <b>necrotic damage you can't reduce</b> — no resistance${b.patron === 'undead' && isProfane() ? ", and your <b>Undead Rite Focus can't halve it</b>" : ''}.</div>
    <div>• ${b.tempSoak ? 'Your temporary HP absorb it first (table setting).' : 'It skips your temporary HP and comes off your real HP (table setting).'}</div>
@@ -5200,6 +5202,11 @@ function castSpell(s, slotKey) {
   }
   if (s.res && !fb) spendRes(s.res);
   if (/^Mage Armou?r$/i.test(s.n) && maPart() && maPart().down) setTimeout(() => maSet(true), 0);
+  // Divine Favor without concentration (2024): its +1d4 rides on your weapon hits for 1 minute
+  if (/^Divine Favor$/i.test(spBase(s.n)) && !s.conc) {
+    C().status = C().status.filter(x => !/^Divine Favor/.test(x));
+    addStatus(`Divine Favor until round ${C().round + 9}`);
+  }
   if (CH().bh && isProfane() && bh().level >= 7 && s.lvl === 0 && t === 'A' && c.phase === 'turn')
     c.flags.frenzy = true;
   const counts = !(s.smite && is14('smite'));
@@ -5226,7 +5233,7 @@ function castSpell(s, slotKey) {
     } else if (ch.ward) {
       const b = ch.ward.cur;
       ch.ward.cur = Math.min(ch.ward.max, ch.ward.cur + 2 * lv);
-      extra += `<br>Arcane Ward +${ch.ward.cur - b} (${ch.ward.cur}/${ch.ward.max})`;
+      extra += ch.ward.cur > b ? `<br>Arcane Ward +${ch.ward.cur - b} (${ch.ward.cur}/${ch.ward.max})` : `<br>Arcane Ward already full (${ch.ward.max}/${ch.ward.max})`;
     }
   }
   {
@@ -8950,6 +8957,10 @@ const ACT = {
     PB.rite = r;
     render();
   },
+  pbRoll(f) {
+    const n = d(+f);
+    ACT.pbFace(n);
+  },
   pbFace(n) {
     n = +n;
     const c = C(),
@@ -10040,6 +10051,17 @@ const ACT = {
     let atk = o.atk;
     const rip = !atk && /^Riposte$/i.test(o.n) && allReactions()[0].atk;
     if (rip) atk = { ...rip, extra: ((o.d || '').match(/\+(\d*d\d+) damage/) || [])[1] };
+    // Unarmed Strikes from a feature (Martial Arts, Flurry of Blows): one goes to the attack card, several get a row each
+    const ua = !atk && (o.d || '').match(/^(One|Two|Three) Unarmed Strikes?[:,]? (?:each )?\+(\d+) to hit, (\d*d\d+(?:\+\d+)?|\d+) (\w+)\.?\s*(.*)$/i);
+    if (ua) {
+      const n = { one: 1, two: 2, three: 3 }[ua[1].toLowerCase()];
+      if (n === 1) atk = { hit: +ua[2], dmg: ua[3], type: ua[4], w: o.n, uname: 'Unarmed Strike' };
+      else if (!o.effect && !o.refill && !o.gain && !o.regainPact) {
+        featCard(o.n, ua[3], 'atk', ua[5] ? [`<span class="mut">${esc(ua[5])}</span>`] : [], { hit: +ua[2], n, each: 'Strike', type: ua[4] });
+        render();
+        return;
+      }
+    }
     // dice the feature tells you to roll: healing (Second Wind, a potion) or damage you prevent (Parry)
     const heal = !atk && (o.d || '').match(/^Regain (\d*d\d+(?:\s*\+\s*\d+)?) HP/i),
       dr = !atk && (o.d || '').match(/reduce the damage by (\d*d\d+(?:\s*\+\s*\d+)?)/i);
@@ -10050,7 +10072,7 @@ const ACT = {
       }
       toast(
         atk
-          ? `<b>${esc(o.n)}</b>${atk.w ? ` (${esc(atk.w)})` : ''}: +${atk.hit} to hit · ${esc(atk.dmg)} ${esc(atk.type)}${atk.extra ? `<br>+${atk.extra} (${esc(o.n)})` : ''}`
+          ? `<b>${esc(atk.uname || o.n)}</b>${atk.w ? ` (${esc(atk.w)})` : ''}: +${atk.hit} to hit · ${esc(atk.dmg)} ${esc(atk.type)}${atk.extra ? `<br>+${atk.extra} (${esc(o.n)})` : ''}`
           : `Used <b>${esc(o.n)}</b>${why ? `<br><span style="color:var(--warn)">House rule: ${esc(why)}</span>` : ''}`
       );
     }
@@ -17485,6 +17507,7 @@ function spellCard(s, lv, o) {
   const f = condFx(),
     a = f.atkAdv.length + (innate ? 1 : 0),
     di = f.atkDis.length;
+  const spMode = a && !di ? 'adv' : di && !a ? 'dis' : 'normal';
   const notes = [];
   const addEx = (label, expr, x) => notes.push({ html: '', ex: { label, expr, ...(x || {}) } });
   sp.x.forEach(x => addEx(x.label, x.expr, x.how === 'sep' ? { sep: 1 } : x.how === 'later' ? { later: 1 } : {}));
@@ -17521,7 +17544,7 @@ function spellCard(s, lv, o) {
     burst: sp.burst ? { burst: sp.burst, max: Math.max(0, castMod(s) || 0) } : null,
     rows: sp.n > 1 ? Array.from({ length: sp.n }, () => ({ toHit: null, dmg: null, miss: false })) : null,
     notes,
-    mode: sp.k === 'atk' ? (a && !di ? 'adv' : di && !a ? 'dis' : 'normal') : 'normal',
+    mode: sp.k === 'atk' ? spMode : 'normal',
     crit: false,
     toHit: null,
     dmg: null,
@@ -17669,26 +17692,27 @@ function spellShow(enter) {
 }
 
 // a feature's own dice on the same card: healing (Second Wind, potions) or damage you prevent (Parry)
-function featCard(name, expr, k, lines) {
+function featCard(name, expr, k, lines, o) {
+  o = o || {};
   RC = {
     sp: true,
     name: esc(name),
     sub: '',
     k,
-    hit: 0,
+    hit: o.hit || 0,
     dc: null,
     ab: '',
     half: false,
-    parts: [{ expr: expr.replace(/\s/g, ''), type: '' }],
+    parts: [{ expr: expr.replace(/\s/g, ''), type: o.type || '' }],
     alt: null,
     altOn: false,
-    n: 1,
-    each: '',
+    n: o.n || 1,
+    each: o.each || '',
     per: [],
     burst: null,
-    rows: null,
+    rows: o.n > 1 ? Array.from({ length: o.n }, () => ({ toHit: null, dmg: null, miss: false })) : null,
     notes: (lines || []).map(h => ({ html: h })),
-    mode: 'normal',
+    mode: k === 'atk' ? atkMode() : 'normal',
     crit: false,
     toHit: null,
     dmg: null,
@@ -17712,6 +17736,14 @@ function spApplyHp() {
   RC.applied = true;
   render();
   rollShow();
+}
+
+// advantage or disadvantage on your attacks right now, from conditions
+function atkMode() {
+  const f = condFx(),
+    a = f.atkAdv.length,
+    di = f.atkDis.length;
+  return a && !di ? 'adv' : di && !a ? 'dis' : 'normal';
 }
 
 /* ---------- the roll card: an attack's numbers, and (if you want) digital dice ----------
@@ -17824,6 +17856,9 @@ function rollCard(m) {
   const add = (label, expr) => RC.notes.push({ html: `<span class="mut">${esc(label)}</span>`, ex: { label, expr } });
   const auto = (label, expr, x) => RC.notes.push({ html: '', ex: { label, expr, auto: true, ...(x || {}) } });
   if (S.conc === 'Hex') auto('Hex: +1d6 necrotic', '1d6');
+  // Crimson Rite: the rite die rides on every weapon hit
+  if (S.rite && typeof RITES !== 'undefined' && RITES[S.rite] && !/unarmed/i.test(RC.name)) auto(`${RITES[S.rite][0].replace('Rite of the ', '')} rite: +1d${hemoDie(bh().level)} ${RITES[S.rite][1]}`, `1d${hemoDie(bh().level)}`);
+  if (S.conc === 'Divine Favor' || C().status.some(x => /^Divine Favor/.test(x))) auto('Divine Favor: +1d4 radiant', '1d4');
   if (S.conc === "Hunter's Mark") auto(`Hunter's Mark: +1d6${is14('demo') ? '' : ' force'}`, '1d6');
   // first-hit-each-turn damage from your features, while it's still unused this turn
   const c = C(),
@@ -17859,6 +17894,14 @@ function rollCard(m) {
     });
     if (w && (w.ranged || /^Dart/.test(w.n)) && c.status.some(x => /^Kensei's Shot/.test(x))) auto("Kensei's Shot: +1d4", '1d4');
   }
+  // once-per-turn on-hit effects with no dice that spend a use (Stunning Strike): tick to spend it
+  feats().forEach(f => {
+    if (!f.res || !resOK(f.res) || !/^Once per turn,? on a hit/i.test(f.d || '') || /\+\d*d\d+/.test(f.d || '')) return;
+    const key = f.once || f.n;
+    if (c.flags[key]) return;
+    const save = (f.d.match(/\b(STR|DEX|CON|INT|WIS|CHA) save DC \d+/) || [])[0];
+    RC.notes.push({ html: '', ex: { label: `${f.n}${save ? ': ' + save : ''} (1 ${resName(f.res).replace(/s$/, '')})`, expr: '0', once: key, res: f.res, nodmg: true } });
+  });
   // maneuvers and other on-hit dice that spend a use: Trip Attack, Menacing Attack…
   feats().forEach(f => {
       if (f.once || !f.res || !resOK(f.res) || f.t === 'R') return;
@@ -17908,7 +17951,7 @@ function rollShow(enter) {
         const e = R.extras[i],
           willAuto = n.ex.auto && !R.off[i] && !R.dmg && (!n.ex.critOnly || R.crit);
         if (n.ex.critOnly && !R.crit && !e) return `<div class="mut">${esc(n.ex.label)}</div>`;
-        return `<button class="rex ${e ? 'on' : willAuto ? 'auto' : ''}" onclick="event.stopPropagation();rollExtra(${i})">${e ? `✓ ${esc(n.ex.label)} <b>${e.total}</b> <small>${esc(e.bits.join(' '))}</small>` : willAuto ? `✓ ${esc(n.ex.label)} <small>included</small>` : `+ ${esc(n.ex.label)}`}</button>`;
+        return `<button class="rex ${e ? 'on' : willAuto ? 'auto' : ''}" onclick="event.stopPropagation();rollExtra(${i})">${e ? (/d\d/.test(n.ex.expr || '') ? `✓ ${esc(n.ex.label)} <b>${e.total}</b> <small>${esc(e.bits.join(' '))}</small>` : `✓ ${esc(n.ex.label)}`) : willAuto ? `✓ ${esc(n.ex.label)} <small>included</small>` : `+ ${esc(n.ex.label)}`}</button>`;
       }
       if (!DICE && n.ex && n.ex.auto && !n.html) return `<div>${esc(n.ex.label)}</div>`;
       return n.html ? `<div>${n.html}</div>` : '';
@@ -17932,7 +17975,7 @@ function rollShow(enter) {
   ${notes ? `<div class="rnotes">${notes}</div>` : ''}
   ${
     DICE && (R.dmg || exTotal)
-      ? !exTotal ? '' : `<div class="rtotal">Total damage <b>${(R.dmg ? R.dmg.total : 0) + exTotal}</b><small>${[R.dmg ? `${esc(R.name)} ${R.dmg.total}` : '', ...Object.keys(R.extras).map(i => `${esc(R.notes[i].ex.label.split(':')[0])} ${R.extras[i].total}`)].filter(Boolean).join(' · ')}</small></div>`
+      ? !exTotal ? '' : `<div class="rtotal">Total damage <b>${(R.dmg ? R.dmg.total : 0) + exTotal}</b><small>${[R.dmg ? `${esc(R.name)} ${R.dmg.total}` : '', ...Object.keys(R.extras).filter(i => !R.notes[i].ex.nodmg).map(i => `${esc(R.notes[i].ex.label.split(':')[0])} ${R.extras[i].total}`)].filter(Boolean).join(' · ')}</small></div>`
       : (() => {
           // rolling physical dice: everything that applies, as one formula
           const L = R.notes.filter((n, i) => n.ex && n.ex.auto && !n.ex.critOnly && !R.off[i]);
