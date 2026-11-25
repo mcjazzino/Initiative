@@ -17457,9 +17457,9 @@ function spellShow(enter) {
     ? `<div class="rrows" onclick="event.stopPropagation()">${R.rows
         .map(
           (x, i) =>
-            `<button class="rrow ${x.miss ? 'miss' : ''}" onclick="spMiss(${i})"><span>${R.each} ${i + 1}</span>${x.toHit ? `<span class="${x.toHit.nat === 20 ? 'crit' : x.toHit.nat === 1 ? 'fumble' : ''}">${x.toHit.total} to hit</span>` : '<span></span>'}<b>${x.miss ? 'miss' : x.dmg ? x.dmg.total : ''}</b></button>`
+            `<button class="rrow ${x.miss ? 'miss' : ''}" ${R.k === 'atk' ? `onclick="spMiss(${i})"` : 'disabled style="cursor:default"'}><span>${R.each} ${i + 1}</span>${x.toHit ? `<span class="${x.toHit.nat === 20 ? 'crit' : x.toHit.nat === 1 ? 'fumble' : ''}">${x.toHit.total} to hit</span>` : '<span></span>'}<b>${x.miss ? 'miss' : x.dmg ? x.dmg.total : ''}</b></button>`
         )
-        .join('')}<div class="sm mut" style="margin-top:2px">Tap a ${each} that missed to leave it out of the total.</div></div>`
+        .join('')}${R.k === 'atk' ? `<div class="sm mut" style="margin-top:2px">Tap a ${each} that missed to leave it out of the total.</div>` : ''}</div>`
     : '';
   const modes = [];
   if (R.k === 'atk')
@@ -17492,7 +17492,7 @@ function spellShow(enter) {
       ? R.k === 'save' && R.half
         ? `<div class="rtotal">On a successful save <b>${Math.floor(total / 2)}</b><small>Half of ${total}, rounded down</small></div>`
         : exTotal || R.rows
-          ? `<div class="rtotal">${R.k === 'heal' ? 'Total healing' : 'Total damage'} <b>${total}</b><small>${R.rows ? `${R.rows.filter(x => !x.miss).length} of ${R.n} ${each}s` : ''}</small></div>`
+          ? `<div class="rtotal">${R.k === 'heal' ? 'Total healing' : 'Total damage'} <b>${total}</b><small>${R.rows ? (R.k === 'atk' ? `${R.rows.filter(x => !x.miss).length} of ${R.n} ${each}s` : `${R.n} ${each}s, all hit`) : ''}</small></div>`
           : ''
       : '';
   r.innerHTML = `<button class="rx" onclick="event.stopPropagation();rollClose()" aria-label="Close">✕</button>
