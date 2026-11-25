@@ -4861,7 +4861,7 @@ function homeView() {
     )
     .join('')}</div>
   </details>
-  <button class="dicebtn ${DICE ? 'on' : ''}" data-act="diceTog" aria-pressed="${DICE}">${I.dice}<span>Digital dice</span></button>`;
+  <button class="dicebtn ${DICE ? 'on' : ''}" data-act="diceTog" aria-pressed="${DICE}">${I.dice}<span>Digital dice · ${DICE ? 'on' : 'off'}</span></button>`;
 }
 function bonusOpts() {
   return [
@@ -6662,7 +6662,7 @@ function menuSheet() {
   <p class="sm mut" style="margin-top:16px;text-align:center">Initiative · beta ${APP_VERSION} · ${APP_BUILT}<br>Your character is kept on this device.</p>`;
 }
 const APP_VERSION = '0.9',
-  APP_BUILT = '25 Nov 2026';
+  APP_BUILT = '26 Nov 2026';
 const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 // feedback leaves through the phone's own share menu (text, mail, group chat): nothing about anyone is stored in the app
 let FB = '';
@@ -17684,10 +17684,10 @@ function spellShow(enter) {
       : `<b>${sg(R.hit)}</b><span>to hit</span><small>spell attack</small>`;
   else if (R.k === 'atk') box1 = `<b>${sg(R.hit)}</b><span>to hit</span><small>each ${each}</small>`;
   else if (R.k === 'save' && R.dc != null)
-    box1 = `<b>DC ${R.dc}</b><span>${R.ab} save</span><small>${R.half ? 'half damage on a success' : 'no damage on a success'}</small>`;
+    box1 = `<b>DC ${R.dc}</b><span>${R.ab} save</span><small>${R.half ? 'half on a success' : 'none on a success'}</small>`;
   else if (R.k === 'save') box1 = `<b>${R.ab}</b><span>save</span><small>${R.half ? 'half on a success' : 'none on a success'}</small>`;
   const dmgBox = R.rows
-    ? `<b>${rowsDone ? total : esc(dice)}</b><span>${rowsDone ? (type || 'damage') + ' · total' : `${R.n} ${each}s, each${type ? ' · ' + type : ''}`}</span>${rowsDone && exTotal ? '<small>with extras</small>' : ''}`
+    ? `<b>${esc(dice)}</b><span>each of ${R.n} ${each}s${type ? ' · ' + type : ''}</span>`
     : R.dmg
       ? `<b>${R.dmg.total + exTotal}</b><span>${esc(what)}${R.crit ? ' · critical' : ''}</span><small>${esc(R.dmg.bits.join(' + '))}${exTotal ? ' + extras' : ''}</small>`
       : parts.length
@@ -17747,6 +17747,9 @@ function spellShow(enter) {
   if (enter) {
     r.classList.remove('on');
     void r.offsetWidth;
+    // the card carries the message now: a toast behind it is only clutter
+    const t = $('#toast');
+    if (t) t.classList.remove('on');
   }
   r.classList.add('on');
   document.body.classList.add('hasroll');
@@ -18047,6 +18050,8 @@ function rollShow(enter) {
   if (enter) {
     r.classList.remove('on');
     void r.offsetWidth; // replay the entrance when a new attack replaces the last one
+    const t = $('#toast');
+    if (t) t.classList.remove('on');
   }
   r.classList.add('on');
   document.body.classList.add('hasroll');
